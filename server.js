@@ -4,7 +4,7 @@ require('dotenv').config();
 const express = require('express');
 const crypto = require('crypto');
 const path = require('path');
-const Database = require('better-sqlite3');
+const { createStore } = require('./store');
 
 const env = process.env;
 const PORT = Number(env.PORT || 3000);
@@ -16,28 +16,15 @@ if (!env.SESSION_SECRET || env.SESSION_SECRET.length < 32) {
   process.exit(1);
 }
 
-/* ================= Base de données ================= */
-const db = new Database(env.DB_FILE || path.join(__dirname, 'data.sqlite'));
-db.pragma('journal_mode = WAL');
-db.exec(`
-  CREATE TABLE IF NOT EXISTS docs (col TEXT NOT NULL, id TEXT NOT NULL, data TEXT NOT NULL, updated INTEGER, PRIMARY KEY (col, id));
-  CREATE TABLE IF NOT EXISTS users (id TEXT PRIMARY KEY, email TEXT UNIQUE NOT NULL, name TEXT, role TEXT NOT NULL, hash TEXT NOT NULL, created INTEGER);
-  CREATE TABLE IF NOT EXISTS events (id TEXT PRIMARY KEY, at INTEGER);
-`);
-const Q = {
-  get: db.prepare('SELECT data FROM docs WHERE col = ? AND id = ?'),
-  all: db.prepare('SELECT id, data FROM docs WHERE col = ?'),
-  put: db.prepare(`INSERT INTO docs (col, id, data, updated) VALUES (?, ?, ?, ?)
-                   ON CONFLICT (col, id) DO UPDATE SET data = excluded.data, updated = excluded.updated`),
-  del: db.prepare('DELETE FROM docs WHERE col = ? AND id = ?'),
-  user: db.prepare('SELECT id, email, name, role FROM users WHERE id = ?'),
-  userByEmail: db.prepare('SELECT * FROM users WHERE email = ?'),
-  users: db.prepare('SELECT id, email, name, role, created FROM users ORDER BY created'),
-  event: db.prepare('INSERT OR IGNORE INTO events (id, at) VALUES (?, ?)')
-};
-const getDoc = (c, i) => { const r = Q.get.get(c, i); return r ? JSON.parse(r.data) : null; };
-const allDocs = c => Q.all.all(c).map(r => ({ id: r.id, ...JSON.parse(r.data) }));
-const putDoc = (c, i, d) => Q.put.run(c, i, JSON.stringify(d), Date.now());
+/* ================= Base de données (Supabase) ================= */
+if (!env.DATABASE_URL) {
+  console.error('DATABASE_URL manquant : collez la chaîne de connexion « Session pooler » de Supabase.');
+  process.exit(1);
+}
+const store = createStore({ connectionString: env.DATABASE_URL });
+const getDoc = (c, i) => store.get(c, i);
+const allDocs = c => store.all(c);
+const putDoc = (c, i, d) => store.put(c, i, d);
 const patchDoc = (c, i, d) => { const o = getDoc(c, i); if (!o) return null; const n = { ...o, ...d }; putDoc(c, i, n); return n; };
 
 /* ================= Outils ================= */
@@ -67,13 +54,13 @@ function limited(key, max, windowMs) {
 setInterval(() => { const t = Date.now(); for (const [k, v] of hits) if (!v.some(x => t - x < 3600e3)) hits.delete(k); }, 600e3).unref();
 
 /* Premier gérant */
-if (!Q.users.all().length) {
+async function ensureManager() {
+  if (store.users.count()) return;
   if (!env.ADMIN_EMAIL || !env.ADMIN_PASSWORD || env.ADMIN_PASSWORD.length < 10) {
     console.error('Aucun compte : définissez ADMIN_EMAIL et ADMIN_PASSWORD (10 caractères minimum) pour créer le gérant.');
     process.exit(1);
   }
-  db.prepare('INSERT INTO users (id, email, name, role, hash, created) VALUES (?, ?, ?, ?, ?, ?)')
-    .run('u' + rnd(10).toLowerCase(), env.ADMIN_EMAIL.toLowerCase().trim(), env.ADMIN_NAME || 'Gérant', 'Gérant', hashPw(env.ADMIN_PASSWORD), Date.now());
+  await store.users.add({ id: 'u' + rnd(10).toLowerCase(), email: env.ADMIN_EMAIL.toLowerCase().trim(), name: env.ADMIN_NAME || 'Gérant', role: 'Gérant', hash: hashPw(env.ADMIN_PASSWORD), created: Date.now() });
   console.log('Compte gérant créé pour', env.ADMIN_EMAIL);
 }
 
@@ -93,7 +80,7 @@ function readCookie(req, name) {
   }
   return null;
 }
-function currentUser(req) { const p = readSession(readCookie(req, COOKIE)); return p ? Q.user.get(p.uid) || null : null; }
+function currentUser(req) { const p = readSession(readCookie(req, COOKIE)); return p ? store.users.byId(p.uid) : null; }
 const cookieOpts = maxAge => `Path=/; HttpOnly; SameSite=Lax; Max-Age=${maxAge}${SECURE ? '; Secure' : ''}`;
 
 const requireStaff = (req, res, next) => { const u = currentUser(req); if (!u) return res.status(401).json({ error: 'Connexion requise.' }); req.user = u; next(); };
@@ -186,7 +173,7 @@ function computeOrder(items, promoCode, delivery) {
 }
 
 /* Passage en « payée » : idempotent, déduit le stock une seule fois */
-const markPaid = db.transaction((orderId, info) => {
+const markPaid = (orderId, info) => {
   const o = getDoc('orders', orderId);
   if (!o || o.status !== 'en_attente') return false;
   if (!o.stockApplied) for (const i of expandItems(o.items)) {
@@ -196,7 +183,7 @@ const markPaid = db.transaction((orderId, info) => {
     payment: { ...o.payment, status: 'réussi', ref: info.ref || o.payment.ref, paidAt: Date.now() } });
   console.log(`Paiement confirmé ${o.number} (${o.payment.method}) ${o.total}`);
   return true;
-});
+};
 function markFailed(orderId, reason) {
   const o = getDoc('orders', orderId);
   if (!o || o.status !== 'en_attente') return;
@@ -286,6 +273,18 @@ setInterval(async () => {
 const app = express();
 app.set('trust proxy', 1);
 app.disable('x-powered-by');
+app.use((req, res, next) => {
+  if (req.method === 'GET') return next();
+  const send = res.send.bind(res);
+  res.send = body => {
+    store.flush().then(ok => {
+      if (!ok && res.statusCode < 400) { res.status(503); return send(JSON.stringify({ error: 'Enregistrement dans la base impossible. Réessayez dans un instant.' })); }
+      send(body);
+    });
+    return res;
+  };
+  next();
+});
 app.use((req, res, next) => { res.set({ 'X-Content-Type-Options': 'nosniff', 'Referrer-Policy': 'same-origin', 'X-Frame-Options': 'DENY' }); next(); });
 
 /* --- Webhook Wave : corps brut obligatoire pour vérifier la signature --- */
@@ -299,7 +298,7 @@ app.post('/webhooks/wave', express.raw({ type: () => true, limit: '200kb' }), (r
   if (!ts || !sigs.some(s => safeEq(s, expected))) return res.status(401).send('Signature invalide');
   if (Math.abs(Date.now() / 1000 - Number(ts)) > 300) return res.status(401).send('Horodatage expiré');
   let ev; try { ev = JSON.parse(raw); } catch { return res.status(400).send('JSON invalide'); }
-  if (ev.id && Q.event.run('wave:' + ev.id, Date.now()).changes === 0) return res.send('OK'); // doublon
+  if (ev.id && !store.firstTime('wave:' + ev.id)) return res.send('OK'); // doublon
   const d = ev.data || {}, id = d.client_reference, o = id && getDoc('orders', id);
   if (o && o.payment?.method === 'wave') {
     if (ev.type === 'checkout.session.completed' && d.payment_status === 'succeeded' && String(d.amount) === String(o.total) && d.currency === 'XOF') markPaid(id, { ref: d.transaction_id });
@@ -395,7 +394,7 @@ app.get('/api/orders/:id', h(async (req, res) => {
 /* --- Équipe : connexion --- */
 app.post('/api/auth/login', h((req, res) => {
   if (limited('login:' + req.ip, 8, 15 * 60e3)) throw httpErr(429, 'Trop de tentatives. Réessayez dans 15 minutes.');
-  const u = Q.userByEmail.get(String(req.body?.email || '').toLowerCase().trim());
+  const u = store.users.byEmail(String(req.body?.email || '').toLowerCase().trim());
   if (!u || !checkPw(req.body?.password || '', u.hash)) throw httpErr(401, 'E-mail ou mot de passe incorrect.');
   res.set('Set-Cookie', `${COOKIE}=${signSession(u.id)}; ${cookieOpts(7 * 86400)}`).json({ ok: true });
 }));
@@ -413,7 +412,7 @@ app.get('/api/admin/state', requireStaff, (req, res) => {
     clients: allDocs('clients'), suppliers: allDocs('suppliers'),
     moves: allDocs('fin-moves').sort((a, b) => b.createdAt - a.createdAt), ledger: allDocs('fin-ledger').sort((a, b) => b.createdAt - a.createdAt),
     finConfig: getDoc('fin-config', 'main') || {},
-    settings: s, users: Q.users.all(), providers: providers(), configured: CONFIGURED, me: req.user
+    settings: s, users: store.users.list(), providers: providers(), configured: CONFIGURED, me: req.user
   });
 });
 const ADMIN_COLS = new Set(['products', 'bundles', 'promos', 'orders', 'settings', 'clients', 'suppliers', 'fin-moves', 'fin-ledger', 'fin-config']);
@@ -440,7 +439,7 @@ app.delete('/api/admin/:col/:id', requireStaff, h((req, res) => {
   const { col, id } = req.params;
   if (!ADMIN_COLS.has(col) || !validId(id)) throw httpErr(400, 'Requête invalide.');
   if ((col === 'orders' || col === 'settings') && req.user.role !== 'Gérant') throw httpErr(403, 'Réservé au gérant.');
-  Q.del.run(col, id); res.json({ ok: true });
+  store.del(col, id); res.json({ ok: true });
 }));
 /* Remboursement Wave (gérant) */
 app.post('/api/admin/orders/:id/refund', requireStaff, requireManager, h(async (req, res) => {
@@ -459,27 +458,30 @@ app.post('/api/admin/users', requireStaff, requireManager, h((req, res) => {
   if (!/^[^@\s]+@[^@\s]+\.[^@\s]+$/.test(e)) throw httpErr(400, 'Adresse e-mail invalide.');
   if (String(password || '').length < 10) throw httpErr(400, 'Mot de passe : 10 caractères minimum.');
   if (!ROLES.includes(role)) throw httpErr(400, 'Rôle invalide.');
-  if (Q.userByEmail.get(e)) throw httpErr(409, 'Cette adresse est déjà utilisée.');
-  db.prepare('INSERT INTO users (id, email, name, role, hash, created) VALUES (?, ?, ?, ?, ?, ?)')
-    .run('u' + rnd(10).toLowerCase(), e, String(name || '').trim().slice(0, 60) || e, role, hashPw(password), Date.now());
+  if (store.users.byEmail(e)) throw httpErr(409, 'Cette adresse est déjà utilisée.');
+  store.users.add({ id: 'u' + rnd(10).toLowerCase(), email: e, name: String(name || '').trim().slice(0, 60) || e, role, hash: hashPw(password), created: Date.now() });
   res.json({ ok: true });
 }));
 app.patch('/api/admin/users/:id', requireStaff, requireManager, h((req, res) => {
   const role = req.body?.role;
   if (!ROLES.includes(role)) throw httpErr(400, 'Rôle invalide.');
   if (req.params.id === req.user.id && role !== 'Gérant') throw httpErr(400, 'Vous ne pouvez pas retirer votre propre rôle de gérant.');
-  db.prepare('UPDATE users SET role = ? WHERE id = ?').run(role, req.params.id); res.json({ ok: true });
+  store.users.setRole(req.params.id, role); res.json({ ok: true });
 }));
 app.delete('/api/admin/users/:id', requireStaff, requireManager, h((req, res) => {
   if (req.params.id === req.user.id) throw httpErr(400, 'Vous ne pouvez pas supprimer votre propre compte.');
-  db.prepare('DELETE FROM users WHERE id = ?').run(req.params.id); res.json({ ok: true });
+  store.users.remove(req.params.id); res.json({ ok: true });
 }));
 
 app.use(express.static(path.join(__dirname, 'public'), { index: 'index.html', maxAge: '1h' }));
 app.use((req, res) => res.status(404).json({ error: 'Introuvable.' }));
 
-app.listen(PORT, () => {
+store.init().then(ensureManager).then(() => app.listen(PORT, () => {
   console.log(`foûfoûni-Market sur ${BASE_URL} (port ${PORT})`);
   console.log(`Paiements : Wave ${CONFIGURED.wave ? 'configuré' : 'non configuré'} · Orange Money ${CONFIGURED.orange ? 'configuré' : 'non configuré'}`);
   if (!SECURE) console.warn('Attention : BASE_URL n’est pas en HTTPS. Les webhooks Wave et Orange l’exigent en production.');
+})).catch(e => {
+  console.error('Impossible de se connecter à Supabase :', e.message);
+  console.error('Vérifiez DATABASE_URL : chaîne « Session pooler », mot de passe remplacé dans [YOUR-PASSWORD].');
+  process.exit(1);
 });

@@ -1,24 +1,21 @@
 # Configuration automatique de foûfoûni-Market sur Render (New > Blueprint)
+# Offre gratuite : les données sont enregistrées dans Supabase.
 services:
   - type: web
     name: foufouni-market
     runtime: node
-    plan: starter
+    plan: free
     region: frankfurt
     buildCommand: npm install
     startCommand: npm start
     healthCheckPath: /api/me
-    disk:
-      name: donnees
-      mountPath: /var/data
-      sizeGB: 1
     envVars:
       - key: SESSION_SECRET
         generateValue: true
-      - key: DB_FILE
-        value: /var/data/data.sqlite
       - key: ADMIN_NAME
         value: Gérant
+      - key: DATABASE_URL
+        sync: false
       - key: ADMIN_EMAIL
         sync: false
       - key: ADMIN_PASSWORD
