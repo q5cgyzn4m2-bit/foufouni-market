@@ -21,7 +21,10 @@ if (!env.DATABASE_URL) {
   console.error('DATABASE_URL manquant : collez la chaîne de connexion « Session pooler » de Supabase.');
   process.exit(1);
 }
-const store = createStore({ connectionString: env.DATABASE_URL });
+   const dbUrl = new URL(String(env.DATABASE_URL).trim());
+   if (env.DB_PASSWORD) dbUrl.password = encodeURIComponent(String(env.DB_PASSWORD).trim());
+   console.log('Base : ' + dbUrl.hostname + ':' + dbUrl.port + ' · utilisateur ' + decodeURIComponent(dbUrl.username) + ' · mot de passe de ' + decodeURIComponent(dbUrl.password).length + ' caractères');
+   const store = createStore({ connectionString: dbUrl.toString() });
 const getDoc = (c, i) => store.get(c, i);
 const allDocs = c => store.all(c);
 const putDoc = (c, i, d) => store.put(c, i, d);
