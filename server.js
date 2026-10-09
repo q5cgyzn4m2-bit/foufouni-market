@@ -113,6 +113,8 @@ const h = fn => (req, res) => Promise.resolve().then(() => fn(req, res)).catch(e
 /* ================= Réglages et moyens de paiement ================= */
 const DEFAULT_SETTINGS = {
   shopName: 'foûfoûni-Market', currency: 'FCFA', deliveryFee: 1500, freeFrom: 50000, city: 'Bamako',
+  affDefaultPct: 5, affDiscountPct: 5, affDays: 30,
+  tagline: 'Le marché, sans les embouteillages.', intro: 'Commandez en ligne, payez par mobile money ou à la livraison, et recevez vos articles chez vous.',
   processors: { orange: { enabled: true }, wave: { enabled: true }, cod: { enabled: true } }
 };
 function settings() {
@@ -129,6 +131,7 @@ function publicSettings() {
   const s = settings();
   const procs = {}; for (const [k, v] of Object.entries(s.processors || {})) procs[k] = { enabled: !!v.enabled }; // jamais d'identifiants côté public
   return { shopName: s.shopName, tagline: s.tagline, intro: s.intro, currency: s.currency, deliveryFee: s.deliveryFee, freeFrom: s.freeFrom, city: s.city, phone: s.phone, processors: procs,
+    affDays: s.affDays || 30, siteUrl: s.siteUrl || '',
     featuredPromo: s.featuredPromo && s.featuredPromo.code ? { code: s.featuredPromo.code, type: s.featuredPromo.type, value: s.featuredPromo.value, minOrder: s.featuredPromo.minOrder || 0, expiresAt: s.featuredPromo.expiresAt || '' } : null };
 }
 
@@ -172,7 +175,17 @@ function expandItems(items) {
   }
   return [...m].map(([id, qty]) => ({ id, qty }));
 }
-function computeOrder(items, promoCode, delivery) {
+/* ================= Ambassadeurs ================= */
+const PAID_ST = ['payee', 'preparation', 'expediee', 'livree'];
+const findAffiliate = code => { const c = String(code || '').trim().toUpperCase(); return c ? allDocs('affiliates').find(a => a.code === c && a.active !== false) || null : null; };
+const affPct = (doc) => { const v = doc && doc.affPct; return (v !== undefined && v !== null && v !== '' && !isNaN(v)) ? Number(v) : (Number(settings().affDefaultPct) || 0); };
+const affState = o => !o.affiliate ? null : o.status === 'annulee' ? 'annulee' : PAID_ST.includes(o.status) ? 'validee' : 'en_attente';
+function affCommission(lines, discPct) {
+  const k = 1 - (Number(discPct) || 0) / 100;
+  return Math.round(lines.reduce((t, l) => t + l.price * l.qty * k * affPct(l.bundle ? getDoc('bundles', l.id.slice(2)) : getDoc('products', l.id)) / 100, 0));
+}
+
+function computeOrder(items, promoCode, delivery, ref) {
   if (!Array.isArray(items) || !items.length || items.length > 50) throw httpErr(400, 'Panier invalide.');
   const prodQty = new Map(), bundleQty = new Map();
   for (const it of items) {
@@ -200,14 +213,21 @@ function computeOrder(items, promoCode, delivery) {
   const s = settings();
   const subtotal = lines.reduce((t, l) => t + l.price * l.qty, 0);
   const shipping = delivery === 'livraison' ? (subtotal >= Number(s.freeFrom || 0) ? 0 : Math.round(Number(s.deliveryFee) || 0)) : 0;
-  let discount = 0, code = '';
-  if (promoCode) {
+  let discount = 0, code = '', affiliate = null;
+  const aff = findAffiliate(promoCode);
+  if (aff) {
+    code = aff.code; const d = Math.min(90, Number(aff.discountPct) || 0);
+    discount = Math.round(subtotal * d / 100);
+    affiliate = { id: aff.id, code: aff.code, discountPct: d };
+  } else if (promoCode) {
     const p = checkPromo(promoCode, subtotal); code = p.code;
     if (p.type === 'percent') discount = Math.round(subtotal * Math.min(p.value, 100) / 100);
     else if (p.type === 'fixed') discount = Math.min(p.value, subtotal);
     else if (p.type === 'shipping') discount = shipping;
   }
-  return { lines, subtotal, shipping, discount, total: Math.max(0, subtotal + shipping - discount), promoCode: code };
+  if (!affiliate) { const r = findAffiliate(ref); if (r) affiliate = { id: r.id, code: r.code, discountPct: 0 }; }
+  if (affiliate) affiliate.commission = affCommission(lines, affiliate.discountPct);
+  return { lines, subtotal, shipping, discount, total: Math.max(0, subtotal + shipping - discount), promoCode: code, affiliate };
 }
 
 /* Passage en « payée » : idempotent, déduit le stock une seule fois */
@@ -221,7 +241,7 @@ const markPaid = (orderId, info) => {
     payment: { ...o.payment, status: 'réussi', ref: info.ref || o.payment.ref, paidAt: Date.now() } });
   console.log(`Paiement confirmé ${o.number} (${o.payment.method}) ${o.total}`);
   notify({ title: `Paiement reçu : ${money(o.total)}`, tags: ['moneybag'], priority: 4, click: BASE_URL,
-    message: `Commande ${o.number} payée par ${METHOD_NAMES[o.payment.method] || o.payment.method}\n${o.customer?.name || ''} ${o.customer?.phone || ''}\n${o.items.map(i => `${i.qty} × ${i.name}`).join(', ')}` });
+    message: `Commande ${o.number} payée par ${METHOD_NAMES[o.payment.method] || o.payment.method}\n${o.customer?.name || ''} ${o.customer?.phone || ''}\n${o.items.map(i => `${i.qty} × ${i.name}`).join(', ')}${o.affiliate ? `\nVia l’ambassadeur ${o.affiliate.code} (commission ${money(o.affiliate.commission)})` : ''}` });
   return true;
 };
 function markFailed(orderId, reason) {
@@ -373,8 +393,33 @@ app.get('/api/public/catalog', (req, res) => {
 });
 app.post('/api/promo/check', h((req, res) => {
   if (limited('promo:' + req.ip, 20, 60e3)) throw httpErr(429, 'Trop d’essais. Patientez une minute.');
+  const a = findAffiliate(req.body?.code);
+  if (a) return res.json({ promo: { code: a.code, type: 'percent', value: Number(a.discountPct) || 0, affiliate: { id: a.id } } });
   const p = checkPromo(req.body?.code, Number(req.body?.subtotal) || 0);
   res.json({ promo: p });
+}));
+
+/* Ambassadeurs : comptage des clics et espace personnel (accès par lien secret) */
+app.post('/api/aff/click', h((req, res) => {
+  const a = findAffiliate(req.body?.code);
+  if (a && !limited('affclick:' + req.ip + ':' + a.id, 1, 3600e3)) patchDoc('affiliates', a.id, { clicks: (a.clicks || 0) + 1 });
+  res.json({ ok: true });
+}));
+app.get('/api/aff/me', h((req, res) => {
+  if (limited('affme:' + req.ip, 60, 600e3)) throw httpErr(429, 'Trop de requêtes.');
+  const t = String(req.query.t || '');
+  const a = t.length >= 16 && allDocs('affiliates').find(x => x.token && safeEq(x.token, t));
+  if (!a) throw httpErr(404, 'Espace introuvable. Demandez votre lien à la boutique.');
+  const orders = allDocs('orders').filter(o => o.affiliate && o.affiliate.id === a.id).sort((x, y) => y.createdAt - x.createdAt);
+  let validated = 0, pending = 0, n = 0;
+  const sales = orders.map(o => { const st = affState(o), c = o.affiliate.commission || 0; if (st === 'validee') { validated += c; n++; } else if (st === 'en_attente') pending += c;
+    return { number: o.number, date: o.createdAt, total: o.total, commission: c, state: st }; });
+  const payouts = allDocs('aff-payouts').filter(p => p.affiliateId === a.id).sort((x, y) => y.createdAt - x.createdAt).map(p => ({ date: p.date, amount: p.amount }));
+  const paid = payouts.reduce((t2, p) => t2 + p.amount, 0);
+  const products = allDocs('products').filter(p => p.active !== false).sort((x, y) => affPct(y) * y.price - affPct(x) * x.price).slice(0, 40)
+    .map(p => ({ name: p.name, price: p.price, pct: affPct(p), emoji: p.emoji || '📦' }));
+  res.json({ name: a.name, code: a.code, active: a.active !== false, discountPct: a.discountPct || 0, clicks: a.clicks || 0, days: settings().affDays || 30,
+    link: BASE_URL + '/?ref=' + encodeURIComponent(a.code), shop: settings().shopName, sales, n, validated, pending, paid, due: Math.max(0, validated - paid), payouts, products });
 }));
 
 /* Paniers : enregistrés pendant la visite pour signaler les paniers abandonnés */
@@ -428,13 +473,13 @@ app.post('/api/orders', h(async (req, res) => {
     address: String(c.address || '').trim().slice(0, 200), city: String(c.city || '').trim().slice(0, 60), note: String(c.note || '').trim().slice(0, 300) };
   if (!customer.name || customer.phone.replace(/\D/g, '').length < 8) throw httpErr(400, 'Nom et numéro de téléphone valides requis.');
   if (delivery === 'livraison' && !customer.address) throw httpErr(400, 'Adresse de livraison requise.');
-  const t = computeOrder(b.items, b.promoCode, delivery);
+  const t = computeOrder(b.items, b.promoCode, delivery, b.ref);
   if (method !== 'cod' && t.total < 100) throw httpErr(400, 'Montant trop faible pour un paiement mobile.');
 
   const id = newOrderId();
   const order = {
     number: 'FM-' + new Date().toISOString().slice(2, 10).replace(/-/g, '') + '-' + rnd(4),
-    items: t.lines, subtotal: t.subtotal, discount: t.discount, shipping: t.shipping, total: t.total, promoCode: t.promoCode,
+    items: t.lines, subtotal: t.subtotal, discount: t.discount, shipping: t.shipping, total: t.total, promoCode: t.promoCode, affiliate: t.affiliate,
     customer, delivery, payment: { method, status: method === 'cod' ? 'à encaisser' : 'en attente', ref: '' },
     status: 'en_attente', channel: 'en ligne', stockApplied: false, createdAt: Date.now(), createdBy: 'web', token: randomToken()
   };
@@ -442,7 +487,7 @@ app.post('/api/orders', h(async (req, res) => {
   const cartId = String(b.cartId || '');
   if (/^[a-z0-9]{8,40}$/.test(cartId) && getDoc('carts', cartId)) patchDoc('carts', cartId, { converted: true, orderId: id });
   if (method === 'cod') notify({ title: `Nouvelle commande : ${money(order.total)}`, tags: ['shopping_bags'], priority: 4, click: waLink(customer.phone, `Bonjour ${customer.name}, merci pour votre commande ${order.number} chez ${settings().shopName}.`) || BASE_URL,
-    message: `${order.number} · paiement à la livraison\n${customer.name} ${customer.phone}\n${delivery === 'livraison' ? 'Livraison : ' + customer.address + ', ' + customer.city : 'Retrait en boutique'}\n${order.items.map(i => `${i.qty} × ${i.name}`).join(', ')}` });
+    message: `${order.number} · paiement à la livraison\n${customer.name} ${customer.phone}\n${delivery === 'livraison' ? 'Livraison : ' + customer.address + ', ' + customer.city : 'Retrait en boutique'}\n${order.items.map(i => `${i.qty} × ${i.name}`).join(', ')}${order.affiliate ? `\nVia l’ambassadeur ${order.affiliate.code} (commission ${money(order.affiliate.commission)})` : ''}` });
 
   let redirect = null;
   try {
@@ -485,6 +530,7 @@ app.get('/api/admin/state', requireStaff, (req, res) => {
   const s = settings();
   res.json({
     products: allDocs('products').sort((a, b) => (b.createdAt || 0) - (a.createdAt || 0)),
+    affiliates: allDocs('affiliates').sort((a, b) => a.name.localeCompare(b.name)), affPayouts: allDocs('aff-payouts').sort((a, b) => b.createdAt - a.createdAt),
     bundles: allDocs('bundles').sort((a, b) => (b.createdAt || 0) - (a.createdAt || 0)),
     promos: allDocs('promos').sort((a, b) => (b.createdAt || 0) - (a.createdAt || 0)),
     orders: allDocs('orders').sort((a, b) => b.createdAt - a.createdAt).slice(0, 2000).map(o => publicOrder(o, o.id)),
@@ -495,7 +541,7 @@ app.get('/api/admin/state', requireStaff, (req, res) => {
     settings: s, users: store.users.list(), providers: providers(), configured: CONFIGURED, me: req.user
   });
 });
-const ADMIN_COLS = new Set(['products', 'bundles', 'promos', 'orders', 'settings', 'clients', 'suppliers', 'fin-moves', 'fin-ledger', 'fin-config']);
+const ADMIN_COLS = new Set(['products', 'bundles', 'promos', 'orders', 'settings', 'affiliates', 'aff-payouts', 'aff-lookup', 'clients', 'suppliers', 'fin-moves', 'fin-ledger', 'fin-config']);
 function adminTarget(req) {
   const { col, id } = req.params;
   if (!ADMIN_COLS.has(col) || !validId(id)) throw httpErr(400, 'Requête invalide.');
@@ -507,6 +553,7 @@ app.put('/api/admin/:col/:id', requireStaff, h((req, res) => {
   const { col, id } = adminTarget(req); const body = { ...req.body };
   if (col === 'orders') { const prev = getDoc('orders', id); body.token = prev ? prev.token : randomToken(); body.createdBy = prev ? prev.createdBy : req.user.id; if (prev?.payment) body.payment = { ...prev.payment, ...body.payment }; }
   if (col === 'promos') body.code = id;
+  if (col === 'affiliates') { const prev = getDoc('affiliates', id); body.token = (prev && prev.token) || body.token || randomToken(); body.code = String(body.code || '').toUpperCase(); }
   const isNew = !getDoc(col, id);
   putDoc(col, id, body); res.json({ ok: true });
   if (isNew && col === 'orders' && body.channel === 'caisse') {
@@ -570,7 +617,54 @@ app.delete('/api/admin/users/:id', requireStaff, requireManager, h((req, res) =>
   store.users.remove(req.params.id); res.json({ ok: true });
 }));
 
-app.use(express.static(path.join(__dirname, 'public'), { index: 'index.html', maxAge: '1h' }));
+/* ================= Partage : aperçu des liens, images produits, catalogue Facebook ================= */
+const fs = require('fs');
+let INDEX_HTML = '';
+try { INDEX_HTML = fs.readFileSync(path.join(__dirname, 'public', 'index.html'), 'utf8'); } catch (e) { console.error('public/index.html introuvable : envoyez le dossier public sur GitHub.'); }
+const escH = v => String(v ?? '').replace(/[&<>"']/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
+const plain = n => new Intl.NumberFormat('fr-FR').format(Math.round(n || 0)).replace(/[\u202f\u00a0]/g, ' ');
+const productImage = (id, p) => (p && /^data:image\//.test(p.image || '')) ? `${BASE_URL}/img/p/${encodeURIComponent(id)}` : `${BASE_URL}/og-image.jpg`;
+function sendPage(req, res) {
+  if (!INDEX_HTML) return res.status(500).send('Page introuvable : le dossier public manque sur le serveur.');
+  const s = settings(), pid = String(req.query.p || '');
+  const found = validId(pid) ? getDoc('products', pid) : null, p = found && found.active !== false ? found : null;
+  const title = p ? `${p.name} — ${plain(p.price)} FCFA | ${s.shopName}` : `${s.shopName} — ${s.tagline || 'Boutique en ligne'}`;
+  const desc = p
+    ? `${p.comparePrice > p.price ? `Promo : ${plain(p.price)} FCFA au lieu de ${plain(p.comparePrice)} FCFA. ` : ''}${p.description || p.category || ''} Commandez chez ${s.shopName} : mobile money ou paiement à la livraison.`.replace(/\s+/g, ' ').trim()
+    : (s.intro || 'Commandez en ligne, payez par mobile money ou à la livraison.');
+  const img = p ? productImage(pid, p) : `${BASE_URL}/og-image.jpg`, url = p ? `${BASE_URL}/?p=${encodeURIComponent(pid)}` : `${BASE_URL}/`;
+  const meta = [
+    ['name', 'description', desc], ['property', 'og:type', p ? 'product' : 'website'], ['property', 'og:site_name', s.shopName], ['property', 'og:locale', 'fr_FR'],
+    ['property', 'og:title', title], ['property', 'og:description', desc], ['property', 'og:url', url], ['property', 'og:image', img],
+    ...(img.endsWith('/og-image.jpg') ? [['property', 'og:image:width', '1200'], ['property', 'og:image:height', '630']] : []),
+    ...(p ? [['property', 'product:price:amount', String(Math.round(p.price))], ['property', 'product:price:currency', 'XOF']] : []),
+    ['name', 'twitter:card', 'summary_large_image'], ['name', 'twitter:title', title], ['name', 'twitter:description', desc], ['name', 'twitter:image', img]
+  ].map(([k, n, v]) => `<meta ${k}="${n}" content="${escH(v)}">`).join('\n');
+  res.set({ 'Content-Type': 'text/html; charset=utf-8', 'Cache-Control': 'no-cache' })
+    .send(INDEX_HTML.replace(/<title>[^<]*<\/title>/, `<title>${escH(title)}</title>\n<link rel="canonical" href="${escH(url)}">\n${meta}`));
+}
+app.get(['/', '/index.html'], sendPage);
+app.get('/img/p/:id', (req, res) => {
+  const p = validId(req.params.id) && getDoc('products', req.params.id);
+  const m = p && /^data:(image\/[a-z+.-]+);base64,(.+)$/i.exec(p.image || '');
+  if (!m) return res.redirect(302, '/og-image.jpg');
+  res.set({ 'Content-Type': m[1], 'Cache-Control': 'public, max-age=3600' }).send(Buffer.from(m[2], 'base64'));
+});
+/* Flux catalogue lu automatiquement par Facebook (Meta Commerce Manager) */
+app.get('/catalogue.csv', (req, res) => {
+  const s = settings();
+  const q = v => { const x = String(v ?? '').replace(/\s+/g, ' ').trim(); return /[",]/.test(x) ? '"' + x.replace(/"/g, '""') + '"' : x; };
+  const rows = [['id', 'title', 'description', 'availability', 'condition', 'price', 'sale_price', 'link', 'image_link', 'brand', 'product_type']];
+  for (const p of allDocs('products').filter(x => x.active !== false && x.name && x.price > 0)) {
+    const promo = p.comparePrice > p.price;
+    rows.push([p.id, p.name.slice(0, 150), (p.description || `${p.name}${p.category ? ' — ' + p.category : ''}, disponible chez ${s.shopName}.`).slice(0, 5000),
+      p.stock > 0 ? 'in stock' : 'out of stock', 'new', `${Math.round(promo ? p.comparePrice : p.price)} XOF`, promo ? `${Math.round(p.price)} XOF` : '',
+      `${BASE_URL}/?p=${encodeURIComponent(p.id)}`, productImage(p.id, p), s.shopName, p.category || '']);
+  }
+  res.set({ 'Content-Type': 'text/csv; charset=utf-8', 'Cache-Control': 'no-cache' }).send(rows.map(r => r.map(q).join(',')).join('\n'));
+});
+
+app.use(express.static(path.join(__dirname, 'public'), { index: false, maxAge: '1h' }));
 app.use((req, res) => res.status(404).json({ error: 'Introuvable.' }));
 
 store.init().then(ensureManager).then(() => app.listen(PORT, () => {

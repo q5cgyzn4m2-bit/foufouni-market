@@ -90,3 +90,22 @@ Le nom du sujet sert de mot de passe : toute personne qui le connaît peut lire 
 ## Icône
 
 Le dossier `public` contient l'icône (`icon.svg`, `icon-192.png`, `icon-512.png`, `apple-touch-icon.png`) et `manifest.webmanifest`. Sur téléphone, ouvrez la boutique puis « Ajouter à l'écran d'accueil » : elle s'installe comme une application.
+
+
+## Ambassadeurs (affiliation)
+
+Gestion › **Ambassadeurs** : ajoutez une personne (nom et téléphone obligatoires). Elle reçoit un **code** (ex. AWA25) et un **lien** (`/?ref=AWA25`).
+
+- Le client qui arrive par le lien ou tape le code obtient la remise prévue (5 % par défaut). La vente est attribuée à l'ambassadeur pendant 30 jours après le clic.
+- Commission : un pourcentage par produit (fiche produit ou lot, « Commission ambassadeur »), sinon le pourcentage par défaut. Elle est calculée sur le prix payé, remise déduite.
+- Elle est **validée** quand la commande est payée ou livrée, **annulée** si la commande l'est.
+- Bouton **Payer** : enregistre le versement et une dépense « Commissions ambassadeurs » dans la trésorerie.
+- Chaque ambassadeur dispose d'un **espace personnel** (lien `/?espace=…`, envoyé par WhatsApp depuis sa fiche) : clics, ventes, gains, versements, commission par produit.
+
+
+## Partage et promotion (Facebook, WhatsApp)
+
+- **Lien direct par produit** : `https://votre-boutique/?p=ID`, bouton **↗ Partager** dans chaque fiche produit (WhatsApp, Facebook, copier le lien).
+- **Aperçu des liens** : le serveur ajoute automatiquement le titre, le prix, la description et la photo du produit (ou l'image `og-image.jpg` de la boutique). Pour rafraîchir un aperçu déjà partagé, utilisez l'outil de débogage de partage de Facebook.
+- **Visuel à publier** (équipe) : bouton **🖼 Visuel à publier**, au format carré pour Facebook ou au format vertical pour les statuts WhatsApp, avec le texte de publication prêt à copier.
+- **Catalogue Facebook** : `https://votre-boutique/catalogue.csv`, à déclarer dans Meta Commerce Manager (Sources de données › Flux de données › URL, mise à jour quotidienne). Gestion › Produits › **Catalogue Facebook** affiche l'adresse.

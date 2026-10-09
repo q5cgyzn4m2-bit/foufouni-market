@@ -1,5 +1,6 @@
 /* foûfoûni-Market — relie l'interface au serveur (paiements réels, comptes équipe). */
 (function () {
+  window.FFM_SERVER = true;
   const api = async (method, url, body) => {
     const r = await fetch(url, { method, credentials: 'same-origin', headers: body ? { 'Content-Type': 'application/json' } : {}, body: body ? JSON.stringify(body) : undefined });
     const j = await r.json().catch(() => ({}));
@@ -17,7 +18,7 @@
     try {
       if (me) {
         const s = await api('GET', '/api/admin/state');
-        S.products = s.products; S.bundles = s.bundles || []; S.promos = s.promos;
+        S.products = s.products; S.bundles = s.bundles || []; S.promos = s.promos; S.affiliates = s.affiliates || []; S.affPayouts = s.affPayouts || [];
         S.clients = (s.clients||[]).sort((a,b)=>a.name.localeCompare(b.name)); S.suppliers = (s.suppliers||[]).sort((a,b)=>a.name.localeCompare(b.name));
         S.moves = s.moves || []; S.ledger = s.ledger || []; S.finConfig = s.finConfig || {}; S.orders = s.orders; S.users = s.users;
         S.settings = mergeSettings(s.settings); providers = s.providers; configured = s.configured || {}; notif = s.notifications || {};
@@ -60,10 +61,30 @@
     await load(); S.ready = true; schedule();
     clearInterval(pollT); pollT = setInterval(load, me ? 15000 : 60000);
     handleReturn();
+    if (window.__ffmNewRef && !me) api('POST', '/api/aff/click', { code: window.__ffmNewRef }).catch(() => {});
+    affSpace();
   };
 
+  /* ---------- espace personnel de l'ambassadeur (?espace=…) ---------- */
+  async function affSpace() {
+    const t = new URLSearchParams(location.search).get('espace'); if (!t) return;
+    let d; try { d = await api('GET', '/api/aff/me?t=' + encodeURIComponent(t)); } catch (e) { $('#overlay').innerHTML = `<div class="scrim"><div class="modal"><div class="m-b"><h2>Espace ambassadeur</h2><p>${esc(e.message)}</p></div></div></div>`; return; }
+    const ST = { validee: ['Validée', 'ok'], en_attente: ['En attente', 'warn'], annulee: ['Annulée', 'bad'] };
+    const wa = encodeURIComponent(`Découvrez ${d.shop} : ${d.link}\nAvec mon code ${d.code}, vous avez −${d.discountPct} % sur votre commande.`);
+    $('#overlay').innerHTML = `<div class="scrim"><div class="modal wide" role="dialog" aria-modal="true" aria-label="Espace ambassadeur">
+      <div class="m-h"><h2>Bonjour ${esc(d.name)} 👋</h2><button class="x" data-a="closeAll" aria-label="Fermer">×</button></div>
+      <div class="m-b">${d.active ? '' : '<div class="alert">Votre code est actuellement désactivé. Contactez la boutique.</div>'}
+      <div class="kpis"><div class="kpi"><span>Clics sur votre lien</span><b>${d.clicks}</b></div><div class="kpi"><span>Ventes validées</span><b>${d.n}</b></div><div class="kpi"><span>Gains validés</span><b>${fmt(d.validated)}</b></div><div class="kpi"><span>À recevoir</span><b style="color:var(--indigo)">${fmt(d.due)}</b></div></div>
+      <div class="panel"><h3>Votre lien et votre code</h3><p style="margin:0;word-break:break-all"><b>${esc(d.link)}</b></p><p class="muted small">Code : <b>${esc(d.code)}</b> · vos clients ont −${d.discountPct} % · une vente vous est attribuée si le client achète dans les ${d.days} jours après avoir cliqué.</p>
+        <div class="fin-actions" style="margin:10px 0 0"><button class="btn primary sm" id="as-copy">Copier le lien</button><a class="btn ghost sm" href="https://wa.me/?text=${wa}" target="_blank" rel="noopener">Partager sur WhatsApp</a><a class="btn ghost sm" href="https://www.facebook.com/sharer/sharer.php?u=${encodeURIComponent(d.link)}" target="_blank" rel="noopener">Partager sur Facebook</a></div></div>
+      <div class="panel tbl-wrap"><h3>Vos ventes</h3>${d.sales.length ? `<table><thead><tr><th>Commande</th><th>Date</th><th>Montant</th><th>Votre commission</th><th>État</th></tr></thead><tbody>${d.sales.map(x => `<tr><td>${esc(x.number)}</td><td class="small">${dateFr(x.date)}</td><td>${fmt(x.total)}</td><td><b>${fmt(x.commission)}</b></td><td><span class="pill ${ST[x.state][1]}">${ST[x.state][0]}</span></td></tr>`).join('')}</tbody></table>` : '<p class="muted">Pas encore de vente : partagez votre lien !</p>'}
+        <p class="muted small" style="margin-bottom:0">Une commission est validée quand la commande est payée ou livrée. Déjà reçu : ${fmt(d.paid)}${d.pending ? ' · en attente : ' + fmt(d.pending) : ''}.</p></div>
+      <div class="panel tbl-wrap"><h3>Commissions par produit</h3><table><tbody>${d.products.map(p => `<tr><td>${esc(p.emoji)} ${esc(p.name)}</td><td>${fmt(p.price)}</td><td><b>${p.pct} %</b></td></tr>`).join('')}</tbody></table></div></div></div></div>`;
+    $('#as-copy').onclick = async () => { try { await navigator.clipboard.writeText(d.link); toast('Lien copié'); } catch (e) { toast(d.link); } };
+  }
+
   /* ---------- écritures (équipe connectée) ---------- */
-  const skip = (col, id) => col === 'promo-lookup' || (col === 'settings' && id === 'team');
+  const skip = (col, id) => col === 'promo-lookup' || col === 'aff-lookup' || (col === 'settings' && id === 'team');
   window.put = async (col, id, data) => { if (skip(col, id)) return; await api('PUT', `/api/admin/${col}/${encodeURIComponent(id)}`, data); reload(); };
   window.patch = async (col, id, data) => { if (skip(col, id)) return; await api('PATCH', `/api/admin/${col}/${encodeURIComponent(id)}`, data); reload(); };
   window.del = async (col, id) => { if (skip(col, id)) return; await api('DELETE', `/api/admin/${col}/${encodeURIComponent(id)}`); reload(); };
@@ -83,7 +104,7 @@
       const r = await api('POST', '/api/orders', {
         items: S.cart.map(l => l.b ? { bundle: l.b, qty: l.qty } : { id: l.id, qty: l.qty }), promoCode: S.appliedPromo ? S.appliedPromo.code : '',
         customer: { name: CO.name, phone: CO.phone, address: CO.address, city: CO.city, note: CO.note },
-        delivery: CO.delivery, method: CO.method, cartId
+        delivery: CO.delivery, method: CO.method, cartId, ref: refCode()
       });
       addMine(r.id, r.token);
       clearTimeout(syncT); cartId = newCartId(); contact = null; try { localStorage.setItem('ffm-cart-id', cartId); } catch (e) {}

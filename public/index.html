@@ -344,6 +344,7 @@ const DEFAULT_SETTINGS = {
   shopName:'foûfoûni-Market', tagline:'Le marché, sans les embouteillages.',
   intro:'Commandez en ligne, payez par mobile money ou à la livraison, et recevez vos articles chez vous.',
   currency:'FCFA', deliveryFee:1500, freeFrom:50000, city:'Bamako', phone:'',
+  affDefaultPct:5, affDiscountPct:5, affDays:30, siteUrl:'',
   testMode:true,
   processors:{
     orange:{enabled:true, account:''}, moov:{enabled:true, account:''}, wave:{enabled:true, account:''},
@@ -370,7 +371,7 @@ const ROLES = ['Gérant','Vendeur','Caissier','Livreur','Gestionnaire de stock']
 /* ============ état ============ */
 const S = {
   ready:false, live:false, isAdmin:false, uid:null, myName:'',
-  products:[], bundles:[], clients:[], suppliers:[], moves:[], ledger:[], finConfig:{}, posTab:'vente', trAcc:'all', trType:'all', pq:'', promos:[], orders:[], settings:structuredClone(DEFAULT_SETTINGS), team:{members:[]},
+  products:[], bundles:[], clients:[], suppliers:[], affiliates:[], affPayouts:[], moves:[], ledger:[], finConfig:{}, posTab:'vente', trAcc:'all', trType:'all', pq:'', promos:[], orders:[], settings:structuredClone(DEFAULT_SETTINGS), team:{members:[]},
   cart:[], pos:[], posPromo:null, appliedPromo:null,
   view:'shop', tab:'dash', cat:'Tout', q:'', aq:'', orderFilter:'all', selPromos:new Set(), names:{}
 };
@@ -418,6 +419,8 @@ function syncLocal(){
   const arr = c => Object.entries(local[c]||{}).map(([id,d])=>({id,...d}));
   S.products = arr('products').sort((a,b)=>(b.createdAt||0)-(a.createdAt||0));
   S.bundles = arr('bundles').sort((a,b)=>(b.createdAt||0)-(a.createdAt||0));
+  S.affiliates = arr('affiliates').sort((a,b)=>a.name.localeCompare(b.name));
+  S.affPayouts = arr('aff-payouts').sort((a,b)=>b.createdAt-a.createdAt);
   S.clients = arr('clients').sort((a,b)=>a.name.localeCompare(b.name));
   S.suppliers = arr('suppliers').sort((a,b)=>a.name.localeCompare(b.name));
   S.moves = arr('fin-moves').sort((a,b)=>b.createdAt-a.createdAt);
@@ -490,6 +493,8 @@ async function boot(){
       db.collection('orders').orderBy('createdAt','desc').limit(1000).onSnapshot(s=>{ S.orders = s.docs.map(d=>({id:d.id,...d.data()})); schedule(); }, dbErr);
       const sub = (col, key, sort) => db.collection(col).onSnapshot(s=>{ S[key] = s.docs.map(d=>({id:d.id,...d.data()})).sort(sort); schedule(); }, dbErr);
       sub('clients','clients',(a,b)=>a.name.localeCompare(b.name));
+      sub('affiliates','affiliates',(a,b)=>a.name.localeCompare(b.name));
+      sub('aff-payouts','affPayouts',(a,b)=>b.createdAt-a.createdAt);
       sub('suppliers','suppliers',(a,b)=>a.name.localeCompare(b.name));
       sub('fin-moves','moves',(a,b)=>b.createdAt-a.createdAt);
       sub('fin-ledger','ledger',(a,b)=>b.createdAt-a.createdAt);
@@ -521,6 +526,8 @@ function render(){
   else { S.view='shop'; m.innerHTML = viewShop(); }
   if(fid){ const el = document.getElementById(fid); if(el && el.closest('#main,#topbar')){ el.focus(); try{ if(ss!=null) el.setSelectionRange(ss,ss); }catch(e){} } }
   if(S.view==='admin' && S.tab==='team') resolveNames();
+  if(!S._deep && S.ready && S.products.length){ S._deep = true; let pid=''; try{ pid = new URLSearchParams(location.search).get('p')||''; }catch(e){}
+    if(pid && S.products.some(x=>x.id===pid && x.active!==false)){ S.view='shop'; setTimeout(()=>openProduct(pid), 60); } }
   if(S.isAdmin && !S._remShown){ const n = reminders().late.length; if(n){ S._remShown = true; toast(`${n} créance${n>1?'s':''} client arrivée${n>1?'s':''} à échéance : touchez la cloche pour relancer`); } }
   const dr = $('#drawer-body'); if(dr) dr.innerHTML = cartBody();
 }
@@ -619,6 +626,102 @@ function viewMyOrders(){
     </tbody></table></div>`:`<div class="empty"><h3>Aucune commande pour l’instant</h3><p>Vos achats apparaîtront ici avec leur suivi.</p><button class="btn primary" data-a="go" data-v="shop">Parcourir la boutique</button></div>`}`;
 }
 
+/* --- Partage et visuels --- */
+const productLink = p => shopUrl() + '?p=' + encodeURIComponent(p.id);
+function shareProduct(id){
+  const p = S.products.find(x=>x.id===id); if(!p) return; const link = productLink(p);
+  const txt = `${p.name} — ${fmt(p.price)}${p.comparePrice>p.price?` au lieu de ${fmt(p.comparePrice)}`:''}\nChez ${S.settings.shopName} : ${link}`;
+  $('#overlay').innerHTML = `<div class="scrim" data-a="closeAll"><div class="modal" role="dialog" aria-modal="true" aria-label="Partager"><div class="m-h"><h2>Partager « ${esc(p.name)} »</h2><button class="x" data-a="closeAll" aria-label="Fermer">×</button></div>
+    <div class="m-b"><div class="pay-opts">
+      ${navigator.share?'<button class="pay-opt" data-sh="native"><span class="pay-logo" style="background:var(--indigo)">↗</span><b>Partager…</b></button>':''}
+      <a class="pay-opt" href="https://wa.me/?text=${encodeURIComponent(txt)}" target="_blank" rel="noopener" style="text-decoration:none;color:inherit"><span class="pay-logo" style="background:#25D366">W</span><b>WhatsApp</b></a>
+      <a class="pay-opt" href="https://www.facebook.com/sharer/sharer.php?u=${encodeURIComponent(link)}" target="_blank" rel="noopener" style="text-decoration:none;color:inherit"><span class="pay-logo" style="background:#1877F2">f</span><b>Facebook</b></a>
+      <button class="pay-opt" data-sh="copy"><span class="pay-logo" style="background:#5D6070">🔗</span><span><b>Copier le lien</b><br><span class="muted small" style="word-break:break-all">${esc(link)}</span></span></button></div>
+    ${S.isAdmin?`<button class="btn ghost block" data-a="visual" data-id="${p.id}" style="margin-top:14px">🖼 Créer un visuel à publier</button>`:''}</div></div></div>`;
+  $('#overlay').querySelectorAll('[data-sh]').forEach(b=>b.onclick = async e=>{ e.stopPropagation();
+    if(b.dataset.sh==='copy'){ try{ await navigator.clipboard.writeText(link); toast('Lien copié'); }catch(err){ toast(link); } }
+    if(b.dataset.sh==='native'){ try{ await navigator.share({title:p.name, text:txt.split('\n')[0], url:link}); }catch(err){} } });
+}
+function wrapLines(ctx, text, maxW, maxLines){
+  const words = String(text).split(/\s+/), lines = []; let cur = '';
+  for(const w of words){ const t = cur ? cur+' '+w : w; if(ctx.measureText(t).width <= maxW) cur = t; else { if(cur) lines.push(cur); cur = w; } }
+  if(cur) lines.push(cur);
+  if(lines.length > maxLines){ const keep = lines.slice(0, maxLines); let l = keep[maxLines-1]; while(l && ctx.measureText(l+'…').width > maxW) l = l.slice(0,-1); keep[maxLines-1] = l+'…'; return keep; }
+  return lines;
+}
+function bogolanBand(ctx, x, y, w, h){
+  ctx.save(); ctx.fillStyle = '#C9A45C'; ctx.fillRect(x, y, w, h); ctx.strokeStyle = '#14110D'; ctx.fillStyle = '#14110D'; ctx.lineWidth = Math.max(2, h/10);
+  const step = h*1.1;
+  for(let i=x; i<x+w; i+=step){ ctx.beginPath(); ctx.moveTo(i, y+h*0.32); ctx.lineTo(i+step/4, y+h*0.12); ctx.lineTo(i+step/2, y+h*0.32); ctx.lineTo(i+step*0.75, y+h*0.12); ctx.lineTo(i+step, y+h*0.32); ctx.stroke();
+    ctx.beginPath(); ctx.arc(i+step/4, y+h*0.66, h*0.08, 0, 7); ctx.fill(); ctx.fillRect(i+step*0.7, y+h*0.58, h*0.16, h*0.16); }
+  ctx.restore();
+}
+function rrect(ctx, x, y, w, h, r){ ctx.beginPath(); ctx.moveTo(x+r, y); ctx.arcTo(x+w, y, x+w, y+h, r); ctx.arcTo(x+w, y+h, x, y+h, r); ctx.arcTo(x, y+h, x, y, r); ctx.arcTo(x, y, x+w, y, r); ctx.closePath(); }
+async function makeVisual(p, story){
+  const W = 1080, H = story ? 1920 : 1080, c = document.createElement('canvas'); c.width = W; c.height = H; const ctx = c.getContext('2d');
+  const SERIF = '"Cormorant Garamond", Georgia, "Times New Roman", serif', SANS = 'Manrope, "Segoe UI", Arial, sans-serif';
+  try{ await Promise.all([document.fonts.load('700 80px "Cormorant Garamond"'), document.fonts.load('700 40px Manrope')]); }catch(e){}
+  const gold = '#C9A45C', ivory = '#F2EBDD', muted = '#A99E8A', st = S.settings;
+  ctx.fillStyle = '#100E0B'; ctx.fillRect(0, 0, W, H);
+  const band = story ? 44 : 36; bogolanBand(ctx, 0, 0, W, band); bogolanBand(ctx, 0, H-band, W, band);
+  let y = band + (story ? 70 : 44);
+  if(story){ ctx.fillStyle = gold; ctx.font = `700 64px ${SERIF}`; ctx.textAlign = 'center'; ctx.fillText(st.shopName, W/2, y+30); ctx.fillStyle = muted; ctx.font = `500 30px ${SANS}`; ctx.fillText(st.tagline||'', W/2, y+80); y += 140; }
+  const ix = 60, iw = W-120, ih = story ? 900 : 600;
+  ctx.save(); rrect(ctx, ix, y, iw, ih, 36); ctx.fillStyle = '#1B1814'; ctx.fill(); ctx.clip();
+  if(p.image){ await new Promise(ok=>{ const im = new Image(); im.onload = ()=>{ const k = Math.max(iw/im.width, ih/im.height), dw = im.width*k, dh = im.height*k; ctx.drawImage(im, ix+(iw-dw)/2, y+(ih-dh)/2, dw, dh); ok(); }; im.onerror = ok; im.src = p.image; }); }
+  else { ctx.font = `${Math.round(ih*0.5)}px "Apple Color Emoji","Segoe UI Emoji","Noto Color Emoji",sans-serif`; ctx.textAlign = 'center'; ctx.textBaseline = 'middle'; ctx.fillText(p.emoji||'📦', ix+iw/2, y+ih/2+10); ctx.textBaseline = 'alphabetic'; }
+  ctx.restore(); ctx.strokeStyle = 'rgba(201,164,92,.55)'; ctx.lineWidth = 3; rrect(ctx, ix, y, iw, ih, 36); ctx.stroke();
+  if(p.comparePrice > p.price){ const off = Math.round((1-p.price/p.comparePrice)*100), r = story ? 110 : 92, cx = ix+iw-r+20, cy = y+r-20;
+    ctx.fillStyle = gold; ctx.beginPath(); ctx.arc(cx, cy, r, 0, 7); ctx.fill(); ctx.fillStyle = '#14110D'; ctx.textAlign = 'center'; ctx.font = `800 ${Math.round(r*0.62)}px ${SANS}`; ctx.fillText(`−${off}%`, cx, cy+r*0.22); }
+  if(isNew(p)){ ctx.save(); ctx.fillStyle = gold; rrect(ctx, ix+28, y+28, 230, 64, 32); ctx.fill(); ctx.fillStyle = '#14110D'; ctx.font = `800 32px ${SANS}`; ctx.textAlign = 'center'; ctx.fillText('NOUVEAU', ix+28+115, y+71); ctx.restore(); }
+  y += ih + (story ? 90 : 66);
+  ctx.textAlign = story ? 'center' : 'left'; const tx = story ? W/2 : ix;
+  ctx.fillStyle = muted; ctx.font = `600 ${story?34:28}px ${SANS}`; ctx.fillText((p.category||'').toUpperCase(), tx, y); y += story ? 72 : 60;
+  ctx.fillStyle = ivory; ctx.font = `700 ${story?76:62}px ${SERIF}`; for(const l of wrapLines(ctx, p.name, iw, 2)){ ctx.fillText(l, tx, y); y += story ? 80 : 64; }
+  y += story ? 56 : 36; ctx.fillStyle = gold; ctx.font = `700 ${story?112:84}px ${SERIF}`; const priceTxt = fmt(p.price).replace(/[\u202f\u00a0]/g,' '); ctx.fillText(priceTxt, tx, y);
+  if(p.comparePrice > p.price){ const pw = ctx.measureText(priceTxt).width; ctx.font = `500 ${story?44:36}px ${SANS}`; ctx.fillStyle = muted; const old = fmt(p.comparePrice).replace(/[\u202f\u00a0]/g,' ');
+    if(story){ y += 70; ctx.fillText(old, tx, y); const ow = ctx.measureText(old).width; ctx.fillRect(tx-ow/2, y-14, ow, 3); } else { const ox = ix+pw+26; ctx.textAlign = 'left'; ctx.fillText(old, ox, y-6); const ow = ctx.measureText(old).width; ctx.fillRect(ox, y-20, ow, 3); } }
+  const host = (()=>{ try{ return new URL(shopUrl()).host; }catch(e){ return ''; } })();
+  if(story){ const by = H - band - 260; ctx.fillStyle = gold; rrect(ctx, 140, by, W-280, 120, 60); ctx.fill(); ctx.fillStyle = '#14110D'; ctx.font = `800 44px ${SANS}`; ctx.textAlign = 'center'; ctx.fillText('Commandez maintenant', W/2, by+76);
+    ctx.fillStyle = ivory; ctx.font = `600 34px ${SANS}`; ctx.fillText([host, st.phone].filter(Boolean).join('  ·  '), W/2, by+190); }
+  else { ctx.textAlign = 'left'; ctx.fillStyle = gold; ctx.font = `700 40px ${SERIF}`; ctx.fillText(st.shopName, ix, H-band-40); ctx.textAlign = 'right'; ctx.fillStyle = ivory; ctx.font = `600 28px ${SANS}`; ctx.fillText([host, st.phone].filter(Boolean).join('  ·  '), ix+iw, H-band-44); }
+  return await new Promise(ok=>c.toBlob(b=>ok(b), 'image/png'));
+}
+async function openVisual(id, story){
+  const p = S.products.find(x=>x.id===id); if(!p) return; story = !!story;
+  $('#overlay').innerHTML = `<div class="scrim" data-a="closeAll"><div class="modal" role="dialog" aria-modal="true" aria-label="Visuel"><div class="m-h"><h2>Visuel à publier</h2><button class="x" data-a="closeAll" aria-label="Fermer">×</button></div><div class="m-b" style="text-align:center"><div class="spinner"></div>Préparation du visuel…</div></div></div>`;
+  let blob; try{ blob = await makeVisual(p, story); }catch(e){ console.warn(e); }
+  if(!blob){ toast('Impossible de créer le visuel sur cet appareil.'); return closeAll(); }
+  const url = URL.createObjectURL(blob), name = `${(p.name||'produit').normalize('NFD').replace(/[^A-Za-z0-9]+/g,'-').toLowerCase()}-${story?'statut':'publication'}.png`;
+  const caption = `${p.name} — ${fmt(p.price)}${p.comparePrice>p.price?` (au lieu de ${fmt(p.comparePrice)})`:''}\n${p.description?p.description+'\n':''}👉 Commandez ici : ${productLink(p)}${S.settings.phone?`\n📞 ${S.settings.phone}`:''}`;
+  $('#overlay').innerHTML = `<div class="scrim" data-a="closeAll"><div class="modal wide" role="dialog" aria-modal="true" aria-label="Visuel"><div class="m-h"><h2>Visuel à publier</h2><button class="x" data-a="closeAll" aria-label="Fermer">×</button></div>
+    <div class="m-b"><div class="cats" role="group" aria-label="Format"><button aria-pressed="${!story}" data-vf="0">Publication Facebook (carré)</button><button aria-pressed="${story}" data-vf="1">Statut WhatsApp / story</button></div>
+    <div class="row" style="align-items:flex-start"><div style="flex:1 1 260px;text-align:center"><img src="${url}" alt="Aperçu du visuel" style="max-width:100%;max-height:60vh;border-radius:12px;border:1px solid var(--line);margin:0 auto"></div>
+    <div style="flex:1 1 260px"><div class="field"><label for="vs-cap">Texte à publier avec l’image</label><textarea class="input" id="vs-cap" style="min-height:150px">${esc(caption)}</textarea></div>
+    <div class="fin-actions"><button class="btn primary" data-vs="dl">⬇️ Télécharger l’image</button>${navigator.canShare?'<button class="btn ghost" data-vs="share">↗ Partager</button>':''}<button class="btn ghost" data-vs="copy">Copier le texte</button></div>
+    <p class="muted small" style="margin:0">Publiez l’image avec ce texte : le lien ouvre directement ce produit dans la boutique.</p></div></div></div></div></div>`;
+  $('#overlay').querySelectorAll('[data-vf]').forEach(b=>b.onclick = e=>{ e.stopPropagation(); URL.revokeObjectURL(url); openVisual(id, b.dataset.vf==='1'); });
+  $('#overlay').querySelectorAll('[data-vs]').forEach(b=>b.onclick = async e=>{ e.stopPropagation(); const k = b.dataset.vs;
+    if(k==='copy'){ try{ await navigator.clipboard.writeText($('#vs-cap').value); toast('Texte copié'); }catch(err){} }
+    if(k==='dl'){ if(dl) save(name, blob); else { const a = document.createElement('a'); a.href = url; a.download = name; document.body.appendChild(a); a.click(); a.remove(); } }
+    if(k==='share'){ const f = new File([blob], name, {type:'image/png'}); try{ if(navigator.canShare({files:[f]})) await navigator.share({files:[f], text:$('#vs-cap').value}); else toast('Partage non disponible : téléchargez l’image.'); }catch(err){} } });
+}
+
+function openProduct(id){
+      const p = S.products.find(x=>x.id===id); if(!p) return;
+      const related = S.products.filter(x=>x.id!==p.id && x.active!==false && x.category===p.category).sort((a,b)=>(b.stock>0)-(a.stock>0)).slice(0,6);
+      const inBundles = S.bundles.filter(b=>b.active!==false && (b.items||[]).some(i=>i.id===p.id) && bundleInfo(b).ok);
+      $('#overlay').innerHTML = `<div class="scrim" data-a="closeAll"><div class="modal wide" role="dialog" aria-modal="true" aria-label="${esc(p.name)}"><div class="m-h"><h2>${esc(p.name)}</h2><button class="x" data-a="closeAll" aria-label="Fermer">×</button></div>
+        <div class="m-b"><div class="row" style="align-items:flex-start"><div class="thumb" style="flex:1 1 260px;border-radius:14px;font-size:110px">${pImg(p)}</div>
+        <div style="flex:1 1 260px"><span class="muted small">${esc(p.category)} · ${esc(p.sku)}</span><p class="price" style="font-size:28px;margin:8px 0">${fmt(p.price)}${p.comparePrice>p.price?`<span class="strike">${fmt(p.comparePrice)}</span>`:''}</p>
+        <p>${esc(p.description||'')}</p><p>${p.stock>0?`<span class="pill ok">En stock · ${p.stock}</span>`:'<span class="pill bad">Rupture de stock</span>'} ${isNew(p)?'<span class="pill info">Nouveau</span>':''}</p>
+        ${p.bulkMin>1&&p.bulkPrice>0?`<p class="bulk" style="font-size:14px">Achat groupé : ${fmt(p.bulkPrice)} l’unité dès ${p.bulkMin} unités, appliqué automatiquement dans le panier.</p>`:''}
+        <button class="btn primary block" data-a="addClose" data-id="${p.id}" ${p.stock<=0?'disabled':''}>Ajouter au panier</button>
+        <div class="row" style="margin-top:10px;gap:8px"><button class="btn ghost" data-a="shareProduct" data-id="${p.id}" style="flex:1">↗ Partager</button>${S.isAdmin?`<button class="btn ghost" data-a="visual" data-id="${p.id}" style="flex:1">🖼 Visuel à publier</button>`:''}</div>
+        ${inBundles.length?`<div style="margin-top:14px">${inBundles.map(b=>`<button class="btn ghost block" style="margin-top:8px" data-a="addBundle" data-id="${b.id}">Aussi en lot : ${esc(b.name)} · ${fmt(b.price)}</button>`).join('')}</div>`:''}</div></div>
+        ${related.length?`<h3 style="margin:26px 0 12px;font-size:24px">Dans la même catégorie</h3><div class="related">${related.map(miniCard).join('')}</div>`:''}</div></div></div>`;
+}
+
 function miniCard(p){
   return `<button class="mini" data-a="product" data-id="${p.id}" aria-label="Voir ${esc(p.name)}"><span class="e">${pImg(p)}</span>${isNew(p)?'<span class="new-band">Nouveau</span>':''}<b>${esc(p.name)}</b><span class="price">${fmt(p.price)}${onSale(p)?`<span class="strike">${fmt(p.comparePrice)}</span>`:''}</span></button>`;
 }
@@ -698,6 +801,29 @@ function orderItems(lines){
     ? {id:'b:'+l.b.id, bundle:true, name:l.name, price:l.unit, qty:l.qty, components:l.b.items.map(i=>({id:i.id, qty:i.qty}))}
     : {id:l.id, name:l.name, price:l.unit, qty:l.qty});
 }
+/* --- Ambassadeurs (affiliation) --- */
+const PAID_ST = ['payee','preparation','expediee','livree'];
+const affPctOf = l => { const v = l.kind==='bundle' ? l.b.affPct : (l.p ? l.p.affPct : undefined); return (v!==undefined && v!==null && v!=='' && !isNaN(v)) ? Number(v) : (Number(S.settings.affDefaultPct)||0); };
+const affCommission = (lines, disc) => Math.round(lines.reduce((t,l)=>t + l.unit*l.qty*(1-(Number(disc)||0)/100)*affPctOf(l)/100, 0));
+const affState = o => !o.affiliate ? null : o.status==='annulee' ? 'annulee' : PAID_ST.includes(o.status) ? 'validee' : 'en_attente';
+const AFF_ST = {validee:{l:'Validée',c:'ok'}, en_attente:{l:'En attente',c:'warn'}, annulee:{l:'Annulée',c:'bad'}};
+const isServer = () => !!window.FFM_SERVER;
+const shopUrl = () => (S.settings.siteUrl || (location.origin + location.pathname)).replace(/\/$/,'') + '/';
+function captureRef(){
+  try{ const q = new URLSearchParams(location.search), c = (q.get('ref')||'').trim().toUpperCase();
+    if(/^[A-Z0-9-]{3,20}$/.test(c)){ localStorage.setItem('ffm-ref', JSON.stringify({code:c, at:Date.now()})); window.__ffmNewRef = c; } }catch(e){}
+}
+function refCode(){
+  try{ const r = JSON.parse(localStorage.getItem('ffm-ref')||'null'); if(r && r.code && Date.now()-r.at < (Number(S.settings.affDays)||30)*864e5) return r.code; }catch(e){}
+  return '';
+}
+function affStats(a){
+  let validated=0, pending=0, ca=0, n=0, clicks=a.clicks||0;
+  const orders = S.orders.filter(o=>o.affiliate && o.affiliate.id===a.id);
+  orders.forEach(o=>{ const st=affState(o), c=o.affiliate.commission||0; if(st==='validee'){ validated+=c; ca+=o.total; n++; } else if(st==='en_attente') pending+=c; });
+  const paid = S.affPayouts.filter(x=>x.affiliateId===a.id).reduce((t,x)=>t+x.amount,0);
+  return {orders, validated, pending, paid, due:Math.max(0, validated-paid), ca, n, clicks};
+}
 function expandItems(items){
   const m = {};
   for(const i of items||[]){ if(i.bundle) (i.components||[]).forEach(c=>m[c.id]=(m[c.id]||0)+c.qty*i.qty); else m[i.id]=(m[i.id]||0)+i.qty; }
@@ -725,7 +851,7 @@ function cartBody(){
       <b>${fmt(l.unit*l.qty)}</b></div>`).join('')}
     <div style="margin:18px 0 12px">${promoBox('cart')}</div>
     <div class="totals"><div><span>Sous-total</span><span>${fmt(t.subtotal)}</span></div>
-      ${t.discount?`<div style="color:var(--kola)"><span>Remise ${esc(S.appliedPromo.code)}</span><span>−${fmt(t.discount)}</span></div>`:''}
+      ${t.discount?`<div style="color:var(--kola)"><span>Remise ${S.appliedPromo.affiliate?'ambassadeur ':''}${esc(S.appliedPromo.code)}</span><span>−${fmt(t.discount)}</span></div>`:''}
       <div class="muted"><span>Livraison</span><span>${t.shipping?fmt(t.shipping):'Offerte'}</span></div>
       ${t.subtotal<S.settings.freeFrom?`<div class="muted small"><span>Plus que ${fmt(S.settings.freeFrom-t.subtotal)} pour la livraison offerte</span></div>`:''}
       <div class="grand"><span>Total</span><span>${fmt(t.total)}</span></div></div>`;
@@ -736,6 +862,8 @@ function promoBox(target){
   return `<label class="sr" for="promo-${target}">Code promo</label><div class="promo-in"><input class="input" id="promo-${target}" placeholder="Code promo" autocomplete="off"><button class="btn ghost" data-a="applyPromo" data-t="${target}">Appliquer</button></div><div class="small" id="promo-msg-${target}" style="margin-top:6px;color:var(--danger)"></div>`;
 }
 function openCart(){
+  const rc = refCode();
+  if(rc && !S.appliedPromo) validatePromo(rc, 0).then(r=>{ if(r.promo && r.promo.affiliate && !S.appliedPromo){ S.appliedPromo = r.promo; if(r.promo.value) toast(`Remise ambassadeur ${rc} appliquée : −${r.promo.value} %`); const d=$('#drawer-body'); if(d) d.innerHTML = cartBody(); } }).catch(()=>{});
   $('#overlay').innerHTML = `<div class="drawer-wrap" data-a="closeAll"><aside class="drawer" role="dialog" aria-modal="true" aria-label="Panier">
     <div class="m-h"><h2>Panier</h2><button class="x" data-a="closeAll" aria-label="Fermer">×</button></div>
     <div class="m-b" id="drawer-body">${cartBody()}</div>
@@ -745,6 +873,7 @@ async function validatePromo(code, subtotal){
   const c = code.trim().toUpperCase();
   if(!c) return {err:'Saisissez un code.'};
   const p = await getDoc('promo-lookup', await hashCode(c));
+  if(!p){ const a = await getDoc('aff-lookup', await hashCode(c)); if(a && a.active) return {promo:{code:c, type:'percent', value:Number(a.discountPct)||0, affiliate:{id:a.id}}}; }
   if(!p || !p.active) return {err:'Ce code n’existe pas ou n’est plus actif.'};
   if(p.expiresAt && p.expiresAt < today()) return {err:'Ce code a expiré le '+new Date(p.expiresAt).toLocaleDateString('fr-FR')+'.'};
   if(p.minOrder && subtotal < p.minOrder) return {err:`Ce code s’applique dès ${fmt(p.minOrder)} d’achat.`};
@@ -806,6 +935,7 @@ async function coNext(){
       items:orderItems(t.lines),
       subtotal:t.subtotal, discount:t.discount, shipping:t.shipping, total:t.total,
       promoCode:S.appliedPromo?S.appliedPromo.code:'',
+      affiliate:S.appliedPromo&&S.appliedPromo.affiliate?{id:S.appliedPromo.affiliate.id, code:S.appliedPromo.code, discountPct:S.appliedPromo.value, commission:affCommission(t.lines, S.appliedPromo.value)}:null,
       customer:{name:CO.name, phone:CO.phone, address:CO.address, city:CO.city, note:CO.note},
       delivery:CO.delivery, payment:{method:CO.method, ref, status:CO.method==='cod'?'à encaisser':'réussi'+(S.settings.testMode?' (test)':'')},
       status:CO.method==='cod'?'en_attente':'payee', channel:'en ligne', stockApplied:false,
@@ -970,6 +1100,7 @@ function posPay(){
     const order = {
       number, items:orderItems(t.lines),
       subtotal:t.subtotal, discount:t.discount, shipping:0, total:t.total, promoCode:S.posPromo?S.posPromo.code:'',
+      affiliate:S.posPromo&&S.posPromo.affiliate?{id:S.posPromo.affiliate.id, code:S.posPromo.code, discountPct:S.posPromo.value, commission:affCommission(t.lines, S.posPromo.value)}:null,
       customer:{name:client?client.name:'', phone:client?client.phone||'':'', address:'', city:'', note:''}, clientId:client?client.id:'', delivery:'retrait',
       payment:{method:st.sel, paid, rest, due, status, received:st.sel==='cash'?(Number(st.received)||0):0,
         ref:st.sel==='cash'?'CAISSE-'+rnd(6):st.sel==='credit'?'CREDIT-'+rnd(6):(st.ref.trim()||st.sel.toUpperCase()+'-'+rnd(8))},
@@ -990,9 +1121,96 @@ function posPay(){
   draw();
 }
 
+/* --- Ambassadeurs : gestion --- */
+function paneAffiliates(){
+  const st = S.settings, rows = S.affiliates.map(a=>({a, x:affStats(a)}));
+  const due = rows.reduce((t,r)=>t+r.x.due,0), paid = rows.reduce((t,r)=>t+r.x.paid,0), sales = rows.reduce((t,r)=>t+r.x.n,0), ca = rows.reduce((t,r)=>t+r.x.ca,0);
+  return `<div class="toolbar"><h2 style="font-size:24px;flex:1">Ambassadeurs</h2><button class="btn ghost" data-a="affSettings">Réglages</button><button class="btn primary" data-a="newAff">Ajouter un ambassadeur</button></div>
+  <div class="kpis"><div class="kpi"><span>Ambassadeurs actifs</span><b>${S.affiliates.filter(a=>a.active!==false).length}</b></div><div class="kpi"><span>Ventes apportées</span><b>${sales}</b></div>
+    <div class="kpi"><span>Chiffre d’affaires apporté</span><b>${fmt(ca)}</b></div><div class="kpi"><span>Commissions à payer</span><b style="color:${due?'var(--danger)':'inherit'}">${fmt(due)}</b></div></div>
+  <p class="muted small">Commission par défaut : ${st.affDefaultPct} % (modifiable produit par produit) · remise client : ${st.affDiscountPct} % · lien valable ${st.affDays} jours · commission validée quand la commande est payée ou livrée. Déjà versé : ${fmt(paid)}.</p>
+  <div class="panel tbl-wrap">${rows.length?`<table><thead><tr><th>Ambassadeur</th><th>Code</th><th>Clics</th><th>Ventes</th><th>Validées</th><th>En attente</th><th>À payer</th><th></th></tr></thead><tbody>
+  ${rows.map(({a,x})=>`<tr class="click" data-a="affDetail" data-id="${a.id}"><td><b>${esc(a.name)}</b>${a.active===false?' <span class="pill">Inactif</span>':''}<div class="muted small">${esc(a.phone||'')}</div></td><td><b style="letter-spacing:.04em">${esc(a.code)}</b><div class="muted small">−${a.discountPct||0} % client</div></td>
+    <td>${x.clicks}</td><td>${x.n}</td><td>${fmt(x.validated)}</td><td class="muted">${fmt(x.pending)}</td><td>${x.due?`<span class="pill bad">${fmt(x.due)}</span>`:'<span class="pill ok">À jour</span>'}</td><td class="muted small">Ouvrir</td></tr>`).join('')}</tbody></table>`
+  :'<div class="empty"><h3>Aucun ambassadeur</h3><p>Ajoutez les personnes qui recommandent vos produits : chacune reçoit un code et un lien personnels, et vous voyez les ventes qu’elle apporte.</p></div>'}</div>`;
+}
+function affSettings(){
+  const st = S.settings;
+  $('#overlay').innerHTML = `<div class="scrim" data-a="closeAll"><div class="modal" role="dialog" aria-modal="true" aria-label="Réglages ambassadeurs"><div class="m-h"><h2>Réglages ambassadeurs</h2><button class="x" data-a="closeAll" aria-label="Fermer">×</button></div>
+    <div class="m-b"><div class="row"><div class="field"><label for="as-pct">Commission par défaut (%)</label><input class="input" id="as-pct" inputmode="decimal" value="${st.affDefaultPct}"></div><div class="field"><label for="as-disc">Remise client par défaut (%)</label><input class="input" id="as-disc" inputmode="decimal" value="${st.affDiscountPct}"></div></div>
+    <div class="row"><div class="field"><label for="as-days">Durée du lien (jours)</label><input class="input" id="as-days" inputmode="numeric" value="${st.affDays}"></div><div class="field"><label for="as-url">Adresse de la boutique</label><input class="input" id="as-url" value="${esc(st.siteUrl||'')}" placeholder="${esc(location.origin)}"></div></div>
+    <p class="muted small" style="margin:0">La commission d’un produit se règle dans sa fiche ; sinon ce pourcentage s’applique. Elle est calculée sur le prix payé par le client, remise déduite.</p></div>
+    <div class="m-f"><button class="btn primary" id="as-save">Enregistrer</button></div></div></div>`;
+  $('#as-save').onclick = async ()=>{ const s2 = structuredClone(S.settings), n = id=>Math.max(0, Number($(id).value.replace(',','.'))||0);
+    s2.affDefaultPct = Math.min(100,n('#as-pct')); s2.affDiscountPct = Math.min(90,n('#as-disc')); s2.affDays = Math.max(1, Math.round(n('#as-days'))||30); s2.siteUrl = $('#as-url').value.trim();
+    try{ await put('settings','main',s2); closeAll(); toast('Réglages enregistrés'); }catch(e){ dbErr(e); toast('Réservé au gérant.'); } };
+}
+function affCodeFrom(name){ const b = name.normalize('NFD').replace(/[^A-Za-z]/g,'').toUpperCase().slice(0,5) || 'AMB'; let c; do{ c = b + Math.floor(10+Math.random()*90); }while(S.affiliates.some(a=>a.code===c)); return c; }
+function affForm(a){
+  const isNewA = !a; a = a || {name:'', phone:'', code:'', discountPct:S.settings.affDiscountPct, active:true, note:''};
+  $('#overlay').innerHTML = `<div class="scrim" data-a="closeAll"><div class="modal" role="dialog" aria-modal="true" aria-label="Ambassadeur"><div class="m-h"><h2>${isNewA?'Nouvel ambassadeur':'Modifier l’ambassadeur'}</h2><button class="x" data-a="closeAll" aria-label="Fermer">×</button></div>
+    <div class="m-b"><div class="row"><div class="field"><label for="af-name">Nom *</label><input class="input" id="af-name" value="${esc(a.name)}"></div><div class="field"><label for="af-phone">Téléphone (WhatsApp) *</label><input class="input" id="af-phone" inputmode="tel" value="${esc(a.phone)}"></div></div>
+    <div class="row"><div class="field"><label for="af-code">Code personnel</label><input class="input" id="af-code" value="${esc(a.code)}" placeholder="Créé automatiquement" style="text-transform:uppercase"></div><div class="field"><label for="af-disc">Remise offerte au client (%)</label><input class="input" id="af-disc" inputmode="decimal" value="${esc(a.discountPct)}"></div></div>
+    <div class="field"><label for="af-note">Note</label><input class="input" id="af-note" value="${esc(a.note||'')}" placeholder="ex. page Facebook, quartier…"></div>
+    <label class="row" style="align-items:center;gap:10px"><span class="switch" style="flex:0 0 42px"><input type="checkbox" id="af-active" ${a.active!==false?'checked':''}><span></span></span><span>Actif (code et lien utilisables)</span></label><div class="small" id="af-err" style="color:var(--danger);margin-top:8px"></div></div>
+    <div class="m-f"><button class="btn ghost" data-a="closeAll">Annuler</button><button class="btn primary" id="af-save">${isNewA?'Créer':'Enregistrer'}</button></div></div></div>`;
+  $('#af-name').focus();
+  $('#af-save').onclick = async ()=>{
+    const v = id=>$(id).value.trim(), name = v('#af-name'), phone = v('#af-phone'), err = $('#af-err');
+    let code = v('#af-code').toUpperCase().replace(/[^A-Z0-9-]/g,'') || affCodeFrom(name);
+    if(!name){ err.textContent='Le nom est obligatoire.'; return; }
+    if(!phoneOk(phone)){ err.textContent='Un numéro de téléphone valide est obligatoire.'; return; }
+    if(code.length<3){ err.textContent='Le code doit compter au moins 3 caractères.'; return; }
+    if(S.affiliates.some(x=>x.code===code && x.id!==a.id) || S.promos.some(x=>x.code===code)){ err.textContent='Ce code est déjà utilisé (ambassadeur ou code promo).'; return; }
+    const id = a.id || newId('a'), disc = Math.min(90, Math.max(0, Number(v('#af-disc').replace(',','.'))||0)), active = $('#af-active').checked;
+    const d = {name, phone, code, discountPct:disc, active, note:v('#af-note'), clicks:a.clicks||0, token:a.token||(newId('t')+rnd(16)).toLowerCase(), createdAt:a.createdAt||Date.now(), updatedAt:Date.now()};
+    $('#af-save').disabled = true;
+    try{
+      await put('affiliates', id, d);
+      if(a.code && a.code!==code) await del('aff-lookup', await hashCode(a.code)).catch(()=>{});
+      await put('aff-lookup', await hashCode(code), {id, discountPct:disc, active});
+      toast(isNewA?'Ambassadeur créé':'Ambassadeur enregistré'); setTimeout(()=>affDetail(id), 300);
+    }catch(e){ dbErr(e); err.textContent='Enregistrement impossible : réservé aux gérants.'; $('#af-save').disabled=false; }
+  };
+}
+function affDetail(id){
+  const a = S.affiliates.find(x=>x.id===id); if(!a) return; const x = affStats(a), link = shopUrl()+'?ref='+encodeURIComponent(a.code);
+  const space = isServer() ? shopUrl()+'?espace='+encodeURIComponent(a.token) : '';
+  const wa = `Bonjour ${a.name}, voici ton lien ambassadeur ${S.settings.shopName} : ${link}\nTon code : ${a.code} (tes clients ont −${a.discountPct||0} %).${space?`\nSuis tes ventes et tes gains ici : ${space}`:''}`;
+  const pays = S.affPayouts.filter(p=>p.affiliateId===id);
+  $('#overlay').innerHTML = `<div class="scrim" data-a="closeAll"><div class="modal wide" role="dialog" aria-modal="true" aria-label="${esc(a.name)}"><div class="m-h"><h2>${esc(a.name)} · ${esc(a.code)}</h2><button class="x" data-a="closeAll" aria-label="Fermer">×</button></div>
+    <div class="m-b"><div class="kpis"><div class="kpi"><span>Clics sur le lien</span><b>${x.clicks}</b></div><div class="kpi"><span>Ventes validées</span><b>${x.n}</b></div><div class="kpi"><span>Commissions validées</span><b>${fmt(x.validated)}</b></div><div class="kpi"><span>Reste à payer</span><b style="color:${x.due?'var(--danger)':'inherit'}">${fmt(x.due)}</b></div></div>
+    <div class="panel"><h3>Lien et code à partager</h3><p style="margin:0;word-break:break-all"><b>${esc(link)}</b></p><p class="muted small">Code : <b>${esc(a.code)}</b> · remise client −${a.discountPct||0} % · lien valable ${S.settings.affDays} jours après le clic${space?`<br>Espace personnel de l’ambassadeur : ${esc(space)}`:''}</p>
+      <div class="fin-actions" style="margin:10px 0 0"><button class="btn ghost sm" data-af="copy">Copier le lien</button><a class="btn ghost sm" href="https://wa.me/${waNumber(a.phone)}?text=${encodeURIComponent(wa)}" target="_blank" rel="noopener">Envoyer à l’ambassadeur (WhatsApp)</a><button class="btn primary sm" data-af="pay" ${x.due?'':'disabled'}>Payer ${fmt(x.due)}</button><button class="btn ghost sm" data-af="edit">Modifier</button></div></div>
+    <div class="panel tbl-wrap"><h3>Ventes apportées</h3>${x.orders.length?`<table><thead><tr><th>Commande</th><th>Date</th><th>Montant</th><th>Commission</th><th>État</th></tr></thead><tbody>${x.orders.map(o=>`<tr><td>${esc(o.number)}</td><td class="small">${dateFr(o.createdAt)}</td><td>${fmt(o.total)}</td><td>${fmt(o.affiliate.commission)}</td><td><span class="pill ${AFF_ST[affState(o)].c}">${AFF_ST[affState(o)].l}</span></td></tr>`).join('')}</tbody></table>`:'<p class="muted">Aucune vente pour l’instant.</p>'}</div>
+    ${pays.length?`<div class="panel tbl-wrap"><h3>Versements</h3><table><tbody>${pays.map(p=>`<tr><td class="small">${dateOnly(p.date)}</td><td>${esc(ACCOUNTS[p.account]||'')}${p.ref?' · '+esc(p.ref):''}</td><td style="text-align:right"><b>${fmt(p.amount)}</b></td></tr>`).join('')}</tbody></table></div>`:''}</div></div></div>`;
+  $('#overlay').querySelectorAll('[data-af]').forEach(b=>b.onclick = async e=>{ e.stopPropagation(); const k=b.dataset.af;
+    if(k==='copy'){ try{ await navigator.clipboard.writeText(link); toast('Lien copié'); }catch(err){ toast(link); } }
+    if(k==='edit') affForm(a);
+    if(k==='pay') affPay(a, x.due);
+  });
+}
+function affPay(a, due){
+  const accOpts = Object.entries(ACCOUNTS).map(([k,l])=>`<option value="${k}" ${k==='momo'?'selected':''}>${l} · ${fmt(balances()[k])}</option>`).join('');
+  $('#overlay').innerHTML = `<div class="scrim" data-a="closeAll"><div class="modal" role="dialog" aria-modal="true" aria-label="Payer la commission"><div class="m-h"><h2>Payer ${esc(a.name)}</h2><button class="x" data-a="closeAll" aria-label="Fermer">×</button></div>
+    <div class="m-b"><div class="row"><div class="field"><label for="ap-amt">Montant</label><input class="input" id="ap-amt" inputmode="numeric" value="${due}"></div><div class="field"><label for="ap-acc">Payé depuis</label><select class="input" id="ap-acc">${accOpts}</select></div></div>
+    <div class="row"><div class="field"><label for="ap-date">Date</label><input class="input" type="date" id="ap-date" value="${today()}"></div><div class="field"><label for="ap-ref">Référence</label><input class="input" id="ap-ref" placeholder="ID de transaction…"></div></div>
+    <p class="muted small" style="margin:0">Le versement est enregistré en dépense « Commissions ambassadeurs » dans la trésorerie.</p><div class="small" id="ap-err" style="color:var(--danger)"></div></div>
+    <div class="m-f"><button class="btn primary" id="ap-save">Enregistrer le versement</button></div></div></div>`;
+  $('#ap-save').onclick = async ()=>{ const amt = Number($('#ap-amt').value.replace(/\s/g,''))||0, acc = $('#ap-acc').value, date = $('#ap-date').value||today(), ref = $('#ap-ref').value.trim();
+    if(!(amt>0)){ $('#ap-err').textContent='Indiquez un montant.'; return; }
+    if(acc==='caisse' && balances().caisse<amt){ $('#ap-err').textContent=`Solde de la caisse insuffisant (${fmt(balances().caisse)}).`; return; }
+    $('#ap-save').disabled = true;
+    try{ const mid = newId('m');
+      await put('fin-moves', mid, {type:'depense', account:acc, amount:-amt, label:`Commission ambassadeur ${a.name} (${a.code})`, category:'Commissions ambassadeurs', partyId:'', date, ref, createdAt:Date.now(), createdBy:S.uid||'local'});
+      await put('aff-payouts', newId('v'), {affiliateId:a.id, amount:amt, account:acc, date, ref, moveId:mid, createdAt:Date.now(), createdBy:S.uid||'local'});
+      toast('Versement enregistré'); setTimeout(()=>affDetail(a.id), 300);
+    }catch(e){ dbErr(e); $('#ap-err').textContent='Enregistrement impossible.'; $('#ap-save').disabled=false; } };
+}
+
 /* --- Trésorerie --- */
 const ACCOUNTS = {caisse:'Caisse boutique', banque:'Banque', momo:'Mobile money'};
-const EXP_CATS = ['Achat de marchandises','Loyer','Salaires','Électricité et eau','Transport et livraison','Téléphone et internet','Taxes et impôts','Fournitures','Entretien et réparations','Autre'];
+const EXP_CATS = ['Achat de marchandises','Commissions ambassadeurs','Loyer','Salaires','Électricité et eau','Transport et livraison','Téléphone et internet','Taxes et impôts','Fournitures','Entretien et réparations','Autre'];
 const MOVE_TYPES = {vente:'Vente', encaissement:'Encaissement', depense:'Dépense', virement:'Virement', reg_fournisseur:'Règlement fournisseur', reg_client:'Règlement client'};
 const accountFor = m => m==='cash' ? 'caisse' : ['orange','moov','wave'].includes(m) ? 'momo' : 'banque';
 function balances(){
@@ -1250,10 +1468,10 @@ function billForm(type, x){
 }
 
 /* --- Gestion --- */
-const TABS = [['dash','Tableau de bord'],['products','Produits'],['bundles','Lots'],['orders','Commandes'],['promos','Codes promo'],['payments','Paiements'],['team','Équipe']];
+const TABS = [['dash','Tableau de bord'],['products','Produits'],['bundles','Lots'],['orders','Commandes'],['promos','Codes promo'],['affiliates','Ambassadeurs'],['payments','Paiements'],['team','Équipe']];
 function viewAdmin(){
   const pending = S.orders.filter(o=>o.status==='en_attente'||(o.status==='payee'&&!o.stockApplied)).length;
-  const panes = {dash:paneDash, products:paneProducts, bundles:paneBundles, orders:paneOrders, promos:panePromos, payments:panePayments, team:paneTeam};
+  const panes = {dash:paneDash, products:paneProducts, bundles:paneBundles, orders:paneOrders, promos:panePromos, affiliates:paneAffiliates, payments:panePayments, team:paneTeam};
   return `<div class="admin"><nav class="side" aria-label="Gestion">${TABS.map(([k,l])=>`<button data-a="tab" data-v="${k}" ${S.tab===k?'aria-current="page"':''}>${l}${k==='orders'&&pending?`<span class="pill warn">${pending}</span>`:''}</button>`).join('')}</nav>
     <section>${panes[S.tab]()}</section></div>`;
 }
@@ -1278,12 +1496,20 @@ function paneDash(){
     <div class="panel"><h3>Meilleures ventes</h3>${top.length?top.map(([n,q])=>`<div class="row" style="justify-content:space-between;padding:6px 0;border-bottom:1px solid var(--line)"><span style="flex:1">${esc(n)}</span><b style="flex:0">${q}</b></div>`).join(''):'<p class="muted">Les ventes apparaîtront ici.</p>'}</div></div>
     <div class="panel"><h3>Stock à réapprovisionner</h3>${low.length?`<div class="tbl-wrap"><table><thead><tr><th>Produit</th><th>SKU</th><th>Stock</th></tr></thead><tbody>${low.map(p=>`<tr class="click" data-a="editProduct" data-id="${p.id}"><td>${esc(p.name)}</td><td class="muted">${esc(p.sku)}</td><td><span class="pill ${p.stock<=0?'bad':'warn'}">${p.stock}</span></td></tr>`).join('')}</tbody></table></div>`:'<p class="muted">Tout le stock est au-dessus du seuil d’alerte.</p>'}</div>`;
 }
+function fbCatalog(){
+  const feed = shopUrl() + 'catalogue.csv';
+  $('#overlay').innerHTML = `<div class="scrim" data-a="closeAll"><div class="modal" role="dialog" aria-modal="true" aria-label="Catalogue Facebook"><div class="m-h"><h2>Catalogue Facebook</h2><button class="x" data-a="closeAll" aria-label="Fermer">×</button></div>
+    <div class="m-b"><p style="margin-top:0">Facebook lit cette adresse automatiquement pour mettre à jour vos produits, prix, promotions et stocks :</p>
+    <p style="word-break:break-all"><b>${esc(feed)}</b></p><button class="btn ghost sm" id="fc-copy">Copier l’adresse</button>
+    <ol class="small" style="padding-left:18px;margin-bottom:0"><li>Ouvrez <b>Meta Commerce Manager</b> (business.facebook.com/commerce) et créez un catalogue « E-commerce ».</li><li><b>Sources de données › Ajouter des articles › Flux de données</b>.</li><li>Choisissez <b>« Utiliser une URL »</b>, collez l’adresse ci-dessus et une mise à jour <b>quotidienne</b>.</li><li>Devise : XOF (franc CFA). Les produits apparaissent sous quelques heures.</li></ol></div></div></div>`;
+  $('#fc-copy').onclick = async ()=>{ try{ await navigator.clipboard.writeText(feed); toast('Adresse copiée'); }catch(e){ toast(feed); } };
+}
 function paneProducts(){
   const q = S.aq.trim().toLowerCase();
   const list = S.products.filter(p=>!q || (p.name+' '+p.sku+' '+p.category).toLowerCase().includes(q));
   return `<div class="toolbar"><h2 style="font-size:24px;flex:1">Produits <span class="muted small">(${S.products.length})</span></h2>
     <label class="sr" for="aq">Rechercher</label><input class="input" id="aq" data-in="aq" value="${esc(S.aq)}" placeholder="Rechercher…">
-    ${dl?'<button class="btn ghost" data-a="exportProducts">Exporter CSV</button>':''}<button class="btn primary" data-a="newProduct">Ajouter un produit</button></div>
+    ${isServer()?'<button class="btn ghost" data-a="fbCatalog">Catalogue Facebook</button>':''}${dl?'<button class="btn ghost" data-a="exportProducts">Exporter CSV</button>':''}<button class="btn primary" data-a="newProduct">Ajouter un produit</button></div>
     <div class="panel tbl-wrap">${list.length?`<table><thead><tr><th></th><th>Produit</th><th>Catégorie</th><th>Prix</th><th>Stock</th><th>En vente</th></tr></thead><tbody>
     ${list.map(p=>`<tr class="click" data-a="editProduct" data-id="${p.id}"><td><div class="li-img" style="width:40px;height:40px;font-size:20px">${pImg(p)}</div></td><td><b>${esc(p.name)}</b><div class="muted small">${esc(p.sku)}</div></td><td>${esc(p.category)}</td><td>${fmt(p.price)}</td>
     <td><span class="pill ${p.stock<=0?'bad':p.stock<=(p.lowStock||5)?'warn':'ok'}">${p.stock}</span></td><td><span class="pill ${p.active!==false?'ok':''}">${p.active!==false?'Oui':'Masqué'}</span></td></tr>`).join('')}</tbody></table>`
@@ -1300,9 +1526,9 @@ function paneBundles(){
 function bundleForm(b){
   const isNewB = !b; b = b || {name:'',emoji:'🎁',description:'',price:'',items:[],active:true};
   let rows = (b.items||[]).map(i=>({...i})); if(!rows.length) rows = [{id:'',qty:1},{id:'',qty:1}];
-  let f = {name:b.name, emoji:b.emoji||'🎁', description:b.description||'', price:b.price, active:b.active!==false};
+  let f = {name:b.name, emoji:b.emoji||'🎁', description:b.description||'', price:b.price, active:b.active!==false, affPct:b.affPct??''};
   const opts = id => `<option value="">Choisir un produit…</option>${S.products.map(p=>`<option value="${p.id}" ${p.id===id?'selected':''}>${esc(p.name)} · ${fmt(p.price)}</option>`).join('')}`;
-  const read = ()=>{ f={name:$('#bf-name').value.trim(), emoji:$('#bf-emoji').value.trim()||'🎁', description:$('#bf-desc').value.trim(), price:$('#bf-price').value, active:$('#bf-active').checked};
+  const read = ()=>{ f={name:$('#bf-name').value.trim(), emoji:$('#bf-emoji').value.trim()||'🎁', description:$('#bf-desc').value.trim(), price:$('#bf-price').value, active:$('#bf-active').checked, affPct:$('#bf-aff').value.trim()};
     rows=[...document.querySelectorAll('.b-row')].map(r=>({id:r.querySelector('select').value, qty:Math.max(1,parseInt(r.querySelector('input').value)||1)})); };
   const sum = ()=>rows.reduce((t,r)=>{ const p=S.products.find(x=>x.id===r.id); return t+(p?p.price*r.qty:0); },0);
   const draw = ()=>{
@@ -1315,7 +1541,8 @@ function bundleForm(b){
       <div style="margin:8px 0 6px">${rows.map((r,i)=>`<div class="b-row"><select class="input" aria-label="Produit ${i+1}">${opts(r.id)}</select><input class="input" inputmode="numeric" value="${r.qty}" aria-label="Quantité"><button class="btn ghost" data-bf="rm" data-i="${i}" aria-label="Retirer">×</button></div>`).join('')}</div>
       <button class="btn ghost sm" data-bf="addRow">Ajouter un produit</button>
       <div class="row" style="margin-top:16px;align-items:flex-end"><div class="field"><label>Prix normal des articles</label><div class="price" id="bf-sum">${fmt(sum())}</div></div>
-      <div class="field"><label for="bf-price">Prix du lot (${esc(S.settings.currency)})</label><input class="input" id="bf-price" inputmode="numeric" value="${esc(f.price)}"></div></div>
+      <div class="field"><label for="bf-price">Prix du lot (${esc(S.settings.currency)})</label><input class="input" id="bf-price" inputmode="numeric" value="${esc(f.price)}"></div>
+      <div class="field"><label for="bf-aff">Commission ambassadeur (%)</label><input class="input" id="bf-aff" inputmode="decimal" value="${esc(f.affPct??'')}" placeholder="${esc(S.settings.affDefaultPct)} % par défaut"></div></div>
       <label class="row" style="align-items:center;gap:10px"><span class="switch" style="flex:0 0 42px"><input type="checkbox" id="bf-active" ${f.active?'checked':''}><span></span></span><span>En vente sur la boutique</span></label>
       <div class="small" id="bf-err" style="color:var(--danger);margin-top:8px"></div></div>
     <div class="m-f">${isNewB?'':'<button class="btn danger" data-bf="del" style="margin-right:auto">Supprimer</button>'}<button class="btn ghost" data-a="closeAll">Annuler</button><button class="btn primary" data-bf="save">${isNewB?'Créer le lot':'Enregistrer'}</button></div></div></div>`;
@@ -1333,7 +1560,7 @@ function bundleForm(b){
         if(!items.length || units<2){ $('#bf-err').textContent='Un lot contient au moins deux articles (deux produits, ou deux unités d’un même produit).'; return; }
         if(!(price>0)){ $('#bf-err').textContent='Indiquez le prix du lot.'; return; }
         btn.disabled=true;
-        try{ await put('bundles', b.id||newId('b'), {name:f.name, emoji:f.emoji, description:f.description, image:b.image||'', items, price, active:f.active, createdAt:b.createdAt||Date.now(), updatedAt:Date.now()}); closeAll(); toast(isNewB?'Lot créé':'Lot enregistré'); }
+        try{ await put('bundles', b.id||newId('b'), {name:f.name, emoji:f.emoji, description:f.description, image:b.image||'', items, price, active:f.active, affPct:f.affPct===''?'':Math.min(100,Math.max(0,Number(String(f.affPct).replace(',','.'))||0)), createdAt:b.createdAt||Date.now(), updatedAt:Date.now()}); closeAll(); toast(isNewB?'Lot créé':'Lot enregistré'); }
         catch(err){ dbErr(err); $('#bf-err').textContent='Enregistrement impossible : réservé aux gérants.'; btn.disabled=false; }
       }
     });
@@ -1361,6 +1588,7 @@ function productForm(p){
         <div class="row"><div class="field"><label for="pf-bmin">Prix de gros dès (unités)</label><input class="input" id="pf-bmin" inputmode="numeric" value="${esc(p.bulkMin||'')}" placeholder="ex. 10"></div>
         <div class="field"><label for="pf-bprice">Prix de gros à l’unité</label><input class="input" id="pf-bprice" inputmode="numeric" value="${esc(p.bulkPrice||'')}"></div></div>
         <label class="row" style="align-items:center;gap:10px;margin-bottom:14px"><span class="switch" style="flex:0 0 42px"><input type="checkbox" id="pf-new" ${isNewP||isNew(p)?'checked':''}><span></span></span><span>Banderole « Nouveau » pendant 30 jours</span></label>
+        <div class="field"><label for="pf-aff">Commission ambassadeur (%)</label><input class="input" id="pf-aff" inputmode="decimal" value="${esc(p.affPct??'')}" placeholder="${esc(S.settings.affDefaultPct)} % par défaut"></div>
         <div class="field"><label for="pf-desc">Description</label><textarea class="input" id="pf-desc">${esc(p.description)}</textarea></div>
         <label class="row" style="align-items:center;gap:10px"><span class="switch" style="flex:0 0 42px"><input type="checkbox" id="pf-active" ${p.active!==false?'checked':''}><span></span></span><span>En vente sur la boutique</span></label>
       </div></div><div class="small" id="pf-err" style="color:var(--danger)"></div></div>
@@ -1374,6 +1602,7 @@ function productForm(p){
       stock:Math.max(0,parseInt(v('#pf-stock'))||0), lowStock:Math.max(0,parseInt(v('#pf-low'))||0), emoji:v('#pf-emoji')||'📦', image, description:v('#pf-desc'), active:$('#pf-active').checked,
       bulkMin:Math.max(0,parseInt(v('#pf-bmin'))||0), bulkPrice:Number(v('#pf-bprice').replace(/\s/g,''))||0,
       newUntil:$('#pf-new').checked?(isNew(p)?p.newUntil:Date.now()+30*DAY):0,
+      affPct:v('#pf-aff')===''?'':Math.min(100,Math.max(0,Number(v('#pf-aff').replace(',','.'))||0)),
       createdAt:p.createdAt||Date.now(), updatedAt:Date.now()};
     if(!data.name || !(data.price>0)){ $('#pf-err').textContent='Le nom et un prix supérieur à zéro sont obligatoires.'; return; }
     if(data.bulkMin>1 && !(data.bulkPrice>0 && data.bulkPrice<data.price)){ $('#pf-err').textContent='Le prix de gros doit être inférieur au prix de vente.'; return; }
@@ -1407,7 +1636,7 @@ function orderDetail(o){
   $('#overlay').innerHTML = `<div class="scrim" data-a="closeAll"><div class="modal wide" role="dialog" aria-modal="true" aria-label="Commande ${esc(o.number)}">
     <div class="m-h"><h2>${esc(o.number)} <span class="pill ${STATUS[o.status]?.cls}" style="vertical-align:middle">${STATUS[o.status]?.label}</span></h2><button class="x" data-a="closeAll" aria-label="Fermer">×</button></div>
     <div class="m-b"><div class="two"><div class="panel">${receiptHTML(o)}</div>
-      <div><div class="panel"><h3>Client</h3><p style="margin:0">${esc(c.name||'—')}<br>${esc(c.phone||'')}<br>${o.delivery==='livraison'?esc(c.address+', '+c.city):'Retrait en boutique'}${c.note?`<br><span class="muted">${esc(c.note)}</span>`:''}</p>
+      <div>${o.affiliate?`<div class="panel"><h3>Ambassadeur</h3><p style="margin:0"><b>${esc(o.affiliate.code)}</b> · ${esc((S.affiliates.find(a=>a.id===o.affiliate.id)||{}).name||'')}<br>Commission ${fmt(o.affiliate.commission)} <span class="pill ${AFF_ST[affState(o)].c}">${AFF_ST[affState(o)].l}</span></p></div>`:''}<div class="panel"><h3>Client</h3><p style="margin:0">${esc(c.name||'—')}<br>${esc(c.phone||'')}<br>${o.delivery==='livraison'?esc(c.address+', '+c.city):'Retrait en boutique'}${c.note?`<br><span class="muted">${esc(c.note)}</span>`:''}</p>
       ${c.phone?`<a class="btn ghost sm" style="margin-top:10px" href="tel:${esc(c.phone.replace(/\s/g,''))}">Appeler</a>`:''}</div>
       <div class="panel"><h3>Statut</h3><div class="field"><label for="od-status">Changer le statut</label><select class="input" id="od-status">${Object.entries(STATUS).map(([k,v])=>`<option value="${k}" ${k===o.status?'selected':''}>${v.label}</option>`).join('')}</select></div>
       <p class="muted small" style="margin:0">${o.stockApplied?'Le stock a été déduit pour cette commande.':'Le stock sera déduit dès que la commande passe en « Payée » ou au-delà.'}</p></div></div></div></div>
@@ -1610,19 +1839,7 @@ document.addEventListener('click', async e=>{
     case 'scroll': $('#catalogue').scrollIntoView({behavior:matchMedia('(prefers-reduced-motion:reduce)').matches?'auto':'smooth'}); break;
     case 'cart': openCart(); break;
     case 'add': addToCart(id); break;
-    case 'product': {
-      const p = S.products.find(x=>x.id===id); if(!p) break;
-      const related = S.products.filter(x=>x.id!==p.id && x.active!==false && x.category===p.category).sort((a,b)=>(b.stock>0)-(a.stock>0)).slice(0,6);
-      const inBundles = S.bundles.filter(b=>b.active!==false && (b.items||[]).some(i=>i.id===p.id) && bundleInfo(b).ok);
-      $('#overlay').innerHTML = `<div class="scrim" data-a="closeAll"><div class="modal wide" role="dialog" aria-modal="true" aria-label="${esc(p.name)}"><div class="m-h"><h2>${esc(p.name)}</h2><button class="x" data-a="closeAll" aria-label="Fermer">×</button></div>
-        <div class="m-b"><div class="row" style="align-items:flex-start"><div class="thumb" style="flex:1 1 260px;border-radius:14px;font-size:110px">${pImg(p)}</div>
-        <div style="flex:1 1 260px"><span class="muted small">${esc(p.category)} · ${esc(p.sku)}</span><p class="price" style="font-size:28px;margin:8px 0">${fmt(p.price)}${p.comparePrice>p.price?`<span class="strike">${fmt(p.comparePrice)}</span>`:''}</p>
-        <p>${esc(p.description||'')}</p><p>${p.stock>0?`<span class="pill ok">En stock · ${p.stock}</span>`:'<span class="pill bad">Rupture de stock</span>'} ${isNew(p)?'<span class="pill info">Nouveau</span>':''}</p>
-        ${p.bulkMin>1&&p.bulkPrice>0?`<p class="bulk" style="font-size:14px">Achat groupé : ${fmt(p.bulkPrice)} l’unité dès ${p.bulkMin} unités, appliqué automatiquement dans le panier.</p>`:''}
-        <button class="btn primary block" data-a="addClose" data-id="${p.id}" ${p.stock<=0?'disabled':''}>Ajouter au panier</button>
-        ${inBundles.length?`<div style="margin-top:14px">${inBundles.map(b=>`<button class="btn ghost block" style="margin-top:8px" data-a="addBundle" data-id="${b.id}">Aussi en lot : ${esc(b.name)} · ${fmt(b.price)}</button>`).join('')}</div>`:''}</div></div>
-        ${related.length?`<h3 style="margin:26px 0 12px;font-size:24px">Dans la même catégorie</h3><div class="related">${related.map(miniCard).join('')}</div>`:''}</div></div></div>`;
-      break; }
+    case 'product': openProduct(id); break;
     case 'addClose': addToCart(id); closeAll(); break;
     case 'qty': changeQty('cart', id, Number(el.dataset.d)); if(!S.cart.length) openCart(); break;
     case 'addBundle': addBundle(id); break;
@@ -1630,6 +1847,12 @@ document.addEventListener('click', async e=>{
     case 'copyCode': { const c=el.dataset.v; try{ await navigator.clipboard.writeText(c); toast(`Code ${c} copié : collez-le dans le panier`); }catch(err){ toast(`Votre code : ${c}`); } break; }
     case 'featurePromo': { const p=S.promos.find(x=>x.code===id); const cur=S.settings.featuredPromo; const s2=structuredClone(S.settings); s2.featuredPromo = (cur&&cur.code===id) ? null : {code:p.code,type:p.type,value:p.value,minOrder:p.minOrder||0,expiresAt:p.expiresAt||''}; try{ await put('settings','main',s2); toast(s2.featuredPromo?`${id} affiché sur la boutique`:'Offre retirée de la boutique'); }catch(err){ dbErr(err); toast('Réservé au gérant.'); } break; }
     case 'newBundle': bundleForm(null); break;
+    case 'newAff': affForm(null); break;
+    case 'shareProduct': shareProduct(id); break;
+    case 'visual': openVisual(id, false); break;
+    case 'fbCatalog': fbCatalog(); break;
+    case 'affDetail': affDetail(id); break;
+    case 'affSettings': affSettings(); break;
     case 'editBundle': bundleForm(S.bundles.find(x=>x.id===id)); break;
     case 'applyPromo': {
       const tg = el.dataset.t, inp = $('#promo-'+tg), msg = $('#promo-msg-'+tg);
@@ -1681,8 +1904,9 @@ document.addEventListener('click', async e=>{
   }
 });
 
+captureRef();
 renderTop(); renderBnav();
 </script>
-<script src="adapter.js"></script>
+<script src="/adapter.js"></script>
 </body>
 </html>
