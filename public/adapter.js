@@ -6,7 +6,7 @@
     if (!r.ok) { const e = new Error(j.error || 'Le serveur ne répond pas.'); e.status = r.status; throw e; }
     return j;
   };
-  let me = null, providers = [], configured = {}, pollT = null, loadT = null;
+  let me = null, providers = [], configured = {}, notif = {}, pollT = null, loadT = null;
   S.users = [];
 
   const KEY = 'ffm-my-orders';
@@ -20,7 +20,7 @@
         S.products = s.products; S.bundles = s.bundles || []; S.promos = s.promos;
         S.clients = (s.clients||[]).sort((a,b)=>a.name.localeCompare(b.name)); S.suppliers = (s.suppliers||[]).sort((a,b)=>a.name.localeCompare(b.name));
         S.moves = s.moves || []; S.ledger = s.ledger || []; S.finConfig = s.finConfig || {}; S.orders = s.orders; S.users = s.users;
-        S.settings = mergeSettings(s.settings); providers = s.providers; configured = s.configured || {};
+        S.settings = mergeSettings(s.settings); providers = s.providers; configured = s.configured || {}; notif = s.notifications || {};
       } else {
         const s = await api('GET', '/api/public/catalog');
         S.products = s.products; S.bundles = s.bundles || []; S.settings = mergeSettings(s.settings); providers = s.providers;
@@ -35,6 +35,22 @@
     schedule();
   }
   const reload = () => { clearTimeout(loadT); loadT = setTimeout(load, 250); };
+
+  /* ---------- suivi du panier (paniers abandonnés) ---------- */
+  const newCartId = () => Array.from(crypto.getRandomValues(new Uint8Array(12)), b => (b % 36).toString(36)).join('');
+  let cartId = (() => { try { return localStorage.getItem('ffm-cart-id') || ''; } catch (e) { return ''; } })();
+  if (!/^[a-z0-9]{8,40}$/.test(cartId)) { cartId = newCartId(); try { localStorage.setItem('ffm-cart-id', cartId); } catch (e) {} }
+  let contact = null, syncT = null;
+  function syncCart(now) {
+    if (me) return; // l'équipe connectée n'est pas suivie
+    clearTimeout(syncT);
+    syncT = setTimeout(() => {
+      const items = S.cart.map(l => l.b ? { bundle: l.b, qty: l.qty } : { id: l.id, qty: l.qty });
+      api('POST', '/api/carts', { id: cartId, items, contact }).catch(() => {});
+    }, now ? 0 : 2500);
+  }
+  const baseSaveCart = window.saveCart;
+  window.saveCart = function () { baseSaveCart(); syncCart(false); };
 
   /* ---------- démarrage ---------- */
   window.boot = async function () {
@@ -59,6 +75,7 @@
     readCO(); const err = $('#co-err');
     if (CO.step === 1 && (!CO.name || CO.phone.replace(/\D/g, '').length < 8)) { err.textContent = 'Indiquez votre nom et un numéro de téléphone valide.'; return; }
     if (CO.step === 2 && CO.delivery === 'livraison' && !CO.address) { err.textContent = 'Indiquez votre adresse ou votre quartier.'; return; }
+    if (CO.step === 1) { contact = { name: CO.name, phone: CO.phone }; syncCart(true); }
     if (CO.step < 3) { CO.step++; drawCheckout(); return; }
     if (!CO.method) { err.textContent = 'Choisissez un moyen de paiement.'; return; }
     const btn = document.querySelector('[data-a="coNext"]'); btn.disabled = true; btn.textContent = 'Préparation du paiement…';
@@ -66,9 +83,10 @@
       const r = await api('POST', '/api/orders', {
         items: S.cart.map(l => l.b ? { bundle: l.b, qty: l.qty } : { id: l.id, qty: l.qty }), promoCode: S.appliedPromo ? S.appliedPromo.code : '',
         customer: { name: CO.name, phone: CO.phone, address: CO.address, city: CO.city, note: CO.note },
-        delivery: CO.delivery, method: CO.method
+        delivery: CO.delivery, method: CO.method, cartId
       });
       addMine(r.id, r.token);
+      clearTimeout(syncT); cartId = newCartId(); contact = null; try { localStorage.setItem('ffm-cart-id', cartId); } catch (e) {}
       S.cart = []; S.appliedPromo = null; saveCart(); schedule();
       if (r.redirect) {
         const name = PROCESSORS[CO.method].name;
@@ -129,6 +147,8 @@
   window.panePayments = function () {
     const row = (k, n) => `<div class="row" style="justify-content:space-between;align-items:center;padding:8px 0;border-bottom:1px solid var(--line)"><b style="flex:1">${n}</b><span class="pill ${configured[k] ? 'ok' : 'bad'}" style="flex:0 0 auto;white-space:nowrap">${configured[k] ? 'Connecté' : 'Clés manquantes'}</span></div>`;
     return `<div class="panel" style="margin-bottom:18px"><h3>Connexions de paiement réelles</h3>${row('wave', 'Wave')}${row('orange', 'Orange Money')}
+      <div class="row" style="justify-content:space-between;align-items:center;padding:8px 0;border-bottom:1px solid var(--line)"><b style="flex:1">Notifications ntfy</b><span class="pill ${notif.active ? 'ok' : 'bad'}" style="flex:0 0 auto;white-space:nowrap">${notif.active ? 'Actives' : 'NTFY_TOPIC manquant'}</span></div>
+      ${notif.active ? `<p class="muted small">Vous êtes prévenu de chaque paiement, commande, vente en caisse, règlement client, et des paniers sans commande depuis ${notif.abandonMinutes} min.</p><button class="btn ghost sm" data-srv="notifyTest" style="margin-bottom:10px">Envoyer une notification de test</button>` : ''}
       <p class="muted small" style="margin-bottom:0">Les clés secrètes se règlent uniquement dans le fichier .env du serveur. Moov Money, la carte bancaire et PayPal restent masqués côté client tant qu’ils ne sont pas branchés.</p></div>` + basePay();
   };
 
@@ -164,6 +184,7 @@
     const a = el.dataset.srv;
     try {
       if (a === 'login') loginModal();
+      if (a === 'notifyTest') { el.disabled = true; await api('POST', '/api/admin/notify-test'); toast('Notification envoyée : regardez votre téléphone'); el.disabled = false; }
       if (a === 'logout') { await api('POST', '/api/auth/logout'); location.reload(); }
       if (a === 'doLogin') {
         el.disabled = true;

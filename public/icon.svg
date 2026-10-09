@@ -1,0 +1,27 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512" width="512" height="512">
+  <defs>
+    <linearGradient id="g" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0" stop-color="#E3C27E"/>
+      <stop offset="1" stop-color="#B98D45"/>
+    </linearGradient>
+    <clipPath id="bag"><path d="M136 196 H376 L396 420 Q398 440 378 440 H134 Q114 440 116 420 Z"/></clipPath>
+  </defs>
+  <!-- Fond nuit (plein cadre pour les icônes adaptatives) -->
+  <rect width="512" height="512" fill="#100E0B"/>
+  <!-- Anse du sac -->
+  <path d="M196 206 V170 Q196 112 256 112 Q316 112 316 170 V206" fill="none" stroke="url(#g)" stroke-width="26" stroke-linecap="round"/>
+  <!-- Sac doré -->
+  <path d="M136 196 H376 L396 420 Q398 440 378 440 H134 Q114 440 116 420 Z" fill="url(#g)"/>
+  <!-- Motif bogolan sur le sac -->
+  <g clip-path="url(#bag)" fill="none" stroke="#14110D" stroke-width="9" stroke-linecap="round" stroke-linejoin="round">
+    <path d="M110 252 L142 228 L174 252 L206 228 L238 252 L270 228 L302 252 L334 228 L366 252 L398 228"/>
+    <path d="M256 290 V346 M228 318 H284"/>
+    <path d="M110 404 H402" stroke-dasharray="14 14"/>
+  </g>
+  <g fill="#14110D">
+    <circle cx="176" cy="318" r="10"/>
+    <circle cx="336" cy="318" r="10"/>
+    <rect x="160" y="362" width="20" height="20"/>
+    <rect x="332" y="362" width="20" height="20"/>
+  </g>
+</svg>

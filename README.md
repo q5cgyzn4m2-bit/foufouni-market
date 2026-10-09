@@ -16,32 +16,33 @@ Ce dossier contient la boutique complète (boutique en ligne, caisse, gestion) e
 3. Récupérez l'**en-tête d'autorisation** (`Basic …`) et la **merchant key**.
 4. Testez d'abord dans le bac à sable (devise `OUV`), puis demandez à Orange l'URL et les accès de production pour le Mali (devise `XOF`).
 
-## 2. Hébergement
+## 2. Hébergement gratuit : Render + Supabase
 
-Il faut un serveur accessible en **HTTPS** avec un nom de domaine : Wave et Orange refusent d'envoyer leurs confirmations vers une adresse non sécurisée.
+- **Supabase** garde toutes les données (produits, commandes, trésorerie, clients, comptes équipe).
+- **Render** (offre gratuite) fait tourner la boutique. Le service s'endort après 15 minutes sans visite ; la première visite suivante prend quelques secondes.
 
-Options simples : un petit VPS (avec Nginx + Let's Encrypt), Render, Railway ou Fly.io. Prévoyez un **disque persistant** pour le fichier `data.sqlite` qui contient produits, commandes et comptes.
+### Supabase
+1. Créez un compte sur supabase.com puis **New project**. Choisissez la région **Frankfurt (eu-central-1)** et notez le mot de passe de la base.
+2. En haut de la page du projet, cliquez sur **Connect**, puis choisissez **Session pooler**.
+3. Copiez la chaîne de connexion avec le bouton de copie et remplacez `[YOUR-PASSWORD]` par votre mot de passe.
 
-## 3. Installation
+Les tables `ffm_docs`, `ffm_users` et `ffm_events` sont créées automatiquement au premier démarrage, avec l'accès public bloqué.
 
-```bash
-npm install
-cp .env.example .env
-# Remplissez .env (voir ci-dessous)
-npm start
-```
+### Render
+1. Envoyez ces fichiers sur GitHub (dossier `public` compris), avec `render.yaml` à la racine.
+2. Sur Render : **New › Blueprint**, choisissez le dépôt.
+3. Remplissez `DATABASE_URL` (la chaîne Supabase), `ADMIN_EMAIL` et `ADMIN_PASSWORD`, puis **Deploy Blueprint**.
 
-Node.js 18.18 ou plus récent est requis.
+## 3. Variables d'environnement
 
 | Variable | Rôle |
 |---|---|
-| `BASE_URL` | Adresse publique HTTPS de la boutique |
-| `SESSION_SECRET` | Chaîne aléatoire de 32 caractères ou plus (`openssl rand -hex 32`) |
+| `DATABASE_URL` | Chaîne « Session pooler » de Supabase |
+| `SESSION_SECRET` | Générée automatiquement par Render |
 | `ADMIN_EMAIL`, `ADMIN_PASSWORD` | Premier compte gérant, créé au premier démarrage |
+| `BASE_URL` | Facultatif sur Render (détectée automatiquement), à remplir si vous utilisez votre propre domaine |
 | `WAVE_API_KEY`, `WAVE_SIGNING_SECRET`, `WAVE_WEBHOOK_SECRET` | Clés Wave |
 | `OM_AUTH_HEADER`, `OM_MERCHANT_KEY`, `OM_API_BASE`, `OM_CURRENCY` | Accès Orange Money |
-
-Un moyen de paiement dont les clés sont absentes est simplement masqué aux clients. Vous pouvez donc lancer avec Wave seul, puis ajouter Orange Money plus tard.
 
 ## 4. Fonctionnement d'un paiement
 
@@ -60,7 +61,7 @@ Toutes les 5 minutes, le serveur revérifie aussi les paiements restés en atten
 - Faites un vrai paiement Wave de 100 FCFA, vérifiez qu'il passe en « Payée », puis remboursez-le depuis la fiche de la commande (bouton réservé au gérant).
 - Testez Orange Money dans le bac à sable dans trois cas : paiement réussi, paiement annulé et délai dépassé.
 - Dans le portail Wave, utilisez le bouton de test du webhook et vérifiez dans les journaux du serveur qu'il est bien reçu.
-- Sauvegardez `data.sqlite` régulièrement.
+- Supabase sauvegarde la base ; vous pouvez aussi exporter les tables depuis son tableau de bord.
 
 ## 6. Équipe
 
@@ -71,3 +72,21 @@ Connectez-vous via « Espace équipe » en haut de la boutique. Le gérant crée
 - Ne mettez jamais le fichier `.env` en ligne, que ce soit sur GitHub ou ailleurs.
 - Si une clé fuite, révoquez-la immédiatement dans le portail Wave et recréez-en une.
 - Wave permet aussi de limiter l'usage de la clé à l'adresse IP de votre serveur. C'est recommandé.
+
+
+## Notifications sur téléphone (ntfy)
+
+Vous recevez une notification pour : chaque paiement Wave ou Orange Money confirmé, chaque nouvelle commande à la livraison, chaque vente en caisse (avec acompte et reste à crédit), chaque règlement client, et chaque panier abandonné.
+
+1. Installez l'application gratuite **ntfy** (Play Store ou App Store).
+2. Touchez **+**, puis inventez un nom de sujet difficile à deviner, par exemple `foufouni-k7m3q9-alertes`, et abonnez-vous.
+3. Sur Render, dans **Environment**, ajoutez `NTFY_TOPIC` avec exactement ce nom.
+4. Dans la boutique : **Gestion › Paiements › Envoyer une notification de test**.
+
+Options : `ABANDON_MINUTES` (délai avant de signaler un panier, 10 par défaut, 5 minimum), `NTFY_SERVER` et `NTFY_TOKEN` si vous utilisez votre propre serveur ntfy.
+
+Le nom du sujet sert de mot de passe : toute personne qui le connaît peut lire les notifications. Ne le partagez pas.
+
+## Icône
+
+Le dossier `public` contient l'icône (`icon.svg`, `icon-192.png`, `icon-512.png`, `apple-touch-icon.png`) et `manifest.webmanifest`. Sur téléphone, ouvrez la boutique puis « Ajouter à l'écran d'accueil » : elle s'installe comme une application.

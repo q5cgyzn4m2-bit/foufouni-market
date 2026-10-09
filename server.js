@@ -21,10 +21,27 @@ if (!env.DATABASE_URL) {
   console.error('DATABASE_URL manquant : collez la chaîne de connexion « Session pooler » de Supabase.');
   process.exit(1);
 }
-   const dbUrl = new URL(String(env.DATABASE_URL).trim());
-   if (env.DB_PASSWORD) dbUrl.password = encodeURIComponent(String(env.DB_PASSWORD).trim());
-   console.log('Base : ' + dbUrl.hostname + ':' + dbUrl.port + ' · utilisateur ' + decodeURIComponent(dbUrl.username) + ' · mot de passe de ' + decodeURIComponent(dbUrl.password).length + ' caractères');
-   const store = createStore({ connectionString: dbUrl.toString() });
+/* Prépare la chaîne de connexion : nettoie les copier-coller et accepte le mot de passe à part (DB_PASSWORD) */
+function buildDatabaseUrl() {
+  const clean = v => String(v || '').trim().replace(/^DATABASE_URL\s*=\s*/i, '').replace(/^["'«\s]+|["'»\s]+$/g, '');
+  let raw = clean(env.DATABASE_URL);
+  let u;
+  try { u = new URL(raw); } catch {
+    console.error('DATABASE_URL illisible : collez l’adresse « Session pooler » complète, qui commence par postgresql://');
+    process.exit(1);
+  }
+  if (env.DB_PASSWORD) u.password = encodeURIComponent(clean(env.DB_PASSWORD));
+  const pw = decodeURIComponent(u.password || '');
+  const problems = [];
+  if (!pw || /YOUR-PASSWORD|\[|\]/i.test(pw)) problems.push('le mot de passe [YOUR-PASSWORD] n’a pas été remplacé');
+  if (!/pooler\.supabase\.com$/i.test(u.hostname)) problems.push('ce n’est pas l’adresse « Session pooler » (l’hôte doit finir par pooler.supabase.com)');
+  if (u.port && u.port !== '5432') problems.push(`le port est ${u.port} au lieu de 5432 (prenez « Session pooler », pas « Transaction pooler »)`);
+  if (!/^postgres\.[a-z0-9]+$/i.test(decodeURIComponent(u.username))) problems.push(`l’utilisateur « ${decodeURIComponent(u.username)} » devrait ressembler à postgres.xxxxxxxx`);
+  console.log(`Base : ${u.hostname}:${u.port || 5432} · utilisateur ${decodeURIComponent(u.username)} · mot de passe de ${pw.length} caractères (${pw.slice(0, 1)}…${pw.slice(-1)})${env.DB_PASSWORD ? ' pris dans DB_PASSWORD' : ''}`);
+  problems.forEach(m => console.error('À corriger : ' + m));
+  return u.toString();
+}
+const store = createStore({ connectionString: buildDatabaseUrl() });
 const getDoc = (c, i) => store.get(c, i);
 const allDocs = c => store.all(c);
 const putDoc = (c, i, d) => store.put(c, i, d);
@@ -115,6 +132,24 @@ function publicSettings() {
     featuredPromo: s.featuredPromo && s.featuredPromo.code ? { code: s.featuredPromo.code, type: s.featuredPromo.type, value: s.featuredPromo.value, minOrder: s.featuredPromo.minOrder || 0, expiresAt: s.featuredPromo.expiresAt || '' } : null };
 }
 
+/* ================= Notifications (ntfy) ================= */
+const NTFY = { server: (env.NTFY_SERVER || 'https://ntfy.sh').replace(/\/$/, ''), topic: (env.NTFY_TOPIC || '').trim(), token: (env.NTFY_TOKEN || '').trim() };
+const ABANDON_MIN = Math.max(5, Number(env.ABANDON_MINUTES) || 10);
+const money = n => new Intl.NumberFormat('fr-FR').format(Math.round(n || 0)).replace(/[\u202f\u00a0]/g, ' ') + ' ' + (settings().currency || 'FCFA');
+const METHOD_NAMES = { wave: 'Wave', orange: 'Orange Money', moov: 'Moov Money', cod: 'À la livraison', cash: 'Espèces', credit: 'À crédit', card: 'Carte', paypal: 'PayPal' };
+const waLink = (phone, text) => { let d = String(phone || '').replace(/\D/g, ''); if (d.length === 8) d = '223' + d; return d ? `https://wa.me/${d}?text=${encodeURIComponent(text)}` : ''; };
+async function notify({ title, message, tags = [], priority = 3, click }) {
+  if (!NTFY.topic) return;
+  try {
+    const r = await fetch(NTFY.server + '/', {
+      method: 'POST', signal: AbortSignal.timeout(10000),
+      headers: { 'Content-Type': 'application/json', ...(NTFY.token ? { Authorization: `Bearer ${NTFY.token}` } : {}) },
+      body: JSON.stringify({ topic: NTFY.topic, title, message, tags, priority, ...(click ? { click } : {}) })
+    });
+    if (!r.ok) console.warn('Notification ntfy refusée :', r.status);
+  } catch (e) { console.warn('Notification ntfy non envoyée :', e.message); }
+}
+
 /* ================= Codes promo et calcul des totaux (toujours côté serveur) ================= */
 function checkPromo(code, subtotal) {
   const c = String(code || '').trim().toUpperCase();
@@ -185,6 +220,8 @@ const markPaid = (orderId, info) => {
   putDoc('orders', orderId, { ...o, status: 'payee', stockApplied: true, updatedAt: Date.now(),
     payment: { ...o.payment, status: 'réussi', ref: info.ref || o.payment.ref, paidAt: Date.now() } });
   console.log(`Paiement confirmé ${o.number} (${o.payment.method}) ${o.total}`);
+  notify({ title: `Paiement reçu : ${money(o.total)}`, tags: ['moneybag'], priority: 4, click: BASE_URL,
+    message: `Commande ${o.number} payée par ${METHOD_NAMES[o.payment.method] || o.payment.method}\n${o.customer?.name || ''} ${o.customer?.phone || ''}\n${o.items.map(i => `${i.qty} × ${i.name}`).join(', ')}` });
   return true;
 };
 function markFailed(orderId, reason) {
@@ -340,6 +377,41 @@ app.post('/api/promo/check', h((req, res) => {
   res.json({ promo: p });
 }));
 
+/* Paniers : enregistrés pendant la visite pour signaler les paniers abandonnés */
+app.post('/api/carts', h((req, res) => {
+  if (limited('cart:' + req.ip, 60, 600e3)) throw httpErr(429, 'Trop de requêtes.');
+  const b = req.body || {}, id = String(b.id || '');
+  if (!/^[a-z0-9]{8,40}$/.test(id)) throw httpErr(400, 'Panier invalide.');
+  const prev = getDoc('carts', id);
+  if (prev && prev.converted) return res.json({ ok: true });
+  const lines = [];
+  for (const it of (Array.isArray(b.items) ? b.items : []).slice(0, 50)) {
+    const q = Math.min(999, Math.max(1, parseInt(it?.qty) || 1));
+    if (it?.bundle) { const x = validId(String(it.bundle)) && getDoc('bundles', String(it.bundle)); if (x) lines.push({ name: 'Lot · ' + x.name, qty: q, price: Number(x.price) || 0 }); }
+    else { const x = validId(String(it?.id)) && getDoc('products', String(it.id)); if (x) lines.push({ name: x.name, qty: q, price: unitPrice(x, q) }); }
+  }
+  if (!lines.length) { if (prev) store.del('carts', id); return res.json({ ok: true }); }
+  const c = b.contact || {};
+  const contact = (c.name || c.phone) ? { name: String(c.name || '').trim().slice(0, 80), phone: String(c.phone || '').trim().slice(0, 30) } : (prev?.contact || null);
+  const value = lines.reduce((t, l) => t + l.price * l.qty, 0), count = lines.reduce((t, l) => t + l.qty, 0);
+  const changed = !prev || prev.value !== value || prev.count !== count;
+  putDoc('carts', id, { lines, value, count, contact, createdAt: prev?.createdAt || Date.now(), updatedAt: changed ? Date.now() : prev.updatedAt, notified: changed ? false : !!prev.notified, converted: false });
+  res.json({ ok: true });
+}));
+/* Toutes les minutes : signale les paniers sans commande depuis ABANDON_MINUTES, nettoie les anciens */
+setInterval(() => {
+  const t = Date.now();
+  for (const c of allDocs('carts')) {
+    if (t - c.updatedAt > 7 * 864e5) { store.del('carts', c.id); continue; }
+    if (c.converted || c.notified || !c.value || t - c.updatedAt < ABANDON_MIN * 60e3 || t - c.updatedAt > 2 * 864e5) continue;
+    patchDoc('carts', c.id, { notified: true, notifiedAt: t });
+    const who = c.contact && (c.contact.name || c.contact.phone) ? `Client : ${c.contact.name || ''} ${c.contact.phone || ''}` : 'Visiteur anonyme (pas encore de coordonnées)';
+    notify({ title: `Panier abandonné : ${money(c.value)}`, tags: ['shopping_cart'], priority: 3,
+      click: (c.contact?.phone && waLink(c.contact.phone, `Bonjour ${c.contact.name || ''}, vous avez laissé des articles dans votre panier chez ${settings().shopName}. Pouvons-nous vous aider à finaliser votre commande ?`)) || BASE_URL,
+      message: `${c.count} article${c.count > 1 ? 's' : ''} : ${c.lines.map(l => `${l.qty} × ${l.name}`).join(', ')}\n${who}` });
+  }
+}, 60e3).unref();
+
 const publicOrder = (o, id) => {
   const { token, createdBy, ...rest } = o;
   const { sessionId, payToken, notifToken, ...pay } = rest.payment || {};
@@ -367,6 +439,10 @@ app.post('/api/orders', h(async (req, res) => {
     status: 'en_attente', channel: 'en ligne', stockApplied: false, createdAt: Date.now(), createdBy: 'web', token: randomToken()
   };
   putDoc('orders', id, order);
+  const cartId = String(b.cartId || '');
+  if (/^[a-z0-9]{8,40}$/.test(cartId) && getDoc('carts', cartId)) patchDoc('carts', cartId, { converted: true, orderId: id });
+  if (method === 'cod') notify({ title: `Nouvelle commande : ${money(order.total)}`, tags: ['shopping_bags'], priority: 4, click: waLink(customer.phone, `Bonjour ${customer.name}, merci pour votre commande ${order.number} chez ${settings().shopName}.`) || BASE_URL,
+    message: `${order.number} · paiement à la livraison\n${customer.name} ${customer.phone}\n${delivery === 'livraison' ? 'Livraison : ' + customer.address + ', ' + customer.city : 'Retrait en boutique'}\n${order.items.map(i => `${i.qty} × ${i.name}`).join(', ')}` });
 
   let redirect = null;
   try {
@@ -415,6 +491,7 @@ app.get('/api/admin/state', requireStaff, (req, res) => {
     clients: allDocs('clients'), suppliers: allDocs('suppliers'),
     moves: allDocs('fin-moves').sort((a, b) => b.createdAt - a.createdAt), ledger: allDocs('fin-ledger').sort((a, b) => b.createdAt - a.createdAt),
     finConfig: getDoc('fin-config', 'main') || {},
+    notifications: { active: !!NTFY.topic, abandonMinutes: ABANDON_MIN },
     settings: s, users: store.users.list(), providers: providers(), configured: CONFIGURED, me: req.user
   });
 });
@@ -430,7 +507,18 @@ app.put('/api/admin/:col/:id', requireStaff, h((req, res) => {
   const { col, id } = adminTarget(req); const body = { ...req.body };
   if (col === 'orders') { const prev = getDoc('orders', id); body.token = prev ? prev.token : randomToken(); body.createdBy = prev ? prev.createdBy : req.user.id; if (prev?.payment) body.payment = { ...prev.payment, ...body.payment }; }
   if (col === 'promos') body.code = id;
+  const isNew = !getDoc(col, id);
   putDoc(col, id, body); res.json({ ok: true });
+  if (isNew && col === 'orders' && body.channel === 'caisse') {
+    const pay = body.payment || {};
+    const paid = pay.rest > 0 ? (pay.paid || 0) : body.total;
+    notify({ title: pay.rest > 0 ? `Vente en caisse : ${money(paid)} payés, ${money(pay.rest)} à crédit` : `Vente en caisse : ${money(body.total)}`, tags: ['receipt'], priority: 3, click: BASE_URL,
+      message: `${body.number} · ${METHOD_NAMES[pay.method] || pay.method || ''} · par ${req.user.name}${body.customer?.name ? '\nClient : ' + body.customer.name + ' ' + (body.customer.phone || '') : ''}\n${(body.items || []).map(i => `${i.qty} × ${i.name}`).join(', ')}` });
+  }
+  if (isNew && col === 'fin-ledger' && body.kind === 'reglement' && body.partyType === 'client') {
+    const c = getDoc('clients', body.partyId) || {};
+    notify({ title: `Règlement client : ${money(body.amount)}`, tags: ['white_check_mark'], priority: 3, click: BASE_URL, message: `${c.name || 'Client'} ${c.phone || ''}\n${body.label || ''}` });
+  }
 }));
 app.patch('/api/admin/:col/:id', requireStaff, h((req, res) => {
   const { col, id } = adminTarget(req); const body = { ...req.body }; delete body.token; delete body.createdBy;
@@ -443,6 +531,12 @@ app.delete('/api/admin/:col/:id', requireStaff, h((req, res) => {
   if (!ADMIN_COLS.has(col) || !validId(id)) throw httpErr(400, 'Requête invalide.');
   if ((col === 'orders' || col === 'settings') && req.user.role !== 'Gérant') throw httpErr(403, 'Réservé au gérant.');
   store.del(col, id); res.json({ ok: true });
+}));
+/* Test des notifications (équipe) */
+app.post('/api/admin/notify-test', requireStaff, h(async (req, res) => {
+  if (!NTFY.topic) throw httpErr(400, 'Ajoutez la variable NTFY_TOPIC sur Render pour activer les notifications.');
+  await notify({ title: 'Test réussi', message: `Les notifications de ${settings().shopName} arrivent bien sur ce téléphone. Envoyé par ${req.user.name}.`, tags: ['bell'], priority: 3, click: BASE_URL });
+  res.json({ ok: true, abandonMinutes: ABANDON_MIN });
 }));
 /* Remboursement Wave (gérant) */
 app.post('/api/admin/orders/:id/refund', requireStaff, requireManager, h(async (req, res) => {
@@ -482,9 +576,18 @@ app.use((req, res) => res.status(404).json({ error: 'Introuvable.' }));
 store.init().then(ensureManager).then(() => app.listen(PORT, () => {
   console.log(`foûfoûni-Market sur ${BASE_URL} (port ${PORT})`);
   console.log(`Paiements : Wave ${CONFIGURED.wave ? 'configuré' : 'non configuré'} · Orange Money ${CONFIGURED.orange ? 'configuré' : 'non configuré'}`);
+  console.log(NTFY.topic ? `Notifications ntfy actives (sujet ${NTFY.topic.slice(0, 4)}…, panier abandonné après ${ABANDON_MIN} min)` : 'Notifications ntfy désactivées (variable NTFY_TOPIC absente)');
   if (!SECURE) console.warn('Attention : BASE_URL n’est pas en HTTPS. Les webhooks Wave et Orange l’exigent en production.');
 })).catch(e => {
   console.error('Impossible de se connecter à Supabase :', e.message);
-  console.error('Vérifiez DATABASE_URL : chaîne « Session pooler », mot de passe remplacé dans [YOUR-PASSWORD].');
+  if (/password authentication failed/i.test(e.message)) {
+    console.error('→ Le mot de passe ne correspond pas à celui de la base Supabase.');
+    console.error('→ Solution simple : réinitialisez-le dans Supabase (lettres et chiffres seulement), attendez 2 minutes,');
+    console.error('  puis mettez-le dans la variable DB_PASSWORD sur Render (DATABASE_URL peut garder [YOUR-PASSWORD]).');
+  } else if (/tenant|user not found/i.test(e.message)) {
+    console.error('→ L’adresse ne correspond pas à votre projet : recopiez la chaîne « Session pooler » depuis le bouton Connect de Supabase.');
+  } else {
+    console.error('Vérifiez DATABASE_URL : chaîne « Session pooler » de Supabase.');
+  }
   process.exit(1);
 });
