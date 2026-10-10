@@ -182,6 +182,64 @@ textarea.input{min-height:84px; resize:vertical}
 .catbar{display:grid; grid-template-columns:minmax(0,1fr) auto; gap:4px 10px; font-size:13.5px; margin-bottom:10px}
 .catbar i{grid-column:1/-1; height:6px; border-radius:3px; background:var(--surface-2); overflow:hidden; display:block}
 .catbar i b{display:block; height:100%; background:var(--indigo)}
+/* Page produit */
+.pdp{display:grid; grid-template-columns:minmax(0,1.1fr) minmax(0,1fr); gap:40px; align-items:start}
+.crumb{font-size:13px; color:var(--muted); margin:0 0 16px; display:flex; gap:8px; align-items:center; flex-wrap:wrap}
+.crumb button{border:0; background:none; color:var(--indigo); font-weight:700; padding:0}
+.gal-main{display:flex; overflow-x:auto; scroll-snap-type:x mandatory; border-radius:22px; border:1px solid var(--line); background:#FFFFFF; scrollbar-width:none; aspect-ratio:1/1; position:relative}
+.gal-main::-webkit-scrollbar{display:none}
+.gal-main>div{flex:0 0 100%; scroll-snap-align:center; display:grid; place-items:center; font-size:150px}
+.gal-main img{width:100%; height:100%; object-fit:contain}
+.gal-main.emoji{background:var(--surface)}
+.gal-th{display:flex; gap:8px; margin-top:12px; overflow-x:auto; scrollbar-width:none}
+.gal-th button{flex:0 0 68px; height:68px; border-radius:12px; border:2px solid var(--line); padding:0; overflow:hidden; background:#FFFFFF}
+.gal-th button[aria-current="true"]{border-color:var(--indigo)}
+.gal-th img{width:100%; height:100%; object-fit:cover}
+.pdp-info h1{font-size:clamp(30px,3.6vw,46px); margin:8px 0 12px}
+.pdp-price{display:flex; align-items:baseline; gap:12px; flex-wrap:wrap; margin:6px 0 4px}
+.pdp-price .price{font-size:44px}
+.pdp-price .strike{font-size:17px}
+.save{color:var(--kola); font-weight:700; font-size:14px}
+.pdp-buy{display:flex; gap:10px; flex-wrap:wrap; margin-top:18px}
+.pdp-buy .btn{flex:1 1 160px; padding:14px 18px; border-radius:999px; font-size:15px}
+.qty.big button{width:44px; height:46px; font-size:18px}.qty.big span{min-width:44px; font-size:16px}
+.trust-box{display:grid; gap:12px; margin-top:20px; border:1px solid var(--line); border-radius:16px; padding:16px; font-size:14px; background:var(--surface)}
+.trust-box div{display:flex; gap:12px; align-items:flex-start}.trust-box b{display:block}
+.pdp-sec{margin-top:56px}.pdp-sec>h2{font-size:clamp(28px,3vw,36px); margin-bottom:18px}
+.hl{display:grid; grid-template-columns:repeat(auto-fill,minmax(min(280px,100%),1fr)); gap:12px}
+.hl div{display:flex; gap:12px; align-items:flex-start; background:var(--surface); border:1px solid var(--line); border-radius:16px; padding:16px; font-size:15px}
+.hl i{font-style:normal; flex:none; width:28px; height:28px; border-radius:50%; display:grid; place-items:center; background:var(--indigo-soft); color:var(--indigo); font-weight:800}
+.pdp-desc{max-width:760px; font-size:16px; line-height:1.75; color:var(--ink)}
+.specs{max-width:760px}.specs td:first-child{color:var(--muted); width:42%}
+.buybar{display:none}
+.gal-ed{display:grid; grid-template-columns:repeat(3,1fr); gap:8px}
+.gal-ed .gi{position:relative; aspect-ratio:1/1; border-radius:10px; overflow:hidden; border:1px solid var(--line); background:#FFFFFF}
+.gal-ed .gi img{width:100%; height:100%; object-fit:cover}
+.gal-ed .gi .pill{position:absolute; left:4px; bottom:4px; font-size:10px; padding:2px 6px}
+.gal-ed .gi button{position:absolute; top:4px; width:24px; height:24px; border-radius:50%; border:0; background:rgba(0,0,0,.65); color:#fff; font-size:12px; line-height:1; padding:0}
+.gal-ed .gi .gd{right:4px}.gal-ed .gi .gm{left:4px}
+@media (max-width:760px){ .pdp{grid-template-columns:minmax(0,1fr); gap:18px} .pdp-wrap{padding-bottom:90px} .pdp-info h1{font-size:30px} .pdp-price .price{font-size:34px} .pdp-sec{margin-top:40px}
+  .buybar{display:flex; position:fixed; left:0; right:0; bottom:calc(60px + env(safe-area-inset-bottom,0px)); z-index:35; background:var(--surface); border-top:1px solid var(--line); padding:10px 14px; gap:10px; align-items:center}
+  .buybar .price{font-size:24px; flex:1}.buybar .btn{border-radius:999px; padding:12px 18px} }
+/* Avis clients */
+.stars{color:var(--indigo); letter-spacing:1px; white-space:nowrap}.stars s{color:var(--line); text-decoration:none}
+.rate-line{display:flex; align-items:center; gap:8px; font-size:14px; margin:-4px 0 10px}.rate-line button{border:0; background:none; color:var(--muted); text-decoration:underline; padding:0; font:inherit}
+.card .stars{font-size:13px}
+.rv-sum{display:grid; grid-template-columns:auto minmax(0,1fr); gap:28px; align-items:center; margin-bottom:22px}
+.rv-avg{font:600 64px/1 var(--f-d); color:var(--ink)}
+.rv-bar{display:grid; grid-template-columns:36px minmax(0,1fr) 32px; gap:10px; align-items:center; font-size:13px; color:var(--muted); margin:4px 0}
+.rv-bar i{display:block; height:8px; border-radius:4px; background:var(--surface-2); overflow:hidden}.rv-bar i b{display:block; height:100%; background:var(--indigo)}
+.rv-photos{display:flex; gap:8px; overflow-x:auto; padding-bottom:6px; margin-bottom:18px; scrollbar-width:none}
+.rv-photos button,.rv-ph button{flex:0 0 84px; width:84px; height:84px; border-radius:12px; overflow:hidden; border:1px solid var(--line); padding:0; background:#fff}
+.rv-photos img,.rv-ph img{width:100%; height:100%; object-fit:cover}
+.rv{border-top:1px solid var(--line); padding:18px 0}
+.rv-h{display:flex; gap:10px; align-items:center; flex-wrap:wrap; font-size:14px}
+.rv p{margin:8px 0 0; font-size:15px; line-height:1.6}
+.rv-ph{display:flex; gap:8px; margin-top:10px; flex-wrap:wrap}.rv-ph button{flex-basis:72px; width:72px; height:72px}
+.rv-reply{margin-top:10px; padding:10px 12px; border-left:3px solid var(--indigo); background:var(--surface); border-radius:0 10px 10px 0; font-size:14px}
+.star-pick{display:flex; gap:4px}.star-pick button{border:0; background:none; font-size:34px; line-height:1; padding:0 2px; color:var(--line); cursor:pointer}.star-pick button.on{color:var(--indigo)}
+.lightbox{position:fixed; inset:0; z-index:90; background:rgba(0,0,0,.92); display:grid; place-items:center; padding:16px}.lightbox img{max-width:100%; max-height:90vh; border-radius:10px}
+@media (max-width:760px){ .rv-sum{grid-template-columns:minmax(0,1fr); gap:12px} .rv-avg{font-size:48px} }
 .empty{border:2px dashed var(--line); border-radius:var(--r-m); padding:48px 20px; text-align:center; color:var(--muted)}
 .empty h3{color:var(--ink); margin-bottom:8px; font-size:20px}
 
@@ -292,6 +350,8 @@ tr.click:hover td{background:var(--surface-2)}
 @media (max-width:760px){
   .top-in{flex-wrap:wrap; gap:10px; padding:10px 14px}
   .search{order:5; flex-basis:100%; max-width:none}
+  .brand{flex:1 1 auto; min-width:0}
+  .brand b{font-size:22px}
   .modes,.who{display:none}
   main{padding:14px 14px 110px}
   .hero{grid-template-columns:minmax(0,1fr); margin-bottom:34px}
@@ -371,7 +431,7 @@ const ROLES = ['Gérant','Vendeur','Caissier','Livreur','Gestionnaire de stock']
 /* ============ état ============ */
 const S = {
   ready:false, live:false, isAdmin:false, uid:null, myName:'',
-  products:[], bundles:[], clients:[], suppliers:[], affiliates:[], affPayouts:[], moves:[], ledger:[], finConfig:{}, posTab:'vente', trAcc:'all', trType:'all', pq:'', promos:[], orders:[], settings:structuredClone(DEFAULT_SETTINGS), team:{members:[]},
+  products:[], bundles:[], clients:[], suppliers:[], reviews:[], affiliates:[], affPayouts:[], moves:[], ledger:[], finConfig:{}, posTab:'vente', trAcc:'all', trType:'all', pq:'', promos:[], orders:[], settings:structuredClone(DEFAULT_SETTINGS), team:{members:[]},
   cart:[], pos:[], posPromo:null, appliedPromo:null,
   view:'shop', tab:'dash', cat:'Tout', q:'', aq:'', orderFilter:'all', selPromos:new Set(), names:{}
 };
@@ -419,6 +479,7 @@ function syncLocal(){
   const arr = c => Object.entries(local[c]||{}).map(([id,d])=>({id,...d}));
   S.products = arr('products').sort((a,b)=>(b.createdAt||0)-(a.createdAt||0));
   S.bundles = arr('bundles').sort((a,b)=>(b.createdAt||0)-(a.createdAt||0));
+  S.reviews = arr('reviews').sort((a,b)=>b.createdAt-a.createdAt);
   S.affiliates = arr('affiliates').sort((a,b)=>a.name.localeCompare(b.name));
   S.affPayouts = arr('aff-payouts').sort((a,b)=>b.createdAt-a.createdAt);
   S.clients = arr('clients').sort((a,b)=>a.name.localeCompare(b.name));
@@ -486,6 +547,7 @@ async function boot(){
       S.myName = userCap ? await userCap.name() : '';
     }catch(e){}
     db.collection('products').onSnapshot(s=>{ S.products = s.docs.map(d=>({id:d.id,...d.data()})).sort((a,b)=>(b.createdAt||0)-(a.createdAt||0)); schedule(); }, dbErr);
+    db.collection('reviews').onSnapshot(s=>{ S.reviews = s.docs.map(d=>({id:d.id,...d.data()})).sort((a,b)=>b.createdAt-a.createdAt); schedule(); }, dbErr);
     db.collection('bundles').onSnapshot(s=>{ S.bundles = s.docs.map(d=>({id:d.id,...d.data()})).sort((a,b)=>(b.createdAt||0)-(a.createdAt||0)); schedule(); }, dbErr);
     db.doc('settings/main').onSnapshot(d=>{ S.settings = mergeSettings(d.exists?d.data():null); schedule(); }, dbErr);
     if(S.isAdmin){
@@ -520,6 +582,7 @@ function render(){
   if(!S.ready) return;
   const m = $('#main');
   if(S.view==='shop') m.innerHTML = viewShop();
+  else if(S.view==='product') m.innerHTML = viewProduct();
   else if(S.view==='orders') m.innerHTML = viewMyOrders();
   else if(S.view==='pos' && S.isAdmin) m.innerHTML = viewPos();
   else if(S.view==='admin' && S.isAdmin) m.innerHTML = viewAdmin();
@@ -527,7 +590,7 @@ function render(){
   if(fid){ const el = document.getElementById(fid); if(el && el.closest('#main,#topbar')){ el.focus(); try{ if(ss!=null) el.setSelectionRange(ss,ss); }catch(e){} } }
   if(S.view==='admin' && S.tab==='team') resolveNames();
   if(!S._deep && S.ready && S.products.length){ S._deep = true; let pid=''; try{ pid = new URLSearchParams(location.search).get('p')||''; }catch(e){}
-    if(pid && S.products.some(x=>x.id===pid && x.active!==false)){ S.view='shop'; setTimeout(()=>openProduct(pid), 60); } }
+    if(pid && S.products.some(x=>x.id===pid && x.active!==false) && S.view==='shop'){ S.view='product'; S.pid=pid; S.pqty=1; schedule(); } }
   if(S.isAdmin && !S._remShown){ const n = reminders().late.length; if(n){ S._remShown = true; toast(`${n} créance${n>1?'s':''} client arrivée${n>1?'s':''} à échéance : touchez la cloche pour relancer`); } }
   const dr = $('#drawer-body'); if(dr) dr.innerHTML = cartBody();
 }
@@ -607,7 +670,7 @@ function viewShop(){
     ${S.cat==='Lots'?bundleBlock:''}${S.cat==='Lots'?'':list.length?`<div class="grid">${list.map(p=>`
       <article class="card">
         <button class="thumb" data-a="product" data-id="${p.id}" aria-label="Voir ${esc(p.name)}">${pImg(p)}${stockPill(p)}${isNew(p)?'<span class="new-band">Nouveau</span>':''}</button>
-        <div class="card-b"><span class="cat">${esc(p.category)}</span><h3>${esc(p.name)}</h3>${p.bulkMin>1&&p.bulkPrice>0?`<span class="bulk">Dès ${p.bulkMin} : ${fmt(p.bulkPrice)} l’unité</span>`:''}
+        <div class="card-b"><span class="cat">${esc(p.category)}</span><h3>${esc(p.name)}</h3>${(()=>{ const rt=productRating(p.id); return rt.n?`<span class="small">${starsHTML(rt.avg)} <span class="muted">(${rt.n})</span></span>`:''; })()}${p.bulkMin>1&&p.bulkPrice>0?`<span class="bulk">Dès ${p.bulkMin} : ${fmt(p.bulkPrice)} l’unité</span>`:''}
           <div class="card-f"><span class="price">${fmt(p.price)}${p.comparePrice>p.price?`<span class="strike">${fmt(p.comparePrice)}</span>`:''}</span>
           <button class="add" data-a="add" data-id="${p.id}" ${p.stock<=0?'disabled':''} aria-label="Ajouter ${esc(p.name)} au panier">+</button></div>
         </div>
@@ -621,9 +684,81 @@ function viewShop(){
 function viewMyOrders(){
   const mine = S.orders.filter(o=>o.createdBy===S.uid || !S.live);
   return `<div class="sec-h"><h2>Mes commandes</h2></div>
-    ${mine.length?`<div class="panel tbl-wrap"><table><thead><tr><th>Commande</th><th>Date</th><th>Total</th><th>Statut</th></tr></thead><tbody>
-    ${mine.map(o=>`<tr class="click" data-a="receipt" data-id="${o.id}"><td><b>${esc(o.number)}</b></td><td>${dateFr(o.createdAt)}</td><td>${fmt(o.total)}</td><td><span class="pill ${STATUS[o.status]?.cls}">${STATUS[o.status]?.label}</span></td></tr>`).join('')}
+    ${mine.length?`<div class="panel tbl-wrap"><table><thead><tr><th>Commande</th><th>Date</th><th>Total</th><th>Statut</th><th></th></tr></thead><tbody>
+    ${mine.map(o=>`<tr class="click" data-a="receipt" data-id="${o.id}"><td><b>${esc(o.number)}</b></td><td>${dateFr(o.createdAt)}</td><td>${fmt(o.total)}</td><td><span class="pill ${STATUS[o.status]?.cls}">${STATUS[o.status]?.label}</span></td><td>${REVIEW_ST.includes(o.status)?`<button class="btn sm primary" data-a="reviewOrder" data-id="${o.id}" style="border-radius:999px;white-space:nowrap">★ Donner mon avis</button>`:''}</td></tr>`).join('')}
     </tbody></table></div>`:`<div class="empty"><h3>Aucune commande pour l’instant</h3><p>Vos achats apparaîtront ici avec leur suivi.</p><button class="btn primary" data-a="go" data-v="shop">Parcourir la boutique</button></div>`}`;
+}
+
+/* --- Avis clients (achats vérifiés) --- */
+S.rimg = {};
+const REVIEW_ST = ['livree','expediee'];
+const pubReviews = pid => S.reviews.filter(r=>r.productId===pid && r.status!=='hidden');
+function productRating(pid){ const rs = pubReviews(pid), dist=[0,0,0,0,0]; rs.forEach(r=>dist[Math.min(5,Math.max(1,r.rating))-1]++); const n = rs.length; return {n, avg: n ? rs.reduce((t,r)=>t+r.rating,0)/n : 0, dist}; }
+const starsHTML = v => { const k = Math.round(v); return `<span class="stars" aria-label="${(Math.round(v*10)/10).toString().replace('.',',')} sur 5">${'★'.repeat(k)}<s>${'★'.repeat(5-k)}</s></span>`; };
+const reviewImgSrc = id => isServer() ? '/img/rv/'+encodeURIComponent(id) : S.rimg[id];
+function loadReviewImgs(ids){ if(isServer()) return; const miss=(ids||[]).filter(id=>!(id in S.rimg)); if(!miss.length) return; miss.forEach(id=>S.rimg[id]=null);
+  Promise.all(miss.map(id=>getDoc('review-images', id).then(d=>{ S.rimg[id]=d&&d.data||''; }).catch(()=>{ S.rimg[id]=''; }))).then(()=>schedule()); }
+const shortName = n => { const w = String(n||'Client').trim().split(/\s+/); return w[0] + (w[1] ? ' '+w[1][0].toUpperCase()+'.' : ''); };
+function lightbox(src){ const d=document.createElement('div'); d.className='lightbox'; d.innerHTML=`<img src="${esc(src)}" alt="Photo du client">`; d.onclick=()=>d.remove(); document.body.appendChild(d); }
+function reviewsSection(p){
+  const all = pubReviews(p.id), rt = productRating(p.id);
+  if(!rt.n) return `<section class="pdp-sec" id="avis"><h2>Avis clients</h2><p class="muted">Aucun avis pour l’instant. Les clients qui ont acheté ce produit peuvent laisser une note et des photos depuis « Mes commandes ».</p></section>`;
+  const photos = []; all.forEach(r=>(r.photos||[]).forEach(id=>photos.push(id))); loadReviewImgs(photos);
+  const only = S.rvPhotos ? all.filter(r=>(r.photos||[]).length) : all;
+  return `<section class="pdp-sec" id="avis"><h2>Avis clients</h2>
+    <div class="rv-sum"><div><div class="rv-avg">${(Math.round(rt.avg*10)/10).toString().replace('.',',')}</div><div style="font-size:22px;margin:4px 0">${starsHTML(rt.avg)}</div><div class="muted small">${rt.n} avis vérifié${rt.n>1?'s':''}</div></div>
+      <div>${[5,4,3,2,1].map(k=>`<div class="rv-bar"><span>${k} ★</span><i><b style="width:${Math.round(rt.dist[k-1]/rt.n*100)}%"></b></i><span>${rt.dist[k-1]}</span></div>`).join('')}</div></div>
+    ${photos.length?`<h3 style="font-size:20px;margin:0 0 10px">Photos des clients</h3><div class="rv-photos">${photos.slice(0,20).map(id=>reviewImgSrc(id)?`<button data-a="rvZoom" data-v="${esc(id)}"><img src="${esc(reviewImgSrc(id))}" alt="Photo d’un client" loading="lazy"></button>`:'').join('')}</div>`:''}
+    <div class="cats" role="group" aria-label="Filtrer les avis"><button aria-pressed="${!S.rvPhotos}" data-a="rvFilter" data-v="0">Tous (${all.length})</button><button aria-pressed="${!!S.rvPhotos}" data-a="rvFilter" data-v="1">Avec photos (${all.filter(r=>(r.photos||[]).length).length})</button></div>
+    ${only.slice(0, S.rvMore?200:8).map(r=>`<div class="rv"><div class="rv-h">${starsHTML(r.rating)}<b>${esc(r.name||'Client')}</b><span class="pill ok">Achat vérifié</span><span class="muted">${new Date(r.createdAt).toLocaleDateString('fr-FR')}</span></div>
+      ${r.comment?`<p>${esc(r.comment).replace(/\n/g,'<br>')}</p>`:''}
+      ${(r.photos||[]).length?`<div class="rv-ph">${r.photos.map(id=>reviewImgSrc(id)?`<button data-a="rvZoom" data-v="${esc(id)}"><img src="${esc(reviewImgSrc(id))}" alt="Photo du client" loading="lazy"></button>`:'').join('')}</div>`:''}
+      ${r.reply?`<div class="rv-reply"><b>Réponse de ${esc(S.settings.shopName)}</b><br>${esc(r.reply)}</div>`:''}</div>`).join('')}
+    ${only.length>8&&!S.rvMore?`<button class="btn ghost" data-a="rvMore">Voir tous les avis (${only.length})</button>`:''}</section>`;
+}
+/* Envoi d'un avis (remplacé côté serveur par une vérification du jeton de commande) */
+async function postReview(o, item, r){
+  const id = newId('r'), photos = [];
+  for(const d of r.photos){ const pid = newId('ri'); await put('review-images', pid, {reviewId:id, data:d, createdAt:Date.now()}); photos.push(pid); }
+  await put('reviews', id, {productId:item.id, orderId:o.id, rating:r.rating, comment:r.comment, name:r.name, photos, status:'published', createdAt:Date.now(), createdBy:S.uid||'local'});
+}
+function reviewForm(orderId){
+  const o = S.orders.find(x=>x.id===orderId); if(!o) return;
+  const items = (o.items||[]).filter(i=>!i.bundle && S.products.some(p=>p.id===i.id));
+  const done = pid => S.reviews.some(r=>r.orderId===o.id && r.productId===pid) || (()=>{ try{ return !!localStorage.getItem('ffm-rv-'+o.id+'-'+pid); }catch(e){ return false; } })();
+  const st = {}; items.forEach(i=>st[i.id]={rating:0, photos:[]});
+  $('#overlay').innerHTML = `<div class="scrim" data-a="closeAll"><div class="modal wide" role="dialog" aria-modal="true" aria-label="Donner mon avis"><div class="m-h"><h2>Votre avis sur la commande ${esc(o.number)}</h2><button class="x" data-a="closeAll" aria-label="Fermer">×</button></div>
+    <div class="m-b"><div class="field"><label for="rv-name">Nom affiché</label><input class="input" id="rv-name" value="${esc(shortName(o.customer&&o.customer.name))}" maxlength="40"></div>
+    ${items.map(i=>{ const p=S.products.find(x=>x.id===i.id); return done(i.id) ? `<div class="panel"><b>${esc(p.name)}</b><p class="muted" style="margin:6px 0 0">✓ Merci, votre avis est publié.</p></div>` : `<div class="panel" data-rv="${i.id}"><div class="row" style="align-items:center;gap:12px"><div class="li-img" style="flex:0 0 52px">${pImg(p)}</div><b style="flex:1">${esc(p.name)}</b></div>
+      <label style="font-size:13px;font-weight:600;color:var(--muted);display:block;margin:12px 0 4px">Votre note sur la qualité *</label><div class="star-pick" role="radiogroup" aria-label="Note">${[1,2,3,4,5].map(k=>`<button type="button" data-star="${k}" aria-label="${k} étoile${k>1?'s':''}">★</button>`).join('')}</div>
+      <div class="field" style="margin-top:10px"><label>Votre commentaire</label><textarea class="input" data-c="1" maxlength="1000" placeholder="Qualité, conformité aux photos, utilisation…"></textarea></div>
+      <div class="rv-ph" data-ph="1"></div><label class="btn ghost sm" style="margin-top:8px">📷 Ajouter des photos réelles (3 max.)<input type="file" accept="image/*" multiple class="sr" data-f="1"></label>
+      <div class="row" style="margin-top:12px"><span class="small" data-err="1" style="color:var(--danger);flex:1"></span><button class="btn primary" data-send="1" style="flex:0">Publier mon avis</button></div></div>`; }).join('') || '<p class="muted">Aucun article à noter dans cette commande.</p>'}
+    <p class="muted small" style="margin-bottom:0">Votre avis est publié avec la mention « Achat vérifié ». Merci de rester courtois : la boutique peut masquer les avis hors sujet.</p></div></div></div>`;
+  $('#overlay').querySelectorAll('[data-rv]').forEach(box=>{ const pid=box.dataset.rv, s2=st[pid];
+    const paint=()=>{ box.querySelectorAll('[data-star]').forEach(b=>b.classList.toggle('on', Number(b.dataset.star)<=s2.rating)); box.querySelector('[data-ph]').innerHTML = s2.photos.map((d,k)=>`<button type="button" data-rmph="${k}" aria-label="Retirer la photo"><img src="${d}" alt=""></button>`).join(''); box.querySelectorAll('[data-rmph]').forEach(b=>b.onclick=e=>{ e.stopPropagation(); s2.photos.splice(Number(b.dataset.rmph),1); paint(); }); };
+    box.querySelectorAll('[data-star]').forEach(b=>b.onclick=e=>{ e.stopPropagation(); s2.rating=Number(b.dataset.star); paint(); });
+    box.querySelector('[data-f]').onchange = async e=>{ const fs=[...e.target.files]; e.target.value=''; for(const f of fs){ if(s2.photos.length>=3) break; try{ s2.photos.push(await compress(f)); }catch(err){} } paint(); };
+    box.querySelector('[data-send]').onclick = async e=>{ e.stopPropagation(); const err=box.querySelector('[data-err]');
+      if(!s2.rating){ err.textContent='Choisissez une note de 1 à 5 étoiles.'; return; }
+      const btn=e.currentTarget; btn.disabled=true; btn.textContent='Envoi…';
+      try{ await postReview(o, {id:pid}, {rating:s2.rating, comment:box.querySelector('[data-c]').value.trim(), name:($('#rv-name').value.trim()||'Client').slice(0,40), photos:s2.photos});
+        try{ localStorage.setItem('ffm-rv-'+o.id+'-'+pid,'1'); }catch(x){}
+        box.innerHTML = `<b>${esc(S.products.find(x=>x.id===pid).name)}</b><p class="muted" style="margin:6px 0 0">✓ Merci, votre avis est publié.</p>`; toast('Merci pour votre avis !'); }
+      catch(x){ err.textContent = x.message || 'Envoi impossible, réessayez.'; btn.disabled=false; btn.textContent='Publier mon avis'; } };
+    paint(); });
+}
+/* Gestion des avis */
+function paneReviews(){
+  const list = S.reviews; const ids=[]; list.forEach(r=>(r.photos||[]).forEach(i=>ids.push(i))); loadReviewImgs(ids);
+  const avg = list.filter(r=>r.status!=='hidden'); const m = avg.length ? avg.reduce((t,r)=>t+r.rating,0)/avg.length : 0;
+  return `<div class="toolbar"><h2 style="font-size:24px;flex:1">Avis clients</h2></div>
+  <div class="kpis" style="grid-template-columns:repeat(3,1fr)"><div class="kpi"><span>Avis publiés</span><b>${avg.length}</b></div><div class="kpi"><span>Note moyenne</span><b>${avg.length?(Math.round(m*10)/10).toString().replace('.',',')+' / 5':'—'}</b></div><div class="kpi"><span>Avis masqués</span><b>${list.length-avg.length}</b></div></div>
+  <div class="panel">${list.length?list.map(r=>{ const p=S.products.find(x=>x.id===r.productId); return `<div class="rv"><div class="rv-h">${starsHTML(r.rating)}<b>${esc(r.name||'Client')}</b><span class="muted">sur</span><b>${esc(p?p.name:'(produit supprimé)')}</b><span class="muted">${dateFr(r.createdAt)}</span>${r.status==='hidden'?'<span class="pill bad">Masqué</span>':'<span class="pill ok">Publié</span>'}</div>
+    ${r.comment?`<p>${esc(r.comment)}</p>`:''}${(r.photos||[]).length?`<div class="rv-ph">${r.photos.map(id=>reviewImgSrc(id)?`<button data-a="rvZoom" data-v="${esc(id)}"><img src="${esc(reviewImgSrc(id))}" alt=""></button>`:'').join('')}</div>`:''}
+    ${r.reply?`<div class="rv-reply"><b>Votre réponse</b><br>${esc(r.reply)}</div>`:''}
+    <div class="fin-actions" style="margin:10px 0 0"><button class="btn ghost sm" data-a="rvReply" data-id="${r.id}">${r.reply?'Modifier la réponse':'Répondre'}</button><button class="btn ghost sm" data-a="rvToggle" data-id="${r.id}">${r.status==='hidden'?'Publier à nouveau':'Masquer'}</button></div></div>`; }).join('')
+  :'<div class="empty"><h3>Aucun avis pour l’instant</h3><p>Après une livraison, vos clients peuvent noter les produits et ajouter leurs photos depuis « Mes commandes ».</p></div>'}</div>`;
 }
 
 /* --- Partage et visuels --- */
@@ -707,19 +842,66 @@ async function openVisual(id, story){
     if(k==='share'){ const f = new File([blob], name, {type:'image/png'}); try{ if(navigator.canShare({files:[f]})) await navigator.share({files:[f], text:$('#vs-cap').value}); else toast('Partage non disponible : téléchargez l’image.'); }catch(err){} } });
 }
 
+/* --- Page produit (style boutique en ligne) --- */
+S.gimg = {};
+const extraSrc = id => isServer() ? '/img/pi/'+encodeURIComponent(id) : S.gimg[id];
+function loadExtras(ids){
+  if(isServer()) return Promise.resolve();
+  const miss = (ids||[]).filter(id=>!(id in S.gimg)); if(!miss.length) return Promise.resolve();
+  miss.forEach(id=>S.gimg[id]=null);
+  return Promise.all(miss.map(id=>getDoc('product-images', id).then(d=>{ S.gimg[id] = d && d.data || ''; }).catch(()=>{ S.gimg[id]=''; }))).then(()=>schedule());
+}
+function galleryFor(p){ const out = p.image ? [p.image] : []; loadExtras(p.gallery); (p.gallery||[]).forEach(id=>{ const src = extraSrc(id); if(src) out.push(src); }); return out; }
+const lines = t => String(t||'').split(/\r?\n/).map(x=>x.trim()).filter(Boolean);
 function openProduct(id){
-      const p = S.products.find(x=>x.id===id); if(!p) return;
-      const related = S.products.filter(x=>x.id!==p.id && x.active!==false && x.category===p.category).sort((a,b)=>(b.stock>0)-(a.stock>0)).slice(0,6);
-      const inBundles = S.bundles.filter(b=>b.active!==false && (b.items||[]).some(i=>i.id===p.id) && bundleInfo(b).ok);
-      $('#overlay').innerHTML = `<div class="scrim" data-a="closeAll"><div class="modal wide" role="dialog" aria-modal="true" aria-label="${esc(p.name)}"><div class="m-h"><h2>${esc(p.name)}</h2><button class="x" data-a="closeAll" aria-label="Fermer">×</button></div>
-        <div class="m-b"><div class="row" style="align-items:flex-start"><div class="thumb" style="flex:1 1 260px;border-radius:14px;font-size:110px">${pImg(p)}</div>
-        <div style="flex:1 1 260px"><span class="muted small">${esc(p.category)} · ${esc(p.sku)}</span><p class="price" style="font-size:28px;margin:8px 0">${fmt(p.price)}${p.comparePrice>p.price?`<span class="strike">${fmt(p.comparePrice)}</span>`:''}</p>
-        <p>${esc(p.description||'')}</p><p>${p.stock>0?`<span class="pill ok">En stock · ${p.stock}</span>`:'<span class="pill bad">Rupture de stock</span>'} ${isNew(p)?'<span class="pill info">Nouveau</span>':''}</p>
-        ${p.bulkMin>1&&p.bulkPrice>0?`<p class="bulk" style="font-size:14px">Achat groupé : ${fmt(p.bulkPrice)} l’unité dès ${p.bulkMin} unités, appliqué automatiquement dans le panier.</p>`:''}
-        <button class="btn primary block" data-a="addClose" data-id="${p.id}" ${p.stock<=0?'disabled':''}>Ajouter au panier</button>
-        <div class="row" style="margin-top:10px;gap:8px"><button class="btn ghost" data-a="shareProduct" data-id="${p.id}" style="flex:1">↗ Partager</button>${S.isAdmin?`<button class="btn ghost" data-a="visual" data-id="${p.id}" style="flex:1">🖼 Visuel à publier</button>`:''}</div>
-        ${inBundles.length?`<div style="margin-top:14px">${inBundles.map(b=>`<button class="btn ghost block" style="margin-top:8px" data-a="addBundle" data-id="${b.id}">Aussi en lot : ${esc(b.name)} · ${fmt(b.price)}</button>`).join('')}</div>`:''}</div></div>
-        ${related.length?`<h3 style="margin:26px 0 12px;font-size:24px">Dans la même catégorie</h3><div class="related">${related.map(miniCard).join('')}</div>`:''}</div></div></div>`;
+  const p = S.products.find(x=>x.id===id); if(!p) return;
+  closeAll(); S.view = 'product'; S.pid = id; S.pqty = 1;
+  try{ history.pushState({p:id}, '', '?p='+encodeURIComponent(id)); }catch(e){}
+  schedule(); window.scrollTo(0,0);
+}
+window.addEventListener('popstate', ()=>{ let pid=''; try{ pid = new URLSearchParams(location.search).get('p')||''; }catch(e){}
+  if(pid && S.products.some(x=>x.id===pid)){ S.view='product'; S.pid=pid; S.pqty=1; } else if(S.view==='product') S.view='shop';
+  closeAll(); schedule(); });
+function viewProduct(){
+  const p = S.products.find(x=>x.id===S.pid && x.active!==false); if(!p){ S.view='shop'; return viewShop(); }
+  const imgs = galleryFor(p), st = S.settings, save = p.comparePrice>p.price ? p.comparePrice-p.price : 0;
+  const related = S.products.filter(x=>x.id!==p.id && x.active!==false && x.category===p.category).sort((a,b)=>(b.stock>0)-(a.stock>0)).slice(0,8);
+  const inBundles = S.bundles.filter(b=>b.active!==false && (b.items||[]).some(i=>i.id===p.id) && bundleInfo(b).ok);
+  const hl = lines(p.highlights).slice(0,8), specs = lines(p.specs).map(l=>{ const k=l.indexOf(':'); return k>0 ? [l.slice(0,k).trim(), l.slice(k+1).trim()] : ['', l]; });
+  const paras = String(p.details||'').split(/\n\s*\n/).map(x=>x.trim()).filter(Boolean);
+  const pays = enabledProcs().map(([k])=>PROCESSORS[k].name);
+  const q = Math.max(1, S.pqty||1), out = p.stock<=0;
+  const gal = imgs.length
+    ? `<div class="gal-main" id="gal">${imgs.map((src,i)=>`<div><img src="${esc(src)}" alt="${esc(p.name)} — photo ${i+1}" ${i?'loading="lazy"':''}></div>`).join('')}</div>
+       ${imgs.length>1?`<div class="gal-th" role="group" aria-label="Photos">${imgs.map((src,i)=>`<button data-a="galGo" data-i="${i}" aria-current="${i===0}" aria-label="Photo ${i+1}"><img src="${esc(src)}" alt=""></button>`).join('')}</div>`:''}`
+    : `<div class="gal-main emoji"><div>${esc(p.emoji||'📦')}</div></div>`;
+  return `<div class="pdp-wrap">
+  <nav class="crumb" aria-label="Fil d’Ariane"><button data-a="go" data-v="shop">← Boutique</button><span>›</span><button data-a="pdpCat" data-v="${esc(p.category)}">${esc(p.category)}</button></nav>
+  <div class="pdp"><div>${gal}</div>
+    <div class="pdp-info"><div style="display:flex;gap:8px;flex-wrap:wrap">${isNew(p)?'<span class="pill info">Nouveau</span>':''}${save?`<span class="pill ok">−${Math.round(save/p.comparePrice*100)} %</span>`:''}${p.stock>0&&p.stock<=(p.lowStock||5)?`<span class="pill warn">Plus que ${p.stock} en stock</span>`:''}</div>
+      <h1>${esc(p.name)}</h1>
+      ${(()=>{ const rt=productRating(p.id); return rt.n?`<div class="rate-line">${starsHTML(rt.avg)}<b>${(Math.round(rt.avg*10)/10).toString().replace('.',',')}</b><button data-a="rvGo">${rt.n} avis vérifié${rt.n>1?'s':''}</button></div>`:''; })()}
+      ${p.description?`<p class="muted" style="margin:0 0 10px;font-size:16px">${esc(p.description)}</p>`:''}
+      <div class="pdp-price"><span class="price">${fmt(p.price)}</span>${save?`<span class="strike">${fmt(p.comparePrice)}</span>`:''}</div>
+      ${save?`<div class="save">Vous économisez ${fmt(save)}</div>`:''}
+      ${p.bulkMin>1&&p.bulkPrice>0?`<p class="bulk" style="font-size:14px;margin:10px 0 0">Achat groupé : ${fmt(p.bulkPrice)} l’unité dès ${p.bulkMin} unités</p>`:''}
+      <p style="margin:14px 0 0">${out?'<span class="pill bad">Rupture de stock</span>':`<span class="pill ok">En stock</span>`}</p>
+      ${out?'':`<div class="pdp-buy"><div class="qty big"><button data-a="pdpQty" data-d="-1" aria-label="Moins">−</button><span>${q}</span><button data-a="pdpQty" data-d="1" aria-label="Plus">+</button></div>
+        <button class="btn primary" data-a="pdpAdd">Ajouter au panier</button><button class="btn ghost" data-a="pdpBuy">Acheter maintenant</button></div>`}
+      <div class="trust-box"><div><span>🚚</span><span><b>Livraison à ${esc(st.city)}</b>${st.freeFrom?`Offerte dès ${fmt(st.freeFrom)} d’achat, sinon ${fmt(st.deliveryFee)}. `:''}Retrait en boutique possible.</span></div>
+        <div><span>💳</span><span><b>Paiement sécurisé</b>${esc(pays.join(', ')||'À la livraison')}</span></div>
+        ${p.warranty?`<div><span>🛡️</span><span><b>Garantie et retour</b>${esc(p.warranty)}</span></div>`:''}
+        ${st.phone?`<div><span>📞</span><span><b>Une question ?</b><a href="tel:${esc(st.phone.replace(/\s/g,''))}" style="color:var(--indigo)">${esc(st.phone)}</a></span></div>`:''}</div>
+      <div class="row" style="gap:8px;margin-top:14px"><button class="btn ghost sm" data-a="shareProduct" data-id="${p.id}" style="flex:0">↗ Partager</button>${S.isAdmin?`<button class="btn ghost sm" data-a="visual" data-id="${p.id}" style="flex:0">🖼 Visuel</button><button class="btn ghost sm" data-a="editProduct" data-id="${p.id}" style="flex:0">✏️ Modifier</button>`:''}</div>
+      ${inBundles.length?`<div style="margin-top:14px">${inBundles.map(b=>`<button class="btn ghost block" style="margin-top:8px" data-a="addBundle" data-id="${b.id}">Aussi en lot : ${esc(b.name)} · ${fmt(b.price)}</button>`).join('')}</div>`:''}
+    </div></div>
+  ${hl.length?`<section class="pdp-sec"><h2>Points forts</h2><div class="hl">${hl.map(x=>`<div><i>✓</i><span>${esc(x)}</span></div>`).join('')}</div></section>`:''}
+  ${paras.length?`<section class="pdp-sec"><h2>Description</h2><div class="pdp-desc">${paras.map(x=>`<p>${esc(x).replace(/\n/g,'<br>')}</p>`).join('')}</div></section>`:''}
+  ${specs.length?`<section class="pdp-sec"><h2>Caractéristiques</h2><div class="panel tbl-wrap specs"><table><tbody>${specs.map(([k,v])=>`<tr><td>${esc(k)}</td><td>${esc(v)}</td></tr>`).join('')}</tbody></table></div></section>`:''}
+  ${reviewsSection(p)}
+  ${related.length?`<section class="pdp-sec"><h2>Dans la même catégorie</h2><div class="related">${related.map(miniCard).join('')}</div></section>`:''}
+  ${out?'':`<div class="buybar"><span class="price">${fmt(p.price)}</span><button class="btn primary" data-a="pdpAdd">Ajouter au panier</button></div>`}
+  </div>`;
 }
 
 function miniCard(p){
@@ -765,7 +947,7 @@ function addLine(target, match, make, label){
   const test = cart.map(l=>({...l})); const t = test.find(match); if(t) t.qty += 1; else test.push(make());
   const issue = stockIssue(test); if(issue){ toast(issue); return; }
   const line = cart.find(match); if(line) line.qty += 1; else cart.push(make());
-  if(target==='cart'){ saveCart(); toast(label); }
+  if(target==='cart'){ saveCart(); if(label) toast(label); }
   schedule();
 }
 function addToCart(id, qty=1, target='cart'){
@@ -1468,10 +1650,10 @@ function billForm(type, x){
 }
 
 /* --- Gestion --- */
-const TABS = [['dash','Tableau de bord'],['products','Produits'],['bundles','Lots'],['orders','Commandes'],['promos','Codes promo'],['affiliates','Ambassadeurs'],['alerts','Alertes clients'],['payments','Paiements'],['team','Équipe']];
+const TABS = [['dash','Tableau de bord'],['products','Produits'],['bundles','Lots'],['orders','Commandes'],['promos','Codes promo'],['affiliates','Ambassadeurs'],['reviews','Avis clients'],['alerts','Alertes clients'],['payments','Paiements'],['team','Équipe']];
 function viewAdmin(){
   const pending = S.orders.filter(o=>o.status==='en_attente'||(o.status==='payee'&&!o.stockApplied)).length;
-  const panes = {dash:paneDash, products:paneProducts, bundles:paneBundles, orders:paneOrders, promos:panePromos, affiliates:paneAffiliates, alerts:()=>window.paneAlerts?window.paneAlerts():'', payments:panePayments, team:paneTeam};
+  const panes = {dash:paneDash, products:paneProducts, bundles:paneBundles, orders:paneOrders, promos:panePromos, affiliates:paneAffiliates, reviews:paneReviews, alerts:()=>window.paneAlerts?window.paneAlerts():'', payments:panePayments, team:paneTeam};
   return `<div class="admin"><nav class="side" aria-label="Gestion">${TABS.filter(([k])=>k!=='alerts'||isServer()).map(([k,l])=>`<button data-a="tab" data-v="${k}" ${S.tab===k?'aria-current="page"':''}>${l}${k==='orders'&&pending?`<span class="pill warn">${pending}</span>`:''}</button>`).join('')}</nav>
     <section>${panes[S.tab]()}</section></div>`;
 }
@@ -1573,9 +1755,9 @@ function productForm(p){
   $('#overlay').innerHTML = `<div class="scrim" data-a="closeAll"><div class="modal wide" role="dialog" aria-modal="true" aria-label="${isNew0?'Nouveau produit':'Modifier le produit'}">
     <div class="m-h"><h2>${isNew0?'Nouveau produit':'Modifier le produit'}</h2><button class="x" data-a="closeAll" aria-label="Fermer">×</button></div>
     <div class="m-b"><div class="row" style="align-items:flex-start">
-      <div style="flex:0 0 180px"><div class="thumb" id="pf-prev" style="border-radius:12px">${pImg(p)}</div>
-        <label class="btn ghost block" style="margin-top:10px">Choisir une photo<input type="file" accept="image/*" id="pf-file" class="sr"></label>
-        ${p.image?'<button class="btn sm ghost block" id="pf-noimg" style="margin-top:6px">Retirer la photo</button>':''}
+      <div style="flex:0 0 230px"><div class="gal-ed" id="pf-gal"></div>
+        <label class="btn ghost block" style="margin-top:8px">Ajouter des photos<input type="file" accept="image/*" id="pf-file" class="sr" multiple></label>
+        <p class="muted small" style="margin:8px 0 0">Jusqu’à 8 photos. La première est la photo principale (★ pour en choisir une autre). Carrées de préférence, produit centré sur fond uni.</p>
         <div class="field" style="margin-top:10px"><label for="pf-emoji">Icône si pas de photo</label><input class="input" id="pf-emoji" value="${esc(p.emoji)}" maxlength="4"></div></div>
       <div style="flex:1 1 320px">
         <div class="field"><label for="pf-name">Nom du produit</label><input class="input" id="pf-name" value="${esc(p.name)}"></div>
@@ -1589,17 +1771,32 @@ function productForm(p){
         <div class="field"><label for="pf-bprice">Prix de gros à l’unité</label><input class="input" id="pf-bprice" inputmode="numeric" value="${esc(p.bulkPrice||'')}"></div></div>
         <label class="row" style="align-items:center;gap:10px;margin-bottom:14px"><span class="switch" style="flex:0 0 42px"><input type="checkbox" id="pf-new" ${isNewP||isNew(p)?'checked':''}><span></span></span><span>Banderole « Nouveau » pendant 30 jours</span></label>
         <div class="field"><label for="pf-aff">Commission ambassadeur (%)</label><input class="input" id="pf-aff" inputmode="decimal" value="${esc(p.affPct??'')}" placeholder="${esc(S.settings.affDefaultPct)} % par défaut"></div>
-        <div class="field"><label for="pf-desc">Description</label><textarea class="input" id="pf-desc">${esc(p.description)}</textarea></div>
+        <div class="field"><label for="pf-hl">Points forts (un par ligne)</label><textarea class="input" id="pf-hl" placeholder="Écran LED lisible de loin&#10;Fonctionne sur piles, sans fil&#10;Garantie 6 mois">${esc(p.highlights||'')}</textarea></div>
+        <div class="field"><label for="pf-details">Description détaillée (paragraphes séparés par une ligne vide)</label><textarea class="input" id="pf-details" style="min-height:110px">${esc(p.details||'')}</textarea></div>
+        <div class="field"><label for="pf-specs">Caractéristiques (une par ligne, ex. « Matière : Inox »)</label><textarea class="input" id="pf-specs" placeholder="Dimensions : 30 × 30 cm&#10;Couleur : Noir&#10;Alimentation : 2 piles AA">${esc(p.specs||'')}</textarea></div>
+        <div class="field"><label for="pf-war">Garantie / retour (facultatif)</label><input class="input" id="pf-war" value="${esc(p.warranty||'')}" placeholder="ex. Garantie 6 mois, échange sous 7 jours"></div>
+        <div class="field"><label for="pf-desc">Description courte (sous le nom du produit)</label><textarea class="input" id="pf-desc">${esc(p.description)}</textarea></div>
         <label class="row" style="align-items:center;gap:10px"><span class="switch" style="flex:0 0 42px"><input type="checkbox" id="pf-active" ${p.active!==false?'checked':''}><span></span></span><span>En vente sur la boutique</span></label>
       </div></div><div class="small" id="pf-err" style="color:var(--danger)"></div></div>
     <div class="m-f">${isNew0?'':`<button class="btn danger" id="pf-del" style="margin-right:auto">Supprimer</button>`}<button class="btn ghost" data-a="closeAll">Annuler</button><button class="btn primary" id="pf-save">${isNew0?'Ajouter le produit':'Enregistrer'}</button></div></div></div>`;
-  let image = p.image;
-  $('#pf-file').onchange = async e=>{ const f=e.target.files[0]; if(!f) return; image = await compress(f); $('#pf-prev').innerHTML = `<img src="${image}" alt="">`; };
-  if($('#pf-noimg')) $('#pf-noimg').onclick = e=>{ e.preventDefault(); image=''; $('#pf-prev').innerHTML = `<span>${esc($('#pf-emoji').value||'📦')}</span>`; };
+  const pid = p.id || newId('p');
+  let items = (p.image ? [{kind:'main', src:p.image, data:p.image}] : []).concat((p.gallery||[]).map(gid=>({kind:'old', id:gid, src:extraSrc(gid)}))), removed = [];
+  const drawGal = ()=>{ items.forEach(it=>{ if(it.kind==='old' && !it.src) it.src = extraSrc(it.id); });
+    $('#pf-gal').innerHTML = items.length ? items.map((it,i)=>`<div class="gi">${it.src?`<img src="${esc(it.src)}" alt="">`:'<div class="spinner" style="width:20px;height:20px;margin:30% auto"></div>'}${i===0?'<span class="pill info">Principale</span>':`<button type="button" class="gm" data-g="main" data-i="${i}" aria-label="Mettre en photo principale">★</button>`}<button type="button" class="gd" data-g="del" data-i="${i}" aria-label="Retirer la photo">✕</button></div>`).join('')
+      : `<div class="gi" style="display:grid;place-items:center;font-size:44px;background:var(--surface)">${esc($('#pf-emoji')?.value||p.emoji||'📦')}</div>`;
+    $('#pf-gal').querySelectorAll('[data-g]').forEach(b=>b.onclick = e=>{ e.preventDefault(); e.stopPropagation(); const k=Number(b.dataset.i);
+      if(b.dataset.g==='main'){ const [it] = items.splice(k,1); items.unshift(it); }
+      else { const [it] = items.splice(k,1); if(it.kind==='old') removed.push(it.id); }
+      drawGal(); }); };
+  drawGal(); loadExtras(p.gallery).then(drawGal);
+  $('#pf-file').onchange = async e=>{ const files=[...e.target.files]; e.target.value='';
+    for(const f of files){ if(items.length>=8){ toast('8 photos maximum par produit.'); break; } try{ const d = await compress(f); items.push({kind:'new', src:d, data:d}); drawGal(); }catch(err){} } };
+  const asData = src => /^data:/.test(src) ? Promise.resolve(src) : fetch(src).then(r=>r.blob()).then(b=>new Promise(ok=>{ const fr=new FileReader(); fr.onload=()=>ok(fr.result); fr.readAsDataURL(b); }));
   $('#pf-save').onclick = async ()=>{
     const v = id=>$(id).value.trim();
     const data = {name:v('#pf-name'), category:v('#pf-cat')||'Divers', sku:v('#pf-sku'), price:Number(v('#pf-price').replace(/\s/g,'')), comparePrice:Number(v('#pf-cmp').replace(/\s/g,''))||0,
-      stock:Math.max(0,parseInt(v('#pf-stock'))||0), lowStock:Math.max(0,parseInt(v('#pf-low'))||0), emoji:v('#pf-emoji')||'📦', image, description:v('#pf-desc'), active:$('#pf-active').checked,
+      stock:Math.max(0,parseInt(v('#pf-stock'))||0), lowStock:Math.max(0,parseInt(v('#pf-low'))||0), emoji:v('#pf-emoji')||'📦', description:v('#pf-desc'),
+      highlights:$('#pf-hl').value.trim(), details:$('#pf-details').value.trim(), specs:$('#pf-specs').value.trim(), warranty:v('#pf-war'), active:$('#pf-active').checked,
       bulkMin:Math.max(0,parseInt(v('#pf-bmin'))||0), bulkPrice:Number(v('#pf-bprice').replace(/\s/g,''))||0,
       newUntil:$('#pf-new').checked?(isNew(p)?p.newUntil:Date.now()+30*DAY):0,
       affPct:v('#pf-aff')===''?'':Math.min(100,Math.max(0,Number(v('#pf-aff').replace(',','.'))||0)),
@@ -1607,18 +1804,35 @@ function productForm(p){
     if(!data.name || !(data.price>0)){ $('#pf-err').textContent='Le nom et un prix supérieur à zéro sont obligatoires.'; return; }
     if(data.bulkMin>1 && !(data.bulkPrice>0 && data.bulkPrice<data.price)){ $('#pf-err').textContent='Le prix de gros doit être inférieur au prix de vente.'; return; }
     $('#pf-save').disabled=true;
-    try{ await put('products', p.id||newId('p'), data); closeAll(); toast(isNew0?'Produit ajouté':'Produit enregistré'); }
+    try{
+      data.image = items.length ? await asData(items[0].src) : '';
+      const gallery = [];
+      for(const it of items.slice(1)){ if(it.kind==='old'){ gallery.push(it.id); continue; } const gid = newId('i'); await put('product-images', gid, {productId:pid, data:await asData(it.src), createdAt:Date.now()}); gallery.push(gid); }
+      for(const gid of removed) await del('product-images', gid).catch(()=>{});
+      if(items[0] && items[0].kind==='old') await del('product-images', items[0].id).catch(()=>{});
+      data.gallery = gallery;
+      await put('products', pid, data); closeAll(); toast(isNew0?'Produit ajouté':'Produit enregistré'); }
     catch(e){ dbErr(e); $('#pf-err').textContent='Enregistrement impossible : seuls les gérants peuvent modifier le catalogue.'; $('#pf-save').disabled=false; }
   };
   if($('#pf-del')) $('#pf-del').onclick = async ()=>{ if(!confirmTwice($('#pf-del'))) return; try{ await del('products',p.id); closeAll(); toast('Produit supprimé'); }catch(e){ dbErr(e); } };
 }
 function confirmTwice(btn){ if(btn.dataset.armed){ return true; } btn.dataset.armed='1'; btn.textContent='Confirmer la suppression'; return false; }
 function compress(file){
-  return new Promise(res=>{
-    const r = new FileReader(); r.onload = ()=>{ const img = new Image(); img.onload = ()=>{
-      const s = 480, c = document.createElement('canvas'); const k = Math.min(1, s/Math.max(img.width,img.height));
-      c.width = Math.round(img.width*k); c.height = Math.round(img.height*k); c.getContext('2d').drawImage(img,0,0,c.width,c.height);
-      res(c.toDataURL('image/jpeg',.78)); }; img.src = r.result; }; r.readAsDataURL(file);
+  /* Photo produit : recadrage carré centré, 800 × 800 px maximum, JPEG ~80-150 Ko */
+  return new Promise((res, rej)=>{
+    const r = new FileReader(); r.onerror = rej;
+    r.onload = ()=>{ const img = new Image(); img.onerror = ()=>{ toast('Photo illisible : essayez une photo JPEG ou PNG.'); rej(new Error('image')); };
+      img.onload = ()=>{
+        const side = Math.min(img.width, img.height), out = Math.min(800, side), c = document.createElement('canvas');
+        c.width = c.height = out; const ctx = c.getContext('2d');
+        ctx.fillStyle = '#FFFFFF'; ctx.fillRect(0, 0, out, out);
+        ctx.imageSmoothingQuality = 'high';
+        ctx.drawImage(img, (img.width-side)/2, (img.height-side)/2, side, side, 0, 0, out, out);
+        let q = .82, data = c.toDataURL('image/jpeg', q);
+        while(data.length > 190000 && q > .5){ q -= .08; data = c.toDataURL('image/jpeg', q); }
+        res(data); };
+      img.src = r.result; };
+    r.readAsDataURL(file);
   });
 }
 function paneOrders(){
@@ -1833,7 +2047,7 @@ document.addEventListener('click', async e=>{
   const id = el.dataset.id;
   switch(a){
     case 'closeAll': closeAll(); break;
-    case 'go': S.view=el.dataset.v; S.aq=''; closeAll(); schedule(); window.scrollTo(0,0); break;
+    case 'go': if(S.view==='product'){ try{ history.pushState({},'',location.pathname); }catch(e){} } S.view=el.dataset.v; S.aq=''; closeAll(); schedule(); window.scrollTo(0,0); break;
     case 'cat': S.cat=el.dataset.v; schedule(); if(el.closest('.sale')) setTimeout(()=>$('#catalogue')?.scrollIntoView({behavior:'smooth'}),60); break;
     case 'clearSearch': S.q=''; S.cat='Tout'; schedule(); break;
     case 'scroll': $('#catalogue').scrollIntoView({behavior:matchMedia('(prefers-reduced-motion:reduce)').matches?'auto':'smooth'}); break;
@@ -1849,6 +2063,23 @@ document.addEventListener('click', async e=>{
     case 'newBundle': bundleForm(null); break;
     case 'newAff': affForm(null); break;
     case 'shareProduct': shareProduct(id); break;
+    case 'reviewOrder': e.stopPropagation(); reviewForm(id); break;
+    case 'rvZoom': { const src = reviewImgSrc(el.dataset.v); if(src) lightbox(src); break; }
+    case 'rvFilter': S.rvPhotos = el.dataset.v==='1'; schedule(); break;
+    case 'rvMore': S.rvMore = true; schedule(); break;
+    case 'rvGo': $('#avis')?.scrollIntoView({behavior:'smooth'}); break;
+    case 'rvToggle': { const r=S.reviews.find(x=>x.id===id); if(!r) break; try{ await patch('reviews', id, {status:r.status==='hidden'?'published':'hidden'}); toast(r.status==='hidden'?'Avis publié':'Avis masqué'); }catch(err){ dbErr(err); } break; }
+    case 'rvReply': { const r=S.reviews.find(x=>x.id===id); if(!r) break;
+      $('#overlay').innerHTML = `<div class="scrim" data-a="closeAll"><div class="modal" role="dialog" aria-modal="true" aria-label="Répondre"><div class="m-h"><h2>Répondre à ${esc(r.name||'ce client')}</h2><button class="x" data-a="closeAll" aria-label="Fermer">×</button></div><div class="m-b"><div class="field"><label for="rr-t">Votre réponse publique</label><textarea class="input" id="rr-t" maxlength="600">${esc(r.reply||'')}</textarea></div></div><div class="m-f"><button class="btn primary" id="rr-s">Publier la réponse</button></div></div></div>`;
+      $('#rr-s').onclick = async ()=>{ try{ await patch('reviews', id, {reply:$('#rr-t').value.trim()}); closeAll(); toast('Réponse publiée'); }catch(err){ dbErr(err); } }; break; }
+    case 'galGo': { const g=$('#gal'), n=Number(el.dataset.i); if(g) g.scrollTo({left:g.clientWidth*n, behavior:'smooth'}); document.querySelectorAll('.gal-th button').forEach((b,k)=>b.setAttribute('aria-current', k===n)); break; }
+    case 'pdpQty': { const p=S.products.find(x=>x.id===S.pid); S.pqty=Math.min(Math.max(1,(S.pqty||1)+Number(el.dataset.d)), Math.max(1,p?p.stock:1)); schedule(); break; }
+    case 'pdpAdd': case 'pdpBuy': { const p=S.products.find(x=>x.id===S.pid); if(!p) break; const n=S.pqty||1, before=S.cart.reduce((t,l)=>t+(l.id===p.id?l.qty:0),0);
+      for(let k=0;k<n;k++) addLine('cart', l=>!l.b&&l.id===p.id, ()=>({id:p.id, qty:1}), '');
+      const added=S.cart.reduce((t,l)=>t+(l.id===p.id?l.qty:0),0)-before; saveCart();
+      if(added>0) toast(`${added} × ${p.name} ajouté${added>1?'s':''} au panier`);
+      if(a==='pdpBuy' && added>0){ if(!enabledProcs().length){ openCart(); break; } openCheckout(); } break; }
+    case 'pdpCat': S.cat=el.dataset.v; S.view='shop'; try{ history.pushState({},'',location.pathname); }catch(e){} schedule(); setTimeout(()=>$('#catalogue')?.scrollIntoView({behavior:'smooth'}),80); break;
     case 'pushProduct': S.pushPre = id; S.view = 'admin'; S.tab = 'alerts'; closeAll(); schedule(); break;
     case 'visual': openVisual(id, false); break;
     case 'fbCatalog': fbCatalog(); break;

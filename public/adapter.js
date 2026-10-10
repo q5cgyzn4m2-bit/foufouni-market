@@ -18,13 +18,13 @@
     try {
       if (me) {
         const s = await api('GET', '/api/admin/state');
-        S.products = s.products; S.bundles = s.bundles || []; S.promos = s.promos; S.affiliates = s.affiliates || []; S.affPayouts = s.affPayouts || [];
+        S.products = s.products; S.bundles = s.bundles || []; S.promos = s.promos; S.affiliates = s.affiliates || []; S.affPayouts = s.affPayouts || []; S.reviews = s.reviews || [];
         S.clients = (s.clients||[]).sort((a,b)=>a.name.localeCompare(b.name)); S.suppliers = (s.suppliers||[]).sort((a,b)=>a.name.localeCompare(b.name));
         S.moves = s.moves || []; S.ledger = s.ledger || []; S.finConfig = s.finConfig || {}; S.orders = s.orders; S.users = s.users;
         S.settings = mergeSettings(s.settings); providers = s.providers; configured = s.configured || {}; notif = s.notifications || {};
       } else {
         const s = await api('GET', '/api/public/catalog');
-        S.products = s.products; S.bundles = s.bundles || []; S.settings = mergeSettings(s.settings); providers = s.providers;
+        S.products = s.products; S.bundles = s.bundles || []; S.reviews = s.reviews || []; S.settings = mergeSettings(s.settings); providers = s.providers;
         const got = await Promise.all(myOrders().slice(0, 20).map(m => api('GET', `/api/orders/${encodeURIComponent(m.id)}?t=${encodeURIComponent(m.t)}`).catch(() => null)));
         S.orders = got.filter(Boolean).sort((a, b) => b.createdAt - a.createdAt);
       }
@@ -157,6 +157,13 @@
   window.put = async (col, id, data) => { if (skip(col, id)) return; await api('PUT', `/api/admin/${col}/${encodeURIComponent(id)}`, data); reload(); };
   window.patch = async (col, id, data) => { if (skip(col, id)) return; await api('PATCH', `/api/admin/${col}/${encodeURIComponent(id)}`, data); reload(); };
   window.del = async (col, id) => { if (skip(col, id)) return; await api('DELETE', `/api/admin/${col}/${encodeURIComponent(id)}`); reload(); };
+  /* Avis : envoyés au serveur avec le jeton secret de la commande (achat vérifié) */
+  window.postReview = async (o, item, r) => {
+    const m = myOrders().find(x => x.id === o.id);
+    if (!m) throw new Error('Commande introuvable sur cet appareil.');
+    await api('POST', '/api/reviews', { orderId: o.id, token: m.t, productId: item.id, rating: r.rating, comment: r.comment, name: r.name, photos: r.photos });
+    reload();
+  };
   window.validatePromo = async (code, subtotal) => { try { return await api('POST', '/api/promo/check', { code, subtotal }); } catch (e) { return { err: e.message }; } };
   window.enabledProcs = () => Object.entries(S.settings.processors).filter(([k, v]) => v.enabled && PROCESSORS[k] && providers.includes(k));
 

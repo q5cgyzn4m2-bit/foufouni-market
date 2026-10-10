@@ -117,3 +117,18 @@ Gestion › **Ambassadeurs** : ajoutez une personne (nom et téléphone obligato
 - **Gestion › Alertes clients** : envoyez une promo ou une nouveauté à tous les abonnés (avec la photo du produit sur Android). Le bouton « 📣 Annoncer aux clients » d'une fiche produit la prépare automatiquement.
 - Aucune configuration : les clés de chiffrement (VAPID) sont créées et stockées automatiquement dans Supabase au premier usage.
 - iPhone : le client doit d'abord ajouter la boutique à l'écran d'accueil (iOS 16.4 ou plus récent). Le site l'explique.
+
+
+## Pages produit et galerie de photos
+
+- Chaque produit a sa **page dédiée** (`/?p=ID`) : galerie de photos (balayage sur téléphone, vignettes sur ordinateur), prix et économie réalisée, quantité, « Ajouter au panier » et « Acheter maintenant », livraison et paiement, garantie, **points forts**, **description détaillée**, **caractéristiques**, lots et produits de la même catégorie. Sur téléphone, une barre d'achat reste visible en bas de l'écran.
+- Fiche produit (Gestion) : jusqu'à **8 photos** (★ pour choisir la principale, ✕ pour retirer), points forts (un par ligne), description détaillée, caractéristiques (« Clé : valeur »), garantie / retour.
+- Les photos supplémentaires sont servies par `/img/pi/ID` et ajoutées au catalogue Facebook (`additional_image_link`).
+
+
+## Avis clients (achats vérifiés)
+
+- Quand une commande est **expédiée ou livrée**, le client voit « ★ Donner mon avis » dans **Mes commandes** : note de 1 à 5 sur la qualité, commentaire et jusqu'à 3 **photos réelles**.
+- Le serveur vérifie le jeton secret de la commande : seul un vrai acheteur peut noter, une seule fois par produit. L'avis porte la mention « Achat vérifié ».
+- Page produit : note moyenne, répartition des étoiles, « Photos des clients », filtre « Avec photos », réponse de la boutique. Les étoiles apparaissent aussi sur les vignettes.
+- **Gestion › Avis clients** : répondre publiquement, masquer ou republier un avis. Une notification ntfy signale chaque nouvel avis (prioritaire si 1 ou 2 étoiles).

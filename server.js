@@ -422,9 +422,12 @@ app.use('/api', (req, res, next) => {
 });
 
 /* --- Public --- */
-const publicProduct = p => ({ id: p.id, name: p.name, sku: p.sku, category: p.category, price: p.price, comparePrice: p.comparePrice, stock: p.stock, lowStock: p.lowStock, emoji: p.emoji, image: p.image, description: p.description, active: true, createdAt: p.createdAt, bulkMin: p.bulkMin || 0, bulkPrice: p.bulkPrice || 0, newUntil: p.newUntil || 0 });
+const publicProduct = p => ({ id: p.id, name: p.name, sku: p.sku, category: p.category, price: p.price, comparePrice: p.comparePrice, stock: p.stock, lowStock: p.lowStock, emoji: p.emoji, image: p.image, description: p.description, active: true, createdAt: p.createdAt, bulkMin: p.bulkMin || 0, bulkPrice: p.bulkPrice || 0, newUntil: p.newUntil || 0,
+  gallery: Array.isArray(p.gallery) ? p.gallery : [], highlights: p.highlights || '', details: p.details || '', specs: p.specs || '', warranty: p.warranty || '' });
 app.get('/api/public/catalog', (req, res) => {
-  res.json({ products: allDocs('products').filter(p => p.active !== false).map(publicProduct), bundles: allDocs('bundles').filter(b => b.active !== false), settings: publicSettings(), providers: providers() });
+  const reviews = allDocs('reviews').filter(r => r.status !== 'hidden').sort((a, b) => b.createdAt - a.createdAt).slice(0, 1500)
+    .map(r => ({ id: r.id, productId: r.productId, rating: r.rating, comment: r.comment, name: r.name, photos: r.photos || [], reply: r.reply || '', createdAt: r.createdAt, status: 'published' }));
+  res.json({ reviews, products: allDocs('products').filter(p => p.active !== false).map(publicProduct), bundles: allDocs('bundles').filter(b => b.active !== false), settings: publicSettings(), providers: providers() });
 });
 app.post('/api/promo/check', h((req, res) => {
   if (limited('promo:' + req.ip, 20, 60e3)) throw httpErr(429, 'Trop d’essais. Patientez une minute.');
@@ -433,6 +436,36 @@ app.post('/api/promo/check', h((req, res) => {
   const p = checkPromo(req.body?.code, Number(req.body?.subtotal) || 0);
   res.json({ promo: p });
 }));
+
+/* Avis clients : uniquement pour un produit réellement acheté et expédié ou livré */
+app.post('/api/reviews', h(async (req, res) => {
+  if (limited('review:' + req.ip, 20, 3600e3)) throw httpErr(429, 'Trop d’avis envoyés. Réessayez plus tard.');
+  const b = req.body || {}, oid = String(b.orderId || ''), pid = String(b.productId || '');
+  const o = validId(oid) && getDoc('orders', oid);
+  if (!o || !b.token || !safeEq(o.token, String(b.token))) throw httpErr(403, 'Commande introuvable.');
+  if (!['livree', 'expediee'].includes(o.status)) throw httpErr(400, 'Vous pourrez donner votre avis dès que la commande sera expédiée ou livrée.');
+  const inOrder = (o.items || []).some(i => i.id === pid || (i.bundle && (i.components || []).some(c => c.id === pid)));
+  if (!validId(pid) || !inOrder || !getDoc('products', pid)) throw httpErr(400, 'Ce produit ne fait pas partie de la commande.');
+  if (allDocs('reviews').some(r => r.orderId === oid && r.productId === pid)) throw httpErr(409, 'Vous avez déjà donné votre avis sur ce produit.');
+  const rating = Math.round(Number(b.rating));
+  if (!(rating >= 1 && rating <= 5)) throw httpErr(400, 'Choisissez une note de 1 à 5 étoiles.');
+  const id = 'r' + Date.now().toString(36) + rnd(5).toLowerCase(), photos = [];
+  for (const d of (Array.isArray(b.photos) ? b.photos : []).slice(0, 3)) {
+    if (typeof d !== 'string' || !/^data:image\/(jpeg|png|webp);base64,[A-Za-z0-9+/=]+$/.test(d) || d.length > 300000) throw httpErr(400, 'Photo invalide ou trop lourde.');
+    const iid = 'ri' + Date.now().toString(36) + rnd(5).toLowerCase(); putDoc('review-images', iid, { reviewId: id, data: d, createdAt: Date.now() }); photos.push(iid);
+  }
+  const doc = { productId: pid, orderId: oid, rating, comment: String(b.comment || '').trim().slice(0, 1000), name: String(b.name || 'Client').trim().slice(0, 40) || 'Client', photos, status: 'published', createdAt: Date.now() };
+  putDoc('reviews', id, doc);
+  res.json({ ok: true, id });
+  const prod = getDoc('products', pid) || {};
+  notify({ title: `Nouvel avis ${'★'.repeat(rating)}${'☆'.repeat(5 - rating)} : ${prod.name || ''}`, message: `${doc.name} : ${doc.comment || '(sans commentaire)'}${photos.length ? `\n${photos.length} photo(s) jointe(s)` : ''}`, tags: [rating >= 4 ? 'star' : 'warning'], priority: rating <= 2 ? 4 : 3, click: `${BASE_URL}/?p=${encodeURIComponent(pid)}` });
+}));
+app.get('/img/rv/:id', (req, res) => {
+  const d = validId(req.params.id) && getDoc('review-images', req.params.id);
+  const m = d && /^data:(image\/[a-z+.-]+);base64,(.+)$/i.exec(d.data || '');
+  if (!m) return res.status(404).end();
+  res.set({ 'Content-Type': m[1], 'Cache-Control': 'public, max-age=86400' }).send(Buffer.from(m[2], 'base64'));
+});
 
 /* Notifications push : abonnement des clients */
 app.get('/api/push/key', h(async (req, res) => res.json({ key: (await vapidKeys()).publicKey })));
@@ -600,6 +633,7 @@ app.get('/api/admin/state', requireStaff, (req, res) => {
   res.json({
     products: allDocs('products').sort((a, b) => (b.createdAt || 0) - (a.createdAt || 0)),
     affiliates: allDocs('affiliates').sort((a, b) => a.name.localeCompare(b.name)), affPayouts: allDocs('aff-payouts').sort((a, b) => b.createdAt - a.createdAt),
+    reviews: allDocs('reviews').sort((a, b) => b.createdAt - a.createdAt),
     bundles: allDocs('bundles').sort((a, b) => (b.createdAt || 0) - (a.createdAt || 0)),
     promos: allDocs('promos').sort((a, b) => (b.createdAt || 0) - (a.createdAt || 0)),
     orders: allDocs('orders').sort((a, b) => b.createdAt - a.createdAt).slice(0, 2000).map(o => publicOrder(o, o.id)),
@@ -610,7 +644,7 @@ app.get('/api/admin/state', requireStaff, (req, res) => {
     settings: s, users: store.users.list(), providers: providers(), configured: CONFIGURED, me: req.user
   });
 });
-const ADMIN_COLS = new Set(['products', 'bundles', 'promos', 'orders', 'settings', 'affiliates', 'aff-payouts', 'aff-lookup', 'clients', 'suppliers', 'fin-moves', 'fin-ledger', 'fin-config']);
+const ADMIN_COLS = new Set(['products', 'product-images', 'reviews', 'review-images', 'bundles', 'promos', 'orders', 'settings', 'affiliates', 'aff-payouts', 'aff-lookup', 'clients', 'suppliers', 'fin-moves', 'fin-ledger', 'fin-config']);
 function adminTarget(req) {
   const { col, id } = req.params;
   if (!ADMIN_COLS.has(col) || !validId(id)) throw httpErr(400, 'Requête invalide.');
@@ -722,16 +756,22 @@ app.get('/img/p/:id', (req, res) => {
   if (!m) return res.redirect(302, '/og-image.jpg');
   res.set({ 'Content-Type': m[1], 'Cache-Control': 'public, max-age=3600' }).send(Buffer.from(m[2], 'base64'));
 });
+app.get('/img/pi/:id', (req, res) => {
+  const d = validId(req.params.id) && getDoc('product-images', req.params.id);
+  const m = d && /^data:(image\/[a-z+.-]+);base64,(.+)$/i.exec(d.data || '');
+  if (!m) return res.status(404).end();
+  res.set({ 'Content-Type': m[1], 'Cache-Control': 'public, max-age=86400' }).send(Buffer.from(m[2], 'base64'));
+});
 /* Flux catalogue lu automatiquement par Facebook (Meta Commerce Manager) */
 app.get('/catalogue.csv', (req, res) => {
   const s = settings();
   const q = v => { const x = String(v ?? '').replace(/\s+/g, ' ').trim(); return /[",]/.test(x) ? '"' + x.replace(/"/g, '""') + '"' : x; };
-  const rows = [['id', 'title', 'description', 'availability', 'condition', 'price', 'sale_price', 'link', 'image_link', 'brand', 'product_type']];
+  const rows = [['id', 'title', 'description', 'availability', 'condition', 'price', 'sale_price', 'link', 'image_link', 'additional_image_link', 'brand', 'product_type']];
   for (const p of allDocs('products').filter(x => x.active !== false && x.name && x.price > 0)) {
     const promo = p.comparePrice > p.price;
     rows.push([p.id, p.name.slice(0, 150), (p.description || `${p.name}${p.category ? ' — ' + p.category : ''}, disponible chez ${s.shopName}.`).slice(0, 5000),
       p.stock > 0 ? 'in stock' : 'out of stock', 'new', `${Math.round(promo ? p.comparePrice : p.price)} XOF`, promo ? `${Math.round(p.price)} XOF` : '',
-      `${BASE_URL}/?p=${encodeURIComponent(p.id)}`, productImage(p.id, p), s.shopName, p.category || '']);
+      `${BASE_URL}/?p=${encodeURIComponent(p.id)}`, productImage(p.id, p), (Array.isArray(p.gallery) ? p.gallery : []).slice(0, 10).map(g => `${BASE_URL}/img/pi/${encodeURIComponent(g)}`).join(','), s.shopName, p.category || '']);
   }
   res.set({ 'Content-Type': 'text/csv; charset=utf-8', 'Cache-Control': 'no-cache' }).send(rows.map(r => r.map(q).join(',')).join('\n'));
 });
