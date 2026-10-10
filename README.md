@@ -132,3 +132,10 @@ Gestion › **Ambassadeurs** : ajoutez une personne (nom et téléphone obligato
 - Le serveur vérifie le jeton secret de la commande : seul un vrai acheteur peut noter, une seule fois par produit. L'avis porte la mention « Achat vérifié ».
 - Page produit : note moyenne, répartition des étoiles, « Photos des clients », filtre « Avec photos », réponse de la boutique. Les étoiles apparaissent aussi sur les vignettes.
 - **Gestion › Avis clients** : répondre publiquement, masquer ou republier un avis. Une notification ntfy signale chaque nouvel avis (prioritaire si 1 ou 2 étoiles).
+
+
+## Prix d'achat, produits phares et inventaire
+
+- **Prix d'achat** dans la fiche produit (visible uniquement par l'équipe), avec la marge par unité. Colonnes « Achat » et « Marge » dans la liste des produits.
+- **Tableau de bord › Produits phares** : quantités vendues, chiffre d'affaires, coût, marge, taux de marge, stock et jours de stock restants, sur 7, 30 ou 90 jours ou depuis le début. Tri par CA, quantité ou marge, export CSV.
+- **Gestion › Stock & inventaire** : valeur du stock, inventaire (saisie du stock compté, écarts, validation groupée), ajustements (réception avec nouveau prix d'achat et fournisseur, perte ou casse, correction) et historique des mouvements.

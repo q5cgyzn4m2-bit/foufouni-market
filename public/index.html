@@ -431,7 +431,7 @@ const ROLES = ['Gérant','Vendeur','Caissier','Livreur','Gestionnaire de stock']
 /* ============ état ============ */
 const S = {
   ready:false, live:false, isAdmin:false, uid:null, myName:'',
-  products:[], bundles:[], clients:[], suppliers:[], reviews:[], affiliates:[], affPayouts:[], moves:[], ledger:[], finConfig:{}, posTab:'vente', trAcc:'all', trType:'all', pq:'', promos:[], orders:[], settings:structuredClone(DEFAULT_SETTINGS), team:{members:[]},
+  products:[], bundles:[], clients:[], suppliers:[], reviews:[], costs:{}, stockMoves:[], inv:{}, topDays:30, topSort:'revenue', stFilter:'all', stCat:'', affiliates:[], affPayouts:[], moves:[], ledger:[], finConfig:{}, posTab:'vente', trAcc:'all', trType:'all', pq:'', promos:[], orders:[], settings:structuredClone(DEFAULT_SETTINGS), team:{members:[]},
   cart:[], pos:[], posPromo:null, appliedPromo:null,
   view:'shop', tab:'dash', cat:'Tout', q:'', aq:'', orderFilter:'all', selPromos:new Set(), names:{}
 };
@@ -479,6 +479,8 @@ function syncLocal(){
   const arr = c => Object.entries(local[c]||{}).map(([id,d])=>({id,...d}));
   S.products = arr('products').sort((a,b)=>(b.createdAt||0)-(a.createdAt||0));
   S.bundles = arr('bundles').sort((a,b)=>(b.createdAt||0)-(a.createdAt||0));
+  S.costs = Object.fromEntries(arr('costs').map(c=>[c.id, Number(c.cost)||0]));
+  S.stockMoves = arr('stock-moves').sort((a,b)=>b.createdAt-a.createdAt);
   S.reviews = arr('reviews').sort((a,b)=>b.createdAt-a.createdAt);
   S.affiliates = arr('affiliates').sort((a,b)=>a.name.localeCompare(b.name));
   S.affPayouts = arr('aff-payouts').sort((a,b)=>b.createdAt-a.createdAt);
@@ -555,6 +557,8 @@ async function boot(){
       db.collection('orders').orderBy('createdAt','desc').limit(1000).onSnapshot(s=>{ S.orders = s.docs.map(d=>({id:d.id,...d.data()})); schedule(); }, dbErr);
       const sub = (col, key, sort) => db.collection(col).onSnapshot(s=>{ S[key] = s.docs.map(d=>({id:d.id,...d.data()})).sort(sort); schedule(); }, dbErr);
       sub('clients','clients',(a,b)=>a.name.localeCompare(b.name));
+      db.collection('costs').onSnapshot(s=>{ S.costs = Object.fromEntries(s.docs.map(d=>[d.id, Number(d.data().cost)||0])); schedule(); }, dbErr);
+      sub('stock-moves','stockMoves',(a,b)=>b.createdAt-a.createdAt);
       sub('affiliates','affiliates',(a,b)=>a.name.localeCompare(b.name));
       sub('aff-payouts','affPayouts',(a,b)=>b.createdAt-a.createdAt);
       sub('suppliers','suppliers',(a,b)=>a.name.localeCompare(b.name));
@@ -1303,6 +1307,115 @@ function posPay(){
   draw();
 }
 
+/* --- Prix d'achat, produits phares, inventaire --- */
+const costOf = pid => Number(S.costs[pid])||0;
+const pct = (a,b) => (b ? Math.round(a/b*1000)/10 : 0).toLocaleString('fr-FR');
+function salesStats(days){
+  const since = days ? Date.now()-days*864e5 : 0, m = {};
+  const row = pid => m[pid] || (m[pid] = {qty:0, revenue:0, cost:0, orders:0, noCost:false});
+  for(const o of S.orders){
+    if(o.status==='annulee' || o.status==='en_attente' || (o.createdAt||0) < since) continue;
+    const sub = Number(o.subtotal)||0, k = sub>0 ? Math.max(0, sub-(Number(o.discount)||0))/sub : 1, seen = new Set();
+    for(const it of o.items||[]){
+      if(it.bundle){ const comps = it.components||[], reg = comps.reduce((t,c)=>{ const p=S.products.find(x=>x.id===c.id); return t+(p?p.price*c.qty:0); },0)||1;
+        for(const c of comps){ const p = S.products.find(x=>x.id===c.id); if(!p) continue; const r = row(c.id), q = c.qty*it.qty;
+          r.qty += q; r.revenue += it.price*it.qty*(p.price*c.qty/reg)*k; r.cost += costOf(c.id)*q; if(!costOf(c.id)) r.noCost = true; if(!seen.has(c.id)){ r.orders++; seen.add(c.id); } } }
+      else { const r = row(it.id); r.qty += it.qty; r.revenue += it.price*it.qty*k; r.cost += costOf(it.id)*it.qty; if(!costOf(it.id)) r.noCost = true; if(!seen.has(it.id)){ r.orders++; seen.add(it.id); } }
+    }
+  }
+  return Object.entries(m).map(([pid,r])=>({pid, p:S.products.find(x=>x.id===pid), ...r, margin:r.noCost?null:r.revenue-r.cost})).filter(x=>x.p);
+}
+function topTable(){
+  const d = S.topDays, rows = salesStats(d), key = S.topSort;
+  rows.sort((a,b)=> key==='qty' ? b.qty-a.qty : key==='margin' ? (b.margin??-1e15)-(a.margin??-1e15) : b.revenue-a.revenue);
+  const T = rows.reduce((t,r)=>({rev:t.rev+r.revenue, cost:t.cost+(r.noCost?0:r.cost), mrg:t.mrg+(r.margin||0), rc:t.rc+(r.noCost?0:r.revenue)}),{rev:0,cost:0,mrg:0,rc:0});
+  const per = d||Math.max(1, Math.round((Date.now()-Math.min(...S.orders.map(o=>o.createdAt||Date.now())))/864e5));
+  const shown = S.topAll ? rows : rows.slice(0,15), missing = rows.filter(r=>r.noCost).length;
+  return `<div class="panel"><div class="toolbar"><h3 style="flex:1;margin:0">Produits phares</h3>
+    <div class="cats" style="margin:0">${[[7,'7 j'],[30,'30 j'],[90,'90 j'],[0,'Tout']].map(([v,l])=>`<button aria-pressed="${d===v}" data-a="topDays" data-v="${v}">${l}</button>`).join('')}</div>
+    <select class="input" data-top="sort" aria-label="Trier par" style="max-width:190px"><option value="revenue" ${key==='revenue'?'selected':''}>Trier par chiffre d’affaires</option><option value="qty" ${key==='qty'?'selected':''}>Trier par quantité</option><option value="margin" ${key==='margin'?'selected':''}>Trier par marge</option></select>
+    ${dl&&rows.length?'<button class="btn ghost sm" data-a="exportTop">Exporter</button>':''}</div>
+  <div class="kpis" style="grid-template-columns:repeat(4,1fr)"><div class="kpi"><span>Chiffre d’affaires</span><b>${fmt(T.rev)}</b></div><div class="kpi"><span>Coût d’achat</span><b>${fmt(T.cost)}</b></div><div class="kpi"><span>Marge brute</span><b style="color:var(--kola)">${fmt(T.mrg)}</b></div><div class="kpi"><span>Taux de marge</span><b>${T.rc?pct(T.mrg,T.rc)+' %':'—'}</b></div></div>
+  ${missing?`<p class="small" style="color:var(--danger);margin:0 0 10px">${missing} produit${missing>1?'s':''} sans prix d’achat : leur marge n’est pas calculée. Renseignez-le dans la fiche produit.</p>`:''}
+  <div class="tbl-wrap">${rows.length?`<table><thead><tr><th>#</th><th>Produit</th><th style="text-align:right">Qté vendue</th><th style="text-align:right">CA</th><th style="text-align:right">Coût</th><th style="text-align:right">Marge</th><th style="text-align:right">Marge %</th><th style="text-align:right">Stock</th><th style="text-align:right">Jours de stock</th></tr></thead><tbody>
+  ${shown.map((r,i)=>{ const cover = r.qty ? Math.round(r.p.stock/(r.qty/per)) : null; return `<tr class="click" data-a="editProduct" data-id="${r.pid}"><td class="muted">${i+1}</td><td><b>${esc(r.p.name)}</b><div class="muted small">${esc(r.p.category)} · ${r.orders} commande${r.orders>1?'s':''}</div></td>
+    <td style="text-align:right"><b>${r.qty}</b></td><td style="text-align:right">${fmt(r.revenue)}</td><td style="text-align:right">${r.noCost?'<span class="muted">—</span>':fmt(r.cost)}</td>
+    <td style="text-align:right">${r.margin===null?'<span class="muted">—</span>':`<span class="${r.margin>=0?'amt-in':'amt-out'}">${fmt(r.margin)}</span>`}</td><td style="text-align:right">${r.margin===null?'—':pct(r.margin,r.revenue)+' %'}</td>
+    <td style="text-align:right"><span class="pill ${r.p.stock<=0?'bad':r.p.stock<=(r.p.lowStock||5)?'warn':'ok'}">${r.p.stock}</span></td><td style="text-align:right">${cover===null?'—':cover>365?'> 1 an':cover+' j'}</td></tr>`; }).join('')}</tbody></table>
+  ${rows.length>15&&!S.topAll?`<button class="btn ghost sm" data-a="topAll" style="margin-top:10px">Voir les ${rows.length} produits</button>`:''}`:'<p class="muted">Aucune vente sur cette période.</p>'}</div>
+  <p class="muted small" style="margin:10px 0 0">Ventes payées, en préparation, expédiées ou livrées (en ligne et en caisse). Remises réparties sur les articles ; un lot est réparti entre ses produits. Marge calculée avec le prix d’achat actuel. « Jours de stock » : nombre de jours avant rupture au rythme de vente de la période.</p></div>`;
+}
+function paneStock(){
+  const q = S.aq.trim().toLowerCase(), cats = [...new Set(S.products.map(p=>p.category).filter(Boolean))].sort();
+  const hasInv = pid => S.inv[pid]!==undefined && S.inv[pid]!=='';
+  const list = S.products.filter(p=>(!q || (p.name+' '+(p.sku||'')).toLowerCase().includes(q)) && (!S.stCat || p.category===S.stCat)
+    && (S.stFilter==='all' || (S.stFilter==='low' && p.stock>0 && p.stock<=(p.lowStock||5)) || (S.stFilter==='out' && p.stock<=0) || (S.stFilter==='diff' && hasInv(p.id) && Number(S.inv[p.id])!==p.stock)));
+  const valCost = S.products.reduce((t,p)=>t+costOf(p.id)*Math.max(0,p.stock),0), valSale = S.products.reduce((t,p)=>t+p.price*Math.max(0,p.stock),0);
+  const diffs = S.products.filter(p=>hasInv(p.id) && Number(S.inv[p.id])!==p.stock), diffVal = diffs.reduce((t,p)=>t+(Number(S.inv[p.id])-p.stock)*costOf(p.id),0);
+  return `<div class="toolbar"><h2 style="font-size:24px;flex:1">Stock et inventaire</h2>${dl?'<button class="btn ghost" data-a="exportStock">Exporter</button>':''}<button class="btn primary" data-a="invValidate" ${diffs.length?'':'disabled'}>Valider l’inventaire${diffs.length?` (${diffs.length})`:''}</button></div>
+  <div class="kpis"><div class="kpi"><span>Valeur du stock (prix d’achat)</span><b>${fmt(valCost)}</b></div><div class="kpi"><span>Valeur au prix de vente</span><b>${fmt(valSale)}</b></div>
+    <div class="kpi"><span>Ruptures</span><b style="color:${S.products.some(p=>p.stock<=0)?'var(--danger)':'inherit'}">${S.products.filter(p=>p.stock<=0).length}</b></div><div class="kpi"><span>Écarts saisis</span><b style="color:${diffVal<0?'var(--danger)':'inherit'}">${diffs.length}${diffs.length?` · ${diffVal<0?'−':'+'}${fmt(Math.abs(diffVal))}`:''}</b></div></div>
+  <div class="toolbar"><label class="sr" for="aq">Rechercher</label><input class="input" id="aq" data-in="aq" value="${esc(S.aq)}" placeholder="Nom ou SKU…">
+    <label class="sr" for="st-cat">Catégorie</label><select class="input" id="st-cat" data-stk="cat" style="max-width:190px"><option value="">Toutes les catégories</option>${cats.map(c=>`<option ${c===S.stCat?'selected':''}>${esc(c)}</option>`).join('')}</select>
+    <div class="cats" style="margin:0">${[['all','Tous'],['low','Stock bas'],['out','Ruptures'],['diff','Écarts']].map(([k,l])=>`<button aria-pressed="${S.stFilter===k}" data-a="stFilter" data-v="${k}">${l}</button>`).join('')}</div></div>
+  <p class="muted small" style="margin:0 0 10px">Inventaire : saisissez le stock réellement compté dans la colonne « Compté », vérifiez les écarts, puis touchez « Valider l’inventaire ». Pour une réception, une perte ou une casse, utilisez « Ajuster ».</p>
+  <div class="panel tbl-wrap">${list.length?`<table><thead><tr><th>Produit</th><th style="text-align:right">Prix d’achat</th><th style="text-align:right">Stock</th><th style="width:110px">Compté</th><th style="text-align:right">Écart</th><th style="text-align:right">Valeur</th><th></th></tr></thead><tbody>
+  ${list.map(p=>{ const c=hasInv(p.id)?Number(S.inv[p.id]):null, d = c===null?null:c-p.stock; return `<tr><td><b>${esc(p.name)}</b><div class="muted small">${esc(p.sku||'')} · ${esc(p.category||'')}</div></td>
+    <td style="text-align:right">${costOf(p.id)?fmt(costOf(p.id)):'<span class="muted">—</span>'}</td><td style="text-align:right"><span class="pill ${p.stock<=0?'bad':p.stock<=(p.lowStock||5)?'warn':'ok'}">${p.stock}</span></td>
+    <td><input class="input" id="inv-${p.id}" data-inv="${p.id}" inputmode="numeric" value="${c===null?'':c}" placeholder="${p.stock}" style="padding:6px 8px" aria-label="Stock compté pour ${esc(p.name)}"></td>
+    <td style="text-align:right">${d===null?'':d===0?'<span class="pill ok">OK</span>':`<b class="${d>0?'amt-in':'amt-out'}">${d>0?'+':''}${d}</b>`}</td>
+    <td style="text-align:right">${costOf(p.id)?fmt(costOf(p.id)*Math.max(0,p.stock)):'—'}</td><td><button class="btn ghost sm" data-a="stockAdj" data-id="${p.id}">Ajuster</button></td></tr>`; }).join('')}</tbody></table>`:'<p class="muted">Aucun produit ne correspond.</p>'}</div>
+  <div class="panel tbl-wrap"><h3>Historique des mouvements</h3>${S.stockMoves.length?`<table><thead><tr><th>Date</th><th>Produit</th><th>Mouvement</th><th style="text-align:right">Quantité</th><th style="text-align:right">Stock</th><th>Note</th></tr></thead><tbody>
+  ${S.stockMoves.slice(0, S.movesAll?500:30).map(m=>{ const p=S.products.find(x=>x.id===m.productId); return `<tr><td class="small" style="white-space:nowrap">${dateFr(m.createdAt)}</td><td>${esc(p?p.name:m.productName||'')}</td><td class="small">${esc(MOVE_LABEL[m.type]||m.type)}</td>
+    <td style="text-align:right"><b class="${m.delta>=0?'amt-in':'amt-out'}">${m.delta>0?'+':''}${m.delta}</b></td><td style="text-align:right" class="small">${m.before} → ${m.after}</td><td class="small muted">${esc(m.note||'')}${m.by?` · ${esc(m.by)}`:''}</td></tr>`; }).join('')}</tbody></table>
+  ${S.stockMoves.length>30&&!S.movesAll?'<button class="btn ghost sm" data-a="movesAll" style="margin-top:10px">Tout afficher</button>':''}`:'<p class="muted">Les inventaires et ajustements apparaîtront ici. Les ventes déduisent le stock automatiquement.</p>'}</div>`;
+}
+const MOVE_LABEL = {inventaire:'Inventaire', entree:'Réception / entrée', sortie:'Perte / casse / sortie', correction:'Correction'};
+async function recordMove(p, after, type, note, extra){
+  const before = p.stock;
+  await patch('products', p.id, {stock:Math.max(0, after)});
+  await put('stock-moves', newId('s'), {productId:p.id, productName:p.name, type, before, after:Math.max(0,after), delta:Math.max(0,after)-before, note:note||'', by:S.myName||'', createdAt:Date.now(), ...(extra||{})});
+}
+function stockAdjust(id){
+  const p = S.products.find(x=>x.id===id); if(!p) return;
+  $('#overlay').innerHTML = `<div class="scrim" data-a="closeAll"><div class="modal" role="dialog" aria-modal="true" aria-label="Ajuster le stock"><div class="m-h"><h2>Ajuster le stock</h2><button class="x" data-a="closeAll" aria-label="Fermer">×</button></div>
+    <div class="m-b"><p style="margin-top:0"><b>${esc(p.name)}</b> · stock actuel : <b>${p.stock}</b></p>
+    <div class="cats" role="group" aria-label="Type">${[['entree','+ Réception / entrée'],['sortie','− Perte / casse'],['correction','= Corriger à']].map(([k,l],i)=>`<button aria-pressed="${i===0}" data-adj="${k}">${l}</button>`).join('')}</div>
+    <div class="row"><div class="field"><label for="ad-q" id="ad-ql">Quantité reçue</label><input class="input" id="ad-q" inputmode="numeric"></div>
+    <div class="field" id="ad-cw"><label for="ad-c">Nouveau prix d’achat unitaire (facultatif)</label><input class="input" id="ad-c" inputmode="numeric" placeholder="${costOf(p.id)||''}"></div></div>
+    <div class="field" id="ad-sw"><label for="ad-s">Fournisseur (facultatif)</label><select class="input" id="ad-s"><option value="">—</option>${S.suppliers.map(f=>`<option value="${f.id}">${esc(f.name)}</option>`).join('')}</select></div>
+    <div class="field"><label for="ad-n">Note</label><input class="input" id="ad-n" placeholder="ex. Bon de livraison n° 125, carton abîmé…"></div>
+    <p class="muted" id="ad-res" style="margin:0"></p><div class="small" id="ad-err" style="color:var(--danger)"></div></div>
+    <div class="m-f"><button class="btn primary" id="ad-ok">Enregistrer</button></div></div></div>`;
+  let type = 'entree';
+  const upd = ()=>{ const q = Math.max(0, parseInt($('#ad-q').value)||0), after = type==='entree' ? p.stock+q : type==='sortie' ? p.stock-q : q;
+    $('#ad-ql').textContent = type==='entree'?'Quantité reçue':type==='sortie'?'Quantité retirée':'Nouveau stock';
+    $('#ad-cw').style.display = $('#ad-sw').style.display = type==='entree'?'':'none';
+    $('#ad-res').textContent = $('#ad-q').value==='' ? '' : `Stock après l’opération : ${Math.max(0,after)}`; return after; };
+  $('#overlay').querySelectorAll('[data-adj]').forEach(b=>b.onclick=e=>{ e.stopPropagation(); type=b.dataset.adj; $('#overlay').querySelectorAll('[data-adj]').forEach(x=>x.setAttribute('aria-pressed', x===b)); upd(); });
+  $('#ad-q').oninput = upd; $('#ad-q').focus();
+  $('#ad-ok').onclick = async ()=>{ if($('#ad-q').value===''){ $('#ad-err').textContent='Indiquez une quantité.'; return; }
+    const after = upd(); if(type==='sortie' && after<0){ $('#ad-err').textContent=`Le stock ne peut pas descendre sous 0 (stock actuel ${p.stock}).`; return; }
+    const cost = Number(($('#ad-c').value||'').replace(/\s/g,''))||0, sup = S.suppliers.find(f=>f.id===$('#ad-s').value);
+    $('#ad-ok').disabled = true;
+    try{ await recordMove(p, after, type, [$('#ad-n').value.trim(), sup?'Fournisseur : '+sup.name:''].filter(Boolean).join(' · '), sup?{supplierId:sup.id}:null);
+      if(type==='entree' && cost>0) await put('costs', p.id, {cost, updatedAt:Date.now()});
+      closeAll(); toast('Stock mis à jour'); }
+    catch(e){ dbErr(e); $('#ad-err').textContent='Enregistrement impossible.'; $('#ad-ok').disabled=false; } };
+}
+async function invValidate(){
+  const diffs = S.products.filter(p=>S.inv[p.id]!==undefined && S.inv[p.id]!=='' && Number(S.inv[p.id])!==p.stock);
+  if(!diffs.length) return;
+  const val = diffs.reduce((t,p)=>t+(Number(S.inv[p.id])-p.stock)*costOf(p.id),0);
+  $('#overlay').innerHTML = `<div class="scrim" data-a="closeAll"><div class="modal" role="dialog" aria-modal="true" aria-label="Valider l’inventaire"><div class="m-h"><h2>Valider l’inventaire</h2><button class="x" data-a="closeAll" aria-label="Fermer">×</button></div>
+    <div class="m-b"><p style="margin-top:0">${diffs.length} produit${diffs.length>1?'s':''} vont être mis au stock compté :</p><div class="tbl-wrap"><table><tbody>${diffs.map(p=>{ const d=Number(S.inv[p.id])-p.stock; return `<tr><td>${esc(p.name)}</td><td style="text-align:right">${p.stock} → <b>${Number(S.inv[p.id])}</b></td><td style="text-align:right"><b class="${d>0?'amt-in':'amt-out'}">${d>0?'+':''}${d}</b></td></tr>`; }).join('')}</tbody></table></div>
+    <p>Valeur des écarts au prix d’achat : <b class="${val<0?'amt-out':'amt-in'}">${val<0?'−':'+'}${fmt(Math.abs(val))}</b></p><div class="field"><label for="iv-n">Note (facultatif)</label><input class="input" id="iv-n" value="Inventaire du ${new Date().toLocaleDateString('fr-FR')}"></div></div>
+    <div class="m-f"><button class="btn ghost" data-a="closeAll">Annuler</button><button class="btn primary" id="iv-ok">Valider ${diffs.length} ajustement${diffs.length>1?'s':''}</button></div></div></div>`;
+  $('#iv-ok').onclick = async ()=>{ $('#iv-ok').disabled = true; const note = $('#iv-n').value.trim();
+    try{ for(const p of diffs){ await recordMove(p, Math.max(0, parseInt(S.inv[p.id])||0), 'inventaire', note); delete S.inv[p.id]; } closeAll(); toast('Inventaire validé'); schedule(); }
+    catch(e){ dbErr(e); toast('Une partie de l’inventaire n’a pas pu être enregistrée.'); $('#iv-ok').disabled=false; } };
+}
+
 /* --- Ambassadeurs : gestion --- */
 function paneAffiliates(){
   const st = S.settings, rows = S.affiliates.map(a=>({a, x:affStats(a)}));
@@ -1650,10 +1763,10 @@ function billForm(type, x){
 }
 
 /* --- Gestion --- */
-const TABS = [['dash','Tableau de bord'],['products','Produits'],['bundles','Lots'],['orders','Commandes'],['promos','Codes promo'],['affiliates','Ambassadeurs'],['reviews','Avis clients'],['alerts','Alertes clients'],['payments','Paiements'],['team','Équipe']];
+const TABS = [['dash','Tableau de bord'],['products','Produits'],['stock','Stock & inventaire'],['bundles','Lots'],['orders','Commandes'],['promos','Codes promo'],['affiliates','Ambassadeurs'],['reviews','Avis clients'],['alerts','Alertes clients'],['payments','Paiements'],['team','Équipe']];
 function viewAdmin(){
   const pending = S.orders.filter(o=>o.status==='en_attente'||(o.status==='payee'&&!o.stockApplied)).length;
-  const panes = {dash:paneDash, products:paneProducts, bundles:paneBundles, orders:paneOrders, promos:panePromos, affiliates:paneAffiliates, reviews:paneReviews, alerts:()=>window.paneAlerts?window.paneAlerts():'', payments:panePayments, team:paneTeam};
+  const panes = {dash:paneDash, products:paneProducts, stock:paneStock, bundles:paneBundles, orders:paneOrders, promos:panePromos, affiliates:paneAffiliates, reviews:paneReviews, alerts:()=>window.paneAlerts?window.paneAlerts():'', payments:panePayments, team:paneTeam};
   return `<div class="admin"><nav class="side" aria-label="Gestion">${TABS.filter(([k])=>k!=='alerts'||isServer()).map(([k,l])=>`<button data-a="tab" data-v="${k}" ${S.tab===k?'aria-current="page"':''}>${l}${k==='orders'&&pending?`<span class="pill warn">${pending}</span>`:''}</button>`).join('')}</nav>
     <section>${panes[S.tab]()}</section></div>`;
 }
@@ -1676,6 +1789,7 @@ function paneDash(){
     <div class="kpi"><span>Panier moyen</span><b>${fmt(avg)}</b></div><div class="kpi"><span>Stock bas</span><b style="color:${low.length?'var(--danger)':'inherit'}">${low.length}</b></div></div>
     <div class="two"><div class="panel"><h3>Ventes des 14 derniers jours</h3>${bars}</div>
     <div class="panel"><h3>Meilleures ventes</h3>${top.length?top.map(([n,q])=>`<div class="row" style="justify-content:space-between;padding:6px 0;border-bottom:1px solid var(--line)"><span style="flex:1">${esc(n)}</span><b style="flex:0">${q}</b></div>`).join(''):'<p class="muted">Les ventes apparaîtront ici.</p>'}</div></div>
+    ${topTable()}
     <div class="panel"><h3>Stock à réapprovisionner</h3>${low.length?`<div class="tbl-wrap"><table><thead><tr><th>Produit</th><th>SKU</th><th>Stock</th></tr></thead><tbody>${low.map(p=>`<tr class="click" data-a="editProduct" data-id="${p.id}"><td>${esc(p.name)}</td><td class="muted">${esc(p.sku)}</td><td><span class="pill ${p.stock<=0?'bad':'warn'}">${p.stock}</span></td></tr>`).join('')}</tbody></table></div>`:'<p class="muted">Tout le stock est au-dessus du seuil d’alerte.</p>'}</div>`;
 }
 function fbCatalog(){
@@ -1692,8 +1806,8 @@ function paneProducts(){
   return `<div class="toolbar"><h2 style="font-size:24px;flex:1">Produits <span class="muted small">(${S.products.length})</span></h2>
     <label class="sr" for="aq">Rechercher</label><input class="input" id="aq" data-in="aq" value="${esc(S.aq)}" placeholder="Rechercher…">
     ${isServer()?'<button class="btn ghost" data-a="fbCatalog">Catalogue Facebook</button>':''}${dl?'<button class="btn ghost" data-a="exportProducts">Exporter CSV</button>':''}<button class="btn primary" data-a="newProduct">Ajouter un produit</button></div>
-    <div class="panel tbl-wrap">${list.length?`<table><thead><tr><th></th><th>Produit</th><th>Catégorie</th><th>Prix</th><th>Stock</th><th>En vente</th></tr></thead><tbody>
-    ${list.map(p=>`<tr class="click" data-a="editProduct" data-id="${p.id}"><td><div class="li-img" style="width:40px;height:40px;font-size:20px">${pImg(p)}</div></td><td><b>${esc(p.name)}</b><div class="muted small">${esc(p.sku)}</div></td><td>${esc(p.category)}</td><td>${fmt(p.price)}</td>
+    <div class="panel tbl-wrap">${list.length?`<table><thead><tr><th></th><th>Produit</th><th>Catégorie</th><th>Prix</th><th>Achat</th><th>Marge</th><th>Stock</th><th>En vente</th></tr></thead><tbody>
+    ${list.map(p=>`<tr class="click" data-a="editProduct" data-id="${p.id}"><td><div class="li-img" style="width:40px;height:40px;font-size:20px">${pImg(p)}</div></td><td><b>${esc(p.name)}</b><div class="muted small">${esc(p.sku)}</div></td><td>${esc(p.category)}</td><td>${fmt(p.price)}</td><td class="small">${costOf(p.id)?fmt(costOf(p.id)):'<span class="muted">—</span>'}</td><td class="small">${costOf(p.id)?`<span class="${p.price-costOf(p.id)>=0?'amt-in':'amt-out'}">${pct(p.price-costOf(p.id),p.price)} %</span>`:'—'}</td>
     <td><span class="pill ${p.stock<=0?'bad':p.stock<=(p.lowStock||5)?'warn':'ok'}">${p.stock}</span></td><td><span class="pill ${p.active!==false?'ok':''}">${p.active!==false?'Oui':'Masqué'}</span></td></tr>`).join('')}</tbody></table>`
     :`<div class="empty"><h3>${S.products.length?'Aucun résultat':'Aucun produit'}</h3><p>${S.products.length?'Modifiez votre recherche.':'Créez votre premier article pour ouvrir la boutique.'}</p></div>`}</div>`;
 }
@@ -1763,6 +1877,7 @@ function productForm(p){
         <div class="field"><label for="pf-name">Nom du produit</label><input class="input" id="pf-name" value="${esc(p.name)}"></div>
         <div class="row"><div class="field"><label for="pf-cat">Catégorie</label><input class="input" id="pf-cat" list="pf-cats" value="${esc(p.category)}"><datalist id="pf-cats">${cats.map(c=>`<option value="${esc(c)}">`).join('')}</datalist></div>
         <div class="field"><label for="pf-sku">SKU / code-barres</label><input class="input" id="pf-sku" value="${esc(p.sku)}"></div></div>
+        <div class="row"><div class="field"><label for="pf-cost">Prix d’achat unitaire (${esc(S.settings.currency)})</label><input class="input" id="pf-cost" inputmode="numeric" value="${esc(p.id&&costOf(p.id)?costOf(p.id):'')}" placeholder="Visible uniquement par l’équipe"></div><div class="field"><label>Marge par unité</label><div id="pf-mg" class="price" style="font-size:20px;padding:8px 0">—</div></div></div>
         <div class="row"><div class="field"><label for="pf-price">Prix de vente (${esc(S.settings.currency)})</label><input class="input" id="pf-price" inputmode="numeric" value="${esc(p.price)}"></div>
         <div class="field"><label for="pf-cmp">Prix barré (facultatif)</label><input class="input" id="pf-cmp" inputmode="numeric" value="${esc(p.comparePrice||'')}"></div></div>
         <div class="row"><div class="field"><label for="pf-stock">Stock</label><input class="input" id="pf-stock" inputmode="numeric" value="${esc(p.stock)}"></div>
@@ -1789,6 +1904,9 @@ function productForm(p){
       else { const [it] = items.splice(k,1); if(it.kind==='old') removed.push(it.id); }
       drawGal(); }); };
   drawGal(); loadExtras(p.gallery).then(drawGal);
+  const mg = ()=>{ const c = Number($('#pf-cost').value.replace(/\s/g,''))||0, pr = Number($('#pf-price').value.replace(/\s/g,''))||0, el = $('#pf-mg');
+    if(!c || !pr){ el.textContent='—'; el.style.color=''; return; } const m = pr-c; el.textContent = `${fmt(m)} · ${pct(m,pr)} %`; el.style.color = m<0?'var(--danger)':'var(--kola)'; };
+  $('#pf-cost').oninput = $('#pf-price').oninput = mg; mg();
   $('#pf-file').onchange = async e=>{ const files=[...e.target.files]; e.target.value='';
     for(const f of files){ if(items.length>=8){ toast('8 photos maximum par produit.'); break; } try{ const d = await compress(f); items.push({kind:'new', src:d, data:d}); drawGal(); }catch(err){} } };
   const asData = src => /^data:/.test(src) ? Promise.resolve(src) : fetch(src).then(r=>r.blob()).then(b=>new Promise(ok=>{ const fr=new FileReader(); fr.onload=()=>ok(fr.result); fr.readAsDataURL(b); }));
@@ -1811,7 +1929,10 @@ function productForm(p){
       for(const gid of removed) await del('product-images', gid).catch(()=>{});
       if(items[0] && items[0].kind==='old') await del('product-images', items[0].id).catch(()=>{});
       data.gallery = gallery;
-      await put('products', pid, data); closeAll(); toast(isNew0?'Produit ajouté':'Produit enregistré'); }
+      await put('products', pid, data);
+      { const c = Number(v('#pf-cost').replace(/\s/g,''))||0; if(c !== costOf(pid)){ if(c>0) await put('costs', pid, {cost:c, updatedAt:Date.now()}); else if(costOf(pid)) await del('costs', pid).catch(()=>{}); } }
+      if(isNew0 && data.stock>0) await put('stock-moves', newId('s'), {productId:pid, productName:data.name, type:'entree', before:0, after:data.stock, delta:data.stock, note:'Stock initial', by:S.myName||'', createdAt:Date.now()});
+      closeAll(); toast(isNew0?'Produit ajouté':'Produit enregistré'); }
     catch(e){ dbErr(e); $('#pf-err').textContent='Enregistrement impossible : seuls les gérants peuvent modifier le catalogue.'; $('#pf-save').disabled=false; }
   };
   if($('#pf-del')) $('#pf-del').onclick = async ()=>{ if(!confirmTwice($('#pf-del'))) return; try{ await del('products',p.id); closeAll(); toast('Produit supprimé'); }catch(e){ dbErr(e); } };
@@ -2019,6 +2140,7 @@ document.addEventListener('input', e=>{
   if(k==='q'){ S.q = e.target.value; if(S.view!=='shop'){ S.view='shop'; } schedule(); }
   if(k==='aq'){ S.aq = e.target.value; schedule(); }
   if(k==='pq'){ S.pq = e.target.value; schedule(); }
+  if(e.target.dataset.inv){ S.inv[e.target.dataset.inv] = e.target.value.replace(/[^0-9]/g,''); schedule(); }
   if(e.target.id==='tm-q'){ clearTimeout(tmTimer); const v=e.target.value; tmTimer=setTimeout(()=>teamSearch(v),250); }
 });
 document.addEventListener('focusin', e=>{ if(e.target.id==='tm-q' && !e.target.value) teamSearch(''); });
@@ -2035,6 +2157,8 @@ document.addEventListener('change', async e=>{
   if(a==='togglePromo'){ const p=S.promos.find(x=>x.code===t.dataset.id); try{ await patch('promos',p.code,{active:t.checked}); await patch('promo-lookup',await hashCode(p.code),{active:t.checked}); }catch(err){ dbErr(err); } }
   if(a==='selPromo'){ t.checked?S.selPromos.add(t.dataset.id):S.selPromos.delete(t.dataset.id); schedule(); }
   if(a==='selAll'){ S.selPromos = t.checked ? new Set(S.promos.map(p=>p.code)) : new Set(); schedule(); }
+  if(t.dataset.top==='sort'){ S.topSort=t.value; schedule(); }
+  if(t.dataset.stk==='cat'){ S.stCat=t.value; schedule(); }
   if(t.dataset.fin==='acc'){ S.trAcc=t.value; schedule(); }
   if(t.dataset.fin==='type'){ S.trType=t.value; schedule(); }
   if(a==='role'){ const m=structuredClone(S.team.members); m[+t.dataset.i].role=t.value; saveTeam(m); }
@@ -2063,6 +2187,14 @@ document.addEventListener('click', async e=>{
     case 'newBundle': bundleForm(null); break;
     case 'newAff': affForm(null); break;
     case 'shareProduct': shareProduct(id); break;
+    case 'topDays': S.topDays=Number(el.dataset.v); S.topAll=false; schedule(); break;
+    case 'topAll': S.topAll=true; schedule(); break;
+    case 'stFilter': S.stFilter=el.dataset.v; schedule(); break;
+    case 'stockAdj': stockAdjust(id); break;
+    case 'invValidate': invValidate(); break;
+    case 'movesAll': S.movesAll=true; schedule(); break;
+    case 'exportTop': { const rows=salesStats(S.topDays).sort((a,b)=>b.revenue-a.revenue); save('produits-phares.csv', csv([['Produit','Catégorie','Quantité vendue','Chiffre d’affaires','Coût d’achat','Marge brute','Marge %','Stock'], ...rows.map(r=>[r.p.name,r.p.category,r.qty,Math.round(r.revenue),r.noCost?'':Math.round(r.cost),r.margin===null?'':Math.round(r.margin),r.margin===null?'':pct(r.margin,r.revenue),r.p.stock])])); break; }
+    case 'exportStock': save('inventaire-stock.csv', csv([['Produit','SKU','Catégorie','Prix d’achat','Prix de vente','Stock','Compté','Écart','Valeur au prix d’achat'], ...S.products.map(p=>{ const c=S.inv[p.id]; return [p.name,p.sku,p.category,costOf(p.id)||'',p.price,p.stock,c??'',c!==undefined&&c!==''?Number(c)-p.stock:'',costOf(p.id)*Math.max(0,p.stock)]; })])); break;
     case 'reviewOrder': e.stopPropagation(); reviewForm(id); break;
     case 'rvZoom': { const src = reviewImgSrc(el.dataset.v); if(src) lightbox(src); break; }
     case 'rvFilter': S.rvPhotos = el.dataset.v==='1'; schedule(); break;
