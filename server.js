@@ -5,6 +5,7 @@ const express = require('express');
 const crypto = require('crypto');
 const path = require('path');
 const { createStore } = require('./store');
+const WP = require('./webpush');
 
 const env = process.env;
 const PORT = Number(env.PORT || 3000);
@@ -153,6 +154,39 @@ async function notify({ title, message, tags = [], priority = 3, click }) {
   } catch (e) { console.warn('Notification ntfy non envoyée :', e.message); }
 }
 
+/* ================= Notifications push aux clients ================= */
+let VAPID = null;
+async function vapidKeys() {
+  if (VAPID) return VAPID;
+  let k = getDoc('push-config', 'vapid');
+  if (!k) { k = await WP.generateVapidKeys(); putDoc('push-config', 'vapid', k); await store.flush(); }
+  return (VAPID = k);
+}
+const PUSH_SUBJECT = 'mailto:' + (env.ADMIN_EMAIL || 'contact@foufouni.ml');
+async function pushTo(subs, msg) {
+  const v = await vapidKeys(); let sent = 0, failed = 0;
+  for (let i = 0; i < subs.length; i += 20) {
+    await Promise.all(subs.slice(i, i + 20).map(async x => {
+      const r = await WP.sendPush(x.sub, msg, v, PUSH_SUBJECT);
+      if (r.ok) sent++; else { failed++; if (r.gone) store.del('push-subs', x.id); }
+    }));
+  }
+  return { sent, failed };
+}
+const ORDER_PUSH = {
+  payee: ['Paiement reçu ✅', 'Merci ! Le paiement de votre commande {n} est confirmé.'],
+  preparation: ['Commande en préparation 📦', 'Nous préparons votre commande {n}.'],
+  expediee: ['Commande expédiée 🚚', 'Votre commande {n} est en route.'],
+  livree: ['Commande livrée 🎉', 'Votre commande {n} a été livrée. Merci pour votre confiance !'],
+  annulee: ['Commande annulée', 'Votre commande {n} a été annulée. Contactez-nous pour toute question.']
+};
+function pushOrder(id, o) {
+  const m = ORDER_PUSH[o.status]; if (!m) return;
+  const subs = allDocs('push-subs').filter(x => (x.orders || []).includes(id)); if (!subs.length) return;
+  pushTo(subs, { title: m[0], body: m[1].replace('{n}', o.number), url: BASE_URL + '/?vue=commandes', tag: 'commande-' + id, icon: '/icon-192.png', badge: '/badge-96.png' })
+    .catch(e => console.warn('Notification client :', e.message));
+}
+
 /* ================= Codes promo et calcul des totaux (toujours côté serveur) ================= */
 function checkPromo(code, subtotal) {
   const c = String(code || '').trim().toUpperCase();
@@ -240,6 +274,7 @@ const markPaid = (orderId, info) => {
   putDoc('orders', orderId, { ...o, status: 'payee', stockApplied: true, updatedAt: Date.now(),
     payment: { ...o.payment, status: 'réussi', ref: info.ref || o.payment.ref, paidAt: Date.now() } });
   console.log(`Paiement confirmé ${o.number} (${o.payment.method}) ${o.total}`);
+  pushOrder(orderId, { ...o, status: 'payee' });
   notify({ title: `Paiement reçu : ${money(o.total)}`, tags: ['moneybag'], priority: 4, click: BASE_URL,
     message: `Commande ${o.number} payée par ${METHOD_NAMES[o.payment.method] || o.payment.method}\n${o.customer?.name || ''} ${o.customer?.phone || ''}\n${o.items.map(i => `${i.qty} × ${i.name}`).join(', ')}${o.affiliate ? `\nVia l’ambassadeur ${o.affiliate.code} (commission ${money(o.affiliate.commission)})` : ''}` });
   return true;
@@ -399,6 +434,40 @@ app.post('/api/promo/check', h((req, res) => {
   res.json({ promo: p });
 }));
 
+/* Notifications push : abonnement des clients */
+app.get('/api/push/key', h(async (req, res) => res.json({ key: (await vapidKeys()).publicKey })));
+app.post('/api/push/subscribe', h(async (req, res) => {
+  if (limited('push:' + req.ip, 30, 600e3)) throw httpErr(429, 'Trop de requêtes.');
+  const sub = req.body?.subscription || {}, k = sub.keys || {};
+  if (!/^https:\/\//.test(String(sub.endpoint || '')) || String(sub.endpoint).length > 1000 || !k.p256dh || !k.auth) throw httpErr(400, 'Abonnement invalide.');
+  const id = await WP.subId(sub.endpoint), prev = getDoc('push-subs', id), orders = new Set(prev?.orders || []);
+  for (const x of (Array.isArray(req.body.orders) ? req.body.orders : []).slice(0, 50)) {
+    const oid = String(x?.id || ''), o = validId(oid) && getDoc('orders', oid);
+    if (o && x.t && safeEq(o.token, String(x.t))) orders.add(oid);
+  }
+  putDoc('push-subs', id, { sub: { endpoint: sub.endpoint, keys: { p256dh: String(k.p256dh), auth: String(k.auth) } }, orders: [...orders].slice(-50),
+    promo: req.body.promo !== undefined ? req.body.promo !== false : (prev ? prev.promo !== false : true), createdAt: prev?.createdAt || Date.now(), updatedAt: Date.now() });
+  res.json({ ok: true, orders: orders.size });
+}));
+app.post('/api/push/unsubscribe', h(async (req, res) => { const e = String(req.body?.endpoint || ''); if (e) store.del('push-subs', await WP.subId(e)); res.json({ ok: true }); }));
+app.get('/api/admin/push/stats', requireStaff, (req, res) => {
+  const subs = allDocs('push-subs');
+  res.json({ total: subs.length, promo: subs.filter(x => x.promo !== false).length, withOrders: subs.filter(x => (x.orders || []).length).length,
+    log: allDocs('push-log').sort((a, b) => b.at - a.at).slice(0, 10) });
+});
+app.post('/api/admin/push/broadcast', requireStaff, h(async (req, res) => {
+  const b = req.body || {}, title = String(b.title || '').trim().slice(0, 70), body = String(b.body || '').trim().slice(0, 200);
+  if (!title || !body) throw httpErr(400, 'Titre et message obligatoires.');
+  if (limited('broadcast', 6, 3600e3)) throw httpErr(429, 'Trop d’envois en une heure : gardez vos clients, espacez les alertes.');
+  const pid = String(b.productId || ''), p = validId(pid) ? getDoc('products', pid) : null;
+  const url = p ? `${BASE_URL}/?p=${encodeURIComponent(pid)}` : BASE_URL + '/';
+  const image = p ? productImage(pid, p) : (b.image ? `${BASE_URL}/og-image.jpg` : undefined);
+  const subs = allDocs('push-subs').filter(x => x.promo !== false);
+  const r = await pushTo(subs, { title, body, url, image, icon: '/icon-192.png', badge: '/badge-96.png', tag: 'promo-' + Date.now() });
+  putDoc('push-log', 'l' + Date.now().toString(36), { at: Date.now(), title, body, product: p ? p.name : '', by: req.user.name, ...r });
+  res.json({ ...r, total: subs.length });
+}));
+
 /* Ambassadeurs : comptage des clics et espace personnel (accès par lien secret) */
 app.post('/api/aff/click', h((req, res) => {
   const a = findAffiliate(req.body?.code);
@@ -554,8 +623,9 @@ app.put('/api/admin/:col/:id', requireStaff, h((req, res) => {
   if (col === 'orders') { const prev = getDoc('orders', id); body.token = prev ? prev.token : randomToken(); body.createdBy = prev ? prev.createdBy : req.user.id; if (prev?.payment) body.payment = { ...prev.payment, ...body.payment }; }
   if (col === 'promos') body.code = id;
   if (col === 'affiliates') { const prev = getDoc('affiliates', id); body.token = (prev && prev.token) || body.token || randomToken(); body.code = String(body.code || '').toUpperCase(); }
-  const isNew = !getDoc(col, id);
+  const prevDoc = getDoc(col, id), isNew = !prevDoc;
   putDoc(col, id, body); res.json({ ok: true });
+  if (col === 'orders' && prevDoc && body.status && prevDoc.status !== body.status) pushOrder(id, body);
   if (isNew && col === 'orders' && body.channel === 'caisse') {
     const pay = body.payment || {};
     const paid = pay.rest > 0 ? (pay.paid || 0) : body.total;
@@ -570,8 +640,10 @@ app.put('/api/admin/:col/:id', requireStaff, h((req, res) => {
 app.patch('/api/admin/:col/:id', requireStaff, h((req, res) => {
   const { col, id } = adminTarget(req); const body = { ...req.body }; delete body.token; delete body.createdBy;
   if (col === 'orders' && body.payment) body.payment = { ...(getDoc('orders', id)?.payment || {}), ...body.payment };
-  if (!patchDoc(col, id, body)) throw httpErr(404, 'Introuvable.');
+  const before = getDoc(col, id);
+  const after = patchDoc(col, id, body); if (!after) throw httpErr(404, 'Introuvable.');
   res.json({ ok: true });
+  if (col === 'orders' && body.status && before && before.status !== body.status) pushOrder(id, after);
 }));
 app.delete('/api/admin/:col/:id', requireStaff, h((req, res) => {
   const { col, id } = req.params;

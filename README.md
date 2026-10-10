@@ -109,3 +109,11 @@ Gestion › **Ambassadeurs** : ajoutez une personne (nom et téléphone obligato
 - **Aperçu des liens** : le serveur ajoute automatiquement le titre, le prix, la description et la photo du produit (ou l'image `og-image.jpg` de la boutique). Pour rafraîchir un aperçu déjà partagé, utilisez l'outil de débogage de partage de Facebook.
 - **Visuel à publier** (équipe) : bouton **🖼 Visuel à publier**, au format carré pour Facebook ou au format vertical pour les statuts WhatsApp, avec le texte de publication prêt à copier.
 - **Catalogue Facebook** : `https://votre-boutique/catalogue.csv`, à déclarer dans Meta Commerce Manager (Sources de données › Flux de données › URL, mise à jour quotidienne). Gestion › Produits › **Catalogue Facebook** affiche l'adresse.
+
+
+## Alertes clients (notifications push)
+
+- Le client touche **« Activer les alertes »** (boutique, Mes commandes ou reçu de commande). Il est ensuite prévenu, avec le logo foûfoûni, quand sa commande passe en Payée, En préparation, Expédiée, Livrée ou Annulée.
+- **Gestion › Alertes clients** : envoyez une promo ou une nouveauté à tous les abonnés (avec la photo du produit sur Android). Le bouton « 📣 Annoncer aux clients » d'une fiche produit la prépare automatiquement.
+- Aucune configuration : les clés de chiffrement (VAPID) sont créées et stockées automatiquement dans Supabase au premier usage.
+- iPhone : le client doit d'abord ajouter la boutique à l'écran d'accueil (iOS 16.4 ou plus récent). Le site l'explique.

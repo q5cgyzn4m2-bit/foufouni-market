@@ -637,7 +637,7 @@ function shareProduct(id){
       <a class="pay-opt" href="https://wa.me/?text=${encodeURIComponent(txt)}" target="_blank" rel="noopener" style="text-decoration:none;color:inherit"><span class="pay-logo" style="background:#25D366">W</span><b>WhatsApp</b></a>
       <a class="pay-opt" href="https://www.facebook.com/sharer/sharer.php?u=${encodeURIComponent(link)}" target="_blank" rel="noopener" style="text-decoration:none;color:inherit"><span class="pay-logo" style="background:#1877F2">f</span><b>Facebook</b></a>
       <button class="pay-opt" data-sh="copy"><span class="pay-logo" style="background:#5D6070">🔗</span><span><b>Copier le lien</b><br><span class="muted small" style="word-break:break-all">${esc(link)}</span></span></button></div>
-    ${S.isAdmin?`<button class="btn ghost block" data-a="visual" data-id="${p.id}" style="margin-top:14px">🖼 Créer un visuel à publier</button>`:''}</div></div></div>`;
+    ${S.isAdmin?`<button class="btn ghost block" data-a="visual" data-id="${p.id}" style="margin-top:14px">🖼 Créer un visuel à publier</button>`:''}${S.isAdmin&&isServer()?`<button class="btn ghost block" data-a="pushProduct" data-id="${p.id}" style="margin-top:8px">📣 Annoncer aux clients (notification)</button>`:''}</div></div></div>`;
   $('#overlay').querySelectorAll('[data-sh]').forEach(b=>b.onclick = async e=>{ e.stopPropagation();
     if(b.dataset.sh==='copy'){ try{ await navigator.clipboard.writeText(link); toast('Lien copié'); }catch(err){ toast(link); } }
     if(b.dataset.sh==='native'){ try{ await navigator.share({title:p.name, text:txt.split('\n')[0], url:link}); }catch(err){} } });
@@ -1468,11 +1468,11 @@ function billForm(type, x){
 }
 
 /* --- Gestion --- */
-const TABS = [['dash','Tableau de bord'],['products','Produits'],['bundles','Lots'],['orders','Commandes'],['promos','Codes promo'],['affiliates','Ambassadeurs'],['payments','Paiements'],['team','Équipe']];
+const TABS = [['dash','Tableau de bord'],['products','Produits'],['bundles','Lots'],['orders','Commandes'],['promos','Codes promo'],['affiliates','Ambassadeurs'],['alerts','Alertes clients'],['payments','Paiements'],['team','Équipe']];
 function viewAdmin(){
   const pending = S.orders.filter(o=>o.status==='en_attente'||(o.status==='payee'&&!o.stockApplied)).length;
-  const panes = {dash:paneDash, products:paneProducts, bundles:paneBundles, orders:paneOrders, promos:panePromos, affiliates:paneAffiliates, payments:panePayments, team:paneTeam};
-  return `<div class="admin"><nav class="side" aria-label="Gestion">${TABS.map(([k,l])=>`<button data-a="tab" data-v="${k}" ${S.tab===k?'aria-current="page"':''}>${l}${k==='orders'&&pending?`<span class="pill warn">${pending}</span>`:''}</button>`).join('')}</nav>
+  const panes = {dash:paneDash, products:paneProducts, bundles:paneBundles, orders:paneOrders, promos:panePromos, affiliates:paneAffiliates, alerts:()=>window.paneAlerts?window.paneAlerts():'', payments:panePayments, team:paneTeam};
+  return `<div class="admin"><nav class="side" aria-label="Gestion">${TABS.filter(([k])=>k!=='alerts'||isServer()).map(([k,l])=>`<button data-a="tab" data-v="${k}" ${S.tab===k?'aria-current="page"':''}>${l}${k==='orders'&&pending?`<span class="pill warn">${pending}</span>`:''}</button>`).join('')}</nav>
     <section>${panes[S.tab]()}</section></div>`;
 }
 function paneDash(){
@@ -1849,6 +1849,7 @@ document.addEventListener('click', async e=>{
     case 'newBundle': bundleForm(null); break;
     case 'newAff': affForm(null); break;
     case 'shareProduct': shareProduct(id); break;
+    case 'pushProduct': S.pushPre = id; S.view = 'admin'; S.tab = 'alerts'; closeAll(); schedule(); break;
     case 'visual': openVisual(id, false); break;
     case 'fbCatalog': fbCatalog(); break;
     case 'affDetail': affDetail(id); break;

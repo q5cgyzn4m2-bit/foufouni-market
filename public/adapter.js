@@ -37,6 +37,73 @@
   }
   const reload = () => { clearTimeout(loadT); loadT = setTimeout(load, 250); };
 
+  /* ---------- notifications push pour les clients ---------- */
+  const PUSH_OK = 'serviceWorker' in navigator && 'PushManager' in window && 'Notification' in window;
+  const IS_IOS = /iPad|iPhone|iPod/.test(navigator.userAgent) || (navigator.platform === 'MacIntel' && navigator.maxTouchPoints > 1);
+  const STANDALONE = (window.matchMedia && matchMedia('(display-mode: standalone)').matches) || navigator.standalone === true;
+  S._push = 'off';
+  if ('serviceWorker' in navigator) navigator.serviceWorker.register('/sw.js').catch(() => {});
+  const u8 = b64 => { const s2 = atob(b64.replace(/-/g, '+').replace(/_/g, '/') + '==='.slice((b64.length + 3) % 4)); return Uint8Array.from(s2, c => c.charCodeAt(0)); };
+  async function pushState() {
+    try {
+      if (!PUSH_OK) { S._push = IS_IOS && !STANDALONE ? 'ios' : 'no'; return; }
+      if (Notification.permission === 'denied') { S._push = 'denied'; return; }
+      const reg = await navigator.serviceWorker.ready, sub = await reg.pushManager.getSubscription();
+      S._push = sub && Notification.permission === 'granted' ? 'on' : 'off';
+    } catch (e) { S._push = 'no'; }
+  }
+  function iosHelp() {
+    $('#overlay').innerHTML = `<div class="scrim" data-a="closeAll"><div class="modal" role="dialog" aria-modal="true" aria-label="Alertes sur iPhone"><div class="m-h"><h2>Alertes sur iPhone</h2><button class="x" data-a="closeAll" aria-label="Fermer">×</button></div>
+      <div class="m-b"><p style="margin-top:0">Sur iPhone, les alertes fonctionnent une fois la boutique installée :</p><ol style="padding-left:20px;line-height:1.7"><li>Touchez le bouton <b>Partager</b> de Safari (carré avec une flèche).</li><li>Choisissez <b>« Sur l’écran d’accueil »</b>, puis <b>Ajouter</b>.</li><li>Ouvrez <b>foûfoûni</b> depuis la nouvelle icône et touchez <b>« Activer les alertes »</b>.</li></ol><p class="muted small" style="margin-bottom:0">iOS 16.4 ou plus récent est nécessaire.</p></div></div></div>`;
+  }
+  async function enableAlerts() {
+    if (IS_IOS && !STANDALONE) return iosHelp();
+    if (!PUSH_OK) return toast('Ce navigateur ne permet pas les alertes. Essayez Chrome.');
+    try {
+      const perm = await Notification.requestPermission();
+      if (perm !== 'granted') { await pushState(); schedule(); return toast('Alertes refusées. Vous pourrez les autoriser dans les réglages du navigateur.'); }
+      const { key } = await api('GET', '/api/push/key'), reg = await navigator.serviceWorker.ready;
+      let sub = await reg.pushManager.getSubscription();
+      if (!sub) sub = await reg.pushManager.subscribe({ userVisibleOnly: true, applicationServerKey: u8(key) });
+      await api('POST', '/api/push/subscribe', { subscription: sub.toJSON(), orders: myOrders(), promo: true });
+      S._push = 'on'; schedule(); toast('🔔 Alertes activées : vous serez prévenu de chaque étape et de nos promos');
+    } catch (e) { toast('Activation impossible : ' + (e.message || 'réessayez plus tard')); }
+  }
+  async function syncAlerts() {
+    try { if (!PUSH_OK || Notification.permission !== 'granted') return; const reg = await navigator.serviceWorker.ready, sub = await reg.pushManager.getSubscription();
+      if (sub) await api('POST', '/api/push/subscribe', { subscription: sub.toJSON(), orders: myOrders() }); } catch (e) {}
+  }
+  const alertBox = ctx => (me || S._push === 'on' || S._push === 'no') ? '' : `<div class="panel" style="display:flex;gap:14px;align-items:center;flex-wrap:wrap;margin:${ctx === 'shop' ? '40px 0 0' : '0 0 18px'}"><span style="font-size:30px">🔔</span><div style="flex:1 1 220px"><b>${ctx === 'orders' ? 'Suivez vos commandes en direct' : 'Ne manquez aucune promo'}</b><div class="muted small">${ctx === 'orders' ? 'Recevez une alerte à chaque étape : paiement, préparation, expédition, livraison.' : 'Soldes, nouveautés et offres réservées : recevez une alerte avec notre logo.'}${S._push === 'denied' ? ' Les alertes sont bloquées : autorisez-les dans les réglages du navigateur.' : ''}</div></div><button class="btn primary" style="border-radius:999px" data-srv="alerts" ${S._push === 'denied' ? 'disabled' : ''}>Activer les alertes</button></div>`;
+  const baseShop = window.viewShop;
+  window.viewShop = function () { const h = baseShop(); const box = alertBox('shop'); return box ? h.replace('<footer class="shop-foot">', box + '<footer class="shop-foot">') : h; };
+  const baseOrders = window.viewMyOrders;
+  window.viewMyOrders = function () { const h = baseOrders(); return h.replace('<div class="sec-h"><h2>Mes commandes</h2></div>', '<div class="sec-h"><h2>Mes commandes</h2></div>' + alertBox('orders')); };
+  const baseReceipt = window.showReceipt;
+  window.showReceipt = function (o, fresh) {
+    baseReceipt(o, fresh);
+    if (fresh && !me && S._push !== 'on' && S._push !== 'no') { const f = document.querySelector('#overlay .m-f'); if (f) { const b = document.createElement('button'); b.className = 'btn ghost'; b.dataset.srv = 'alerts'; b.textContent = '🔔 Me prévenir de chaque étape'; b.style.marginRight = 'auto'; f.prepend(b); } }
+  };
+
+  /* ---------- Gestion : alertes clients (promos et nouveautés) ---------- */
+  let pushStats = null;
+  async function loadPushStats() { try { pushStats = await api('GET', '/api/admin/push/stats'); } catch (e) { pushStats = { error: e.message }; } schedule(); }
+  window.paneAlerts = function () {
+    if (!pushStats) { loadPushStats(); return '<div class="empty"><div class="spinner"></div>Chargement…</div>'; }
+    if (pushStats.error) return `<div class="empty"><h3>Indisponible</h3><p>${esc(pushStats.error)}</p></div>`;
+    const pre = S.products.find(p => p.id === S.pushPre);
+    const tpl = pre ? { t: pre.comparePrice > pre.price ? `Promo : ${pre.name}` : `Nouveau : ${pre.name}`, b: `${fmt(pre.price)}${pre.comparePrice > pre.price ? ' au lieu de ' + fmt(pre.comparePrice) : ''} chez ${S.settings.shopName}. Touchez pour voir le produit.` } : { t: '', b: '' };
+    return `<div class="toolbar"><h2 style="font-size:24px;flex:1">Alertes clients</h2></div>
+    <div class="kpis" style="grid-template-columns:repeat(3,1fr)"><div class="kpi"><span>Appareils abonnés</span><b>${pushStats.total}</b></div><div class="kpi"><span>Acceptent les promos</span><b>${pushStats.promo}</b></div><div class="kpi"><span>Suivent une commande</span><b>${pushStats.withOrders}</b></div></div>
+    <div class="panel"><h3>Envoyer une alerte promo ou nouveauté</h3>
+      <div class="field"><label for="pu-prod">Produit à mettre en avant (facultatif)</label><select class="input" id="pu-prod" data-srv-prod="1"><option value="">— Toute la boutique —</option>${S.products.filter(p => p.active !== false).map(p => `<option value="${p.id}" ${pre && pre.id === p.id ? 'selected' : ''}>${esc(p.name)} · ${fmt(p.price)}</option>`).join('')}</select></div>
+      <div class="field"><label for="pu-title">Titre (70 caractères max.)</label><input class="input" id="pu-title" maxlength="70" value="${esc(tpl.t)}" placeholder="ex. Soldes du week-end : −20 % sur l’épicerie"></div>
+      <div class="field"><label for="pu-body">Message (200 caractères max.)</label><textarea class="input" id="pu-body" maxlength="200" placeholder="ex. Profitez-en jusqu’à dimanche, livraison offerte dès 50 000 FCFA.">${esc(tpl.b)}</textarea></div>
+      <p class="muted small">L’alerte s’affiche avec le logo foûfoûni, et la photo du produit sur Android. Un toucher ouvre ${pre ? 'la fiche du produit' : 'la boutique'}. Conseil : 1 à 2 alertes par semaine au maximum, sinon les clients les désactivent.</p>
+      <button class="btn primary" data-srv="pushSend" ${pushStats.promo ? '' : 'disabled'}>📣 Envoyer à ${pushStats.promo} appareil${pushStats.promo > 1 ? 's' : ''}</button></div>
+    <div class="panel"><h3>Alertes automatiques</h3><p class="muted" style="margin:0">Chaque client abonné est prévenu automatiquement quand sa commande passe en <b>Payée</b>, <b>En préparation</b>, <b>Expédiée</b>, <b>Livrée</b> ou <b>Annulée</b>.</p></div>
+    ${pushStats.log.length ? `<div class="panel tbl-wrap"><h3>Derniers envois</h3><table><tbody>${pushStats.log.map(l => `<tr><td class="small">${dateFr(l.at)}</td><td><b>${esc(l.title)}</b><div class="muted small">${esc(l.body)}</div></td><td class="small">${l.sent} reçus${l.failed ? ' · ' + l.failed + ' échecs' : ''}</td></tr>`).join('')}</tbody></table></div>` : ''}`;
+  };
+
   /* ---------- suivi du panier (paniers abandonnés) ---------- */
   const newCartId = () => Array.from(crypto.getRandomValues(new Uint8Array(12)), b => (b % 36).toString(36)).join('');
   let cartId = (() => { try { return localStorage.getItem('ffm-cart-id') || ''; } catch (e) { return ''; } })();
@@ -56,6 +123,8 @@
   /* ---------- démarrage ---------- */
   window.boot = async function () {
     try { me = (await api('GET', '/api/me')).user; } catch (e) { me = null; }
+    await pushState();
+    try { if (new URLSearchParams(location.search).get('vue') === 'commandes') S.view = 'orders'; } catch (e) {}
     S.isAdmin = !!me; S.myName = me ? me.name : ''; S.uid = me ? me.id : null; S.live = false;
     try { S.cart = JSON.parse(localStorage.getItem('ffm-cart') || '[]'); } catch (e) {}
     await load(); S.ready = true; schedule();
@@ -106,7 +175,7 @@
         customer: { name: CO.name, phone: CO.phone, address: CO.address, city: CO.city, note: CO.note },
         delivery: CO.delivery, method: CO.method, cartId, ref: refCode()
       });
-      addMine(r.id, r.token);
+      addMine(r.id, r.token); syncAlerts();
       clearTimeout(syncT); cartId = newCartId(); contact = null; try { localStorage.setItem('ffm-cart-id', cartId); } catch (e) {}
       S.cart = []; S.appliedPromo = null; saveCart(); schedule();
       if (r.redirect) {
@@ -121,7 +190,7 @@
   async function handleReturn() {
     const q = new URLSearchParams(location.search), id = q.get('order'), t = q.get('t');
     if (!id || !t) return;
-    addMine(id, t); history.replaceState(null, '', location.pathname);
+    addMine(id, t); syncAlerts(); history.replaceState(null, '', location.pathname);
     $('#overlay').innerHTML = `<div class="scrim"><div class="modal"><div class="m-b" style="text-align:center"><div class="spinner"></div><b>Vérification de votre paiement…</b><p class="muted small">Cela prend quelques secondes.</p></div></div></div>`;
     const end = Date.now() + 120000;
     while (Date.now() < end) {
@@ -205,6 +274,14 @@
     const a = el.dataset.srv;
     try {
       if (a === 'login') loginModal();
+      if (a === 'alerts') { closeAll(); await enableAlerts(); }
+      if (a === 'pushSend') {
+        const title = $('#pu-title').value.trim(), body = $('#pu-body').value.trim(), productId = $('#pu-prod').value;
+        if (!title || !body) return toast('Remplissez le titre et le message.');
+        if (!el.dataset.armed) { el.dataset.armed = '1'; el.textContent = 'Confirmer l’envoi ?'; return; } el.disabled = true;
+        const r = await api('POST', '/api/admin/push/broadcast', { title, body, productId });
+        toast(`Alerte envoyée : ${r.sent} reçue${r.sent > 1 ? 's' : ''}${r.failed ? ', ' + r.failed + ' appareil(s) désabonné(s)' : ''}`); S.pushPre = null; pushStats = null; schedule();
+      }
       if (a === 'notifyTest') { el.disabled = true; await api('POST', '/api/admin/notify-test'); toast('Notification envoyée : regardez votre téléphone'); el.disabled = false; }
       if (a === 'logout') { await api('POST', '/api/auth/logout'); location.reload(); }
       if (a === 'doLogin') {
@@ -224,6 +301,7 @@
     } catch (err) { toast(err.message); el.disabled = false; }
   });
   document.addEventListener('change', async e => {
+    if (e.target.dataset.srvProd) { S.pushPre = e.target.value || null; schedule(); return; }
     const id = e.target.dataset.srvRole; if (!id) return;
     try { await api('PATCH', `/api/admin/users/${encodeURIComponent(id)}`, { role: e.target.value }); toast('Rôle mis à jour'); load(); } catch (err) { toast(err.message); load(); }
   });
