@@ -442,6 +442,7 @@ app.use('/api', (req, res, next) => {
 
 /* --- Public --- */
 const publicProduct = p => ({ id: p.id, name: p.name, sku: p.sku, category: p.category, price: p.price, comparePrice: p.comparePrice, stock: p.stock, lowStock: p.lowStock, emoji: p.emoji, image: p.image, description: p.description, active: true, createdAt: p.createdAt, bulkMin: p.bulkMin || 0, bulkPrice: p.bulkPrice || 0, newUntil: p.newUntil || 0,
+  condition: p.condition || 'neuf', conditionNote: p.conditionNote || '',
   options: Array.isArray(p.options) ? p.options : [], variants: Array.isArray(p.variants) ? p.variants.map(v => ({ key: v.key, vals: v.vals, stock: v.stock, price: v.price })) : [],
   gallery: Array.isArray(p.gallery) ? p.gallery : [], highlights: p.highlights || '', details: p.details || '', specs: p.specs || '', warranty: p.warranty || '' });
 app.get('/api/public/catalog', (req, res) => {
@@ -757,7 +758,7 @@ function sendPage(req, res) {
   const found = validId(pid) ? getDoc('products', pid) : null, p = found && found.active !== false ? found : null;
   const title = p ? `${p.name} — ${plain(p.price)} FCFA | ${s.shopName}` : `${s.shopName} — ${s.tagline || 'Boutique en ligne'}`;
   const desc = p
-    ? `${p.comparePrice > p.price ? `Promo : ${plain(p.price)} FCFA au lieu de ${plain(p.comparePrice)} FCFA. ` : ''}${p.description || p.category || ''} Commandez chez ${s.shopName} : mobile money ou paiement à la livraison.`.replace(/\s+/g, ' ').trim()
+    ? `${p.condition && p.condition !== 'neuf' ? `Occasion · ${({ comme_neuf: 'Comme neuf', tres_bon: 'Très bon état', bon: 'Bon état', correct: 'État correct', reconditionne: 'Reconditionné' })[p.condition] || 'Occasion'}. ` : ''}${p.comparePrice > p.price ? `Promo : ${plain(p.price)} FCFA au lieu de ${plain(p.comparePrice)} FCFA. ` : ''}${p.description || p.category || ''} Commandez chez ${s.shopName} : mobile money ou paiement à la livraison.`.replace(/\s+/g, ' ').trim()
     : (s.intro || 'Commandez en ligne, payez par mobile money ou à la livraison.');
   const img = p ? productImage(pid, p) : `${BASE_URL}/og-image.jpg`, url = p ? `${BASE_URL}/?p=${encodeURIComponent(pid)}` : `${BASE_URL}/`;
   const meta = [
@@ -791,7 +792,7 @@ app.get('/catalogue.csv', (req, res) => {
   for (const p of allDocs('products').filter(x => x.active !== false && x.name && x.price > 0)) {
     const promo = p.comparePrice > p.price;
     rows.push([p.id, p.name.slice(0, 150), (p.description || `${p.name}${p.category ? ' — ' + p.category : ''}, disponible chez ${s.shopName}.`).slice(0, 5000),
-      p.stock > 0 ? 'in stock' : 'out of stock', 'new', `${Math.round(promo ? p.comparePrice : p.price)} XOF`, promo ? `${Math.round(p.price)} XOF` : '',
+      p.stock > 0 ? 'in stock' : 'out of stock', !p.condition || p.condition === 'neuf' ? 'new' : p.condition === 'reconditionne' ? 'refurbished' : 'used', `${Math.round(promo ? p.comparePrice : p.price)} XOF`, promo ? `${Math.round(p.price)} XOF` : '',
       `${BASE_URL}/?p=${encodeURIComponent(p.id)}`, productImage(p.id, p), (Array.isArray(p.gallery) ? p.gallery : []).slice(0, 10).map(g => `${BASE_URL}/img/pi/${encodeURIComponent(g)}`).join(','), s.shopName, p.category || '']);
   }
   res.set({ 'Content-Type': 'text/csv; charset=utf-8', 'Cache-Control': 'no-cache' }).send(rows.map(r => r.map(q).join(',')).join('\n'));

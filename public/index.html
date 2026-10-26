@@ -643,15 +643,27 @@ function stockPill(p){
 }
 
 /* --- Boutique --- */
-S.facets = {}; S.onlyStock = false;
+S.facets = {}; S.onlyStock = false; S.grades = [];
+const CONDITIONS = {
+  neuf:{l:'Neuf', d:'Article neuf, jamais utilisé.'},
+  comme_neuf:{l:'Comme neuf', d:'Très peu utilisé, aucune trace visible, fonctionne parfaitement.'},
+  tres_bon:{l:'Très bon état', d:'Légères traces d’usage, fonctionne parfaitement.'},
+  bon:{l:'Bon état', d:'Traces d’usage visibles, fonctionne parfaitement.'},
+  correct:{l:'État correct', d:'Usure marquée ou petit défaut signalé, fonctionne.'},
+  reconditionne:{l:'Reconditionné', d:'Contrôlé, nettoyé et remis en état par nos soins.'}
+};
+const condKey = p => CONDITIONS[p.condition] ? p.condition : 'neuf';
+const isUsed = p => condKey(p) !== 'neuf';
+const condLabel = p => CONDITIONS[condKey(p)].l;
 function shopBase(){
   const q = S.q.trim().toLowerCase();
-  return S.products.filter(p=>p.active!==false && (S.cat==='Tout'||(S.cat==='Soldes'&&onSale(p))||(S.cat==='Nouveautés'&&isNew(p))||p.category===S.cat) &&
+  return S.products.filter(p=>p.active!==false && (S.cat==='Tout'||(S.cat==='Soldes'&&onSale(p))||(S.cat==='Nouveautés'&&isNew(p))||(S.cat==='Occasion'&&isUsed(p))||p.category===S.cat) &&
     (!q || (p.name+' '+p.category+' '+(p.sku||'')+' '+(p.variants||[]).map(v=>v.key).join(' ')).toLowerCase().includes(q)));
 }
 function matchFacets(p){
   const sel = Object.entries(S.facets).filter(([,vals])=>vals.length);
   if(S.onlyStock && p.stock<=0) return false;
+  if(S.grades.length && !S.grades.includes(condKey(p))) return false;
   if(!sel.length) return true;
   if(!hasVar(p)) return false;
   const opts = p.options||[];
@@ -662,9 +674,11 @@ function facetBar(){
   const groups = {};
   shopBase().forEach(p=>(p.options||[]).forEach((o,i)=>{ const key = o.name.trim(); if(!key) return; const g = groups[key.toLowerCase()] ||= {name:key, vals:new Set()}; (p.variants||[]).forEach(v=>{ const x = (v.vals||[])[i]; if(x) g.vals.add(String(x)); }); }));
   const list = Object.values(groups).filter(g=>g.vals.size);
-  if(!list.length && !S.onlyStock) return '';
-  const any = S.onlyStock || Object.values(S.facets).some(v=>v.length);
-  return `<div class="facets" role="group" aria-label="Filtres">${list.map(g=>`<div class="fg"><span>${esc(g.name)} :</span>${[...g.vals].map(v=>`<button data-a="facet" data-o="${esc(g.name)}" data-v="${esc(v)}" aria-pressed="${(S.facets[g.name]||[]).includes(v)}">${isColorOpt(g.name)?swatch(v):''}${esc(v)}</button>`).join('')}</div>`).join('')}
+  const grades = [...new Set(shopBase().map(condKey))];
+  const gradeGroup = grades.length>1 ? `<div class="fg"><span>État :</span>${Object.keys(CONDITIONS).filter(k=>grades.includes(k)).map(k=>`<button data-a="gradeF" data-v="${k}" aria-pressed="${S.grades.includes(k)}">${CONDITIONS[k].l}</button>`).join('')}</div>` : '';
+  if(!list.length && !S.onlyStock && !gradeGroup) return '';
+  const any = S.onlyStock || S.grades.length || Object.values(S.facets).some(v=>v.length);
+  return `<div class="facets" role="group" aria-label="Filtres">${gradeGroup}${list.map(g=>`<div class="fg"><span>${esc(g.name)} :</span>${[...g.vals].map(v=>`<button data-a="facet" data-o="${esc(g.name)}" data-v="${esc(v)}" aria-pressed="${(S.facets[g.name]||[]).includes(v)}">${isColorOpt(g.name)?swatch(v):''}${esc(v)}</button>`).join('')}</div>`).join('')}
     <div class="fg"><button data-a="onlyStock" aria-pressed="${S.onlyStock}">Disponible uniquement</button>${any?'<button data-a="facetClear">✕ Effacer les filtres</button>':''}</div></div>`;
 }
 function viewShop(){
@@ -672,7 +686,7 @@ function viewShop(){
   const live = S.products.filter(p=>p.active!==false);
   const sales = live.filter(p=>onSale(p) && p.stock>0);
   const bundles = S.bundles.filter(b=>b.active!==false && bundleInfo(b).ok);
-  const cats = ['Tout', ...(sales.length?['Soldes']:[]), ...(live.some(isNew)?['Nouveautés']:[]), ...(bundles.length?['Lots']:[]), ...new Set(live.map(p=>p.category).filter(Boolean))];
+  const cats = ['Tout', ...(sales.length?['Soldes']:[]), ...(live.some(isNew)?['Nouveautés']:[]), ...(bundles.length?['Lots']:[]), ...(live.some(isUsed)?['Occasion']:[]), ...new Set(live.map(p=>p.category).filter(Boolean))];
   const list = S.cat==='Lots' ? [] : shopProducts();
   const pool = S.products.filter(p=>p.active!==false && p.stock>0);
   const feat = pool.slice().sort((a,b)=>((b.comparePrice>b.price?b.comparePrice-b.price:0)-(a.comparePrice>a.price?a.comparePrice-a.price:0)) || b.price-a.price)[0];
@@ -689,6 +703,10 @@ function viewShop(){
   const ribbon = fp && fp.code && !(fp.expiresAt && fp.expiresAt<today()) && !S.q
     ? `<div class="ribbon" role="note"><span>Offre du moment :</span><b>${esc(promoLabel(fp))}</b><span>avec le code</span><button class="code-chip" data-a="copyCode" data-v="${esc(fp.code)}" aria-label="Copier le code ${esc(fp.code)}">${esc(fp.code)}</button>${fp.minOrder?`<span class="muted">dès ${fmt(fp.minOrder)}</span>`:''}${fp.expiresAt?`<span class="muted">jusqu’au ${new Date(fp.expiresAt).toLocaleDateString('fr-FR')}</span>`:''}</div>` : '';
   const maxOff = sales.length ? Math.max(...sales.map(p=>Math.round((1-p.price/p.comparePrice)*100))) : 0;
+  const used = live.filter(p=>isUsed(p) && p.stock>0);
+  const usedBlock = used.length && !S.q && S.cat==='Tout' ? `<section class="panel" style="margin-bottom:44px;padding:24px" aria-label="Occasion"><div class="sec-h" style="margin-top:0"><h2>Bonnes affaires d’occasion</h2><button class="btn ghost sm" data-a="cat" data-v="Occasion" style="border-radius:999px">Voir tout (${used.length})</button></div>
+      <p class="muted" style="margin:-6px 0 16px">Articles contrôlés, état décrit honnêtement : comme neuf, très bon état, reconditionné…</p>
+      <div class="sale-row">${used.sort((a,b)=>Object.keys(CONDITIONS).indexOf(condKey(a))-Object.keys(CONDITIONS).indexOf(condKey(b))).slice(0,4).map(miniCard).join('')}</div></section>` : '';
   const saleBlock = sales.length && !S.q && S.cat==='Tout' ? `<section class="sale" aria-label="Soldes"><div class="sale-txt"><h2>Les soldes</h2><span class="big">jusqu’à <span style="white-space:nowrap">−${maxOff}&nbsp;%</span></span>
       <p class="muted" style="margin:0">${sales.length} article${sales.length>1?'s':''} à prix réduit, dans la limite des stocks.</p>
       <button class="btn primary" data-a="cat" data-v="Soldes" style="border-radius:999px">Voir toutes les soldes</button></div>
@@ -698,14 +716,14 @@ function viewShop(){
   const empty = S.products.length===0
     ? `<div class="empty"><h3>La boutique est vide</h3><p>${S.isAdmin?'Ajoutez votre premier produit pour ouvrir la vente.':'Les produits arrivent bientôt.'}</p>${S.isAdmin?'<button class="btn primary" data-a="newProduct">Ajouter un produit</button>':''}</div>`
     : `<div class="empty"><h3>Aucun produit trouvé</h3><p>Essayez un autre mot ou une autre catégorie.</p><button class="btn ghost" data-a="clearSearch">Afficher tout le catalogue</button></div>`;
-  return `${ribbon}${hero}${saleBlock}${S.cat==='Tout'?bundleBlock:''}
+  return `${ribbon}${hero}${saleBlock}${usedBlock}${S.cat==='Tout'?bundleBlock:''}
     <div class="sec-h" id="catalogue"><h2>${S.q?`Résultats pour « ${esc(S.q)} »`:S.cat==='Tout'?'La collection':esc(S.cat)}</h2><span class="muted small">${S.cat==='Lots'?bundles.length+' lot'+(bundles.length>1?'s':''):list.length+' produit'+(list.length>1?'s':'')}</span></div>
     <div class="cats" role="group" aria-label="Catégories">${cats.map(c=>`<button aria-pressed="${S.cat===c}" data-a="cat" data-v="${esc(c)}">${esc(c)}</button>`).join('')}</div>
     ${S.cat==='Lots'?'':facetBar()}
     ${S.cat==='Lots'?bundleBlock:''}${S.cat==='Lots'?'':list.length?`<div class="grid">${list.map(p=>`
       <article class="card">
         <button class="thumb" data-a="product" data-id="${p.id}" aria-label="Voir ${esc(p.name)}">${pImg(p)}${stockPill(p)}${isNew(p)?'<span class="new-band">Nouveau</span>':''}</button>
-        <div class="card-b"><span class="cat">${esc(p.category)}</span><h3>${esc(p.name)}</h3>${(()=>{ const rt=productRating(p.id); return rt.n?`<span class="small">${starsHTML(rt.avg)} <span class="muted">(${rt.n})</span></span>`:''; })()}${p.bulkMin>1&&p.bulkPrice>0?`<span class="bulk">Dès ${p.bulkMin} : ${fmt(p.bulkPrice)} l’unité</span>`:''}
+        <div class="card-b"><span class="cat">${esc(p.category)}${isUsed(p)?` · <b style="color:var(--indigo)">Occasion · ${esc(condLabel(p))}</b>`:''}</span><h3>${esc(p.name)}</h3>${(()=>{ const rt=productRating(p.id); return rt.n?`<span class="small">${starsHTML(rt.avg)} <span class="muted">(${rt.n})</span></span>`:''; })()}${p.bulkMin>1&&p.bulkPrice>0?`<span class="bulk">Dès ${p.bulkMin} : ${fmt(p.bulkPrice)} l’unité</span>`:''}
           <div class="card-f"><span class="price">${hasVar(p)&&minPrice(p)<p.price?'<span class="muted small" style="font-family:var(--f-b)">Dès </span>'+fmt(minPrice(p)):fmt(p.price)}${p.comparePrice>p.price?`<span class="strike">${fmt(p.comparePrice)}</span>`:''}</span>
           <button class="add" data-a="add" data-id="${p.id}" ${p.stock<=0?'disabled':''} aria-label="Ajouter ${esc(p.name)} au panier">+</button></div>
         </div>
@@ -846,7 +864,7 @@ async function makeVisual(p, story){
   if(isNew(p)){ ctx.save(); ctx.fillStyle = gold; rrect(ctx, ix+28, y+28, 230, 64, 32); ctx.fill(); ctx.fillStyle = '#14110D'; ctx.font = `800 32px ${SANS}`; ctx.textAlign = 'center'; ctx.fillText('NOUVEAU', ix+28+115, y+71); ctx.restore(); }
   y += ih + (story ? 90 : 66);
   ctx.textAlign = story ? 'center' : 'left'; const tx = story ? W/2 : ix;
-  ctx.fillStyle = muted; ctx.font = `600 ${story?34:28}px ${SANS}`; ctx.fillText((p.category||'').toUpperCase(), tx, y); y += story ? 72 : 60;
+  ctx.fillStyle = muted; ctx.font = `600 ${story?34:28}px ${SANS}`; ctx.fillText(((p.category||'') + (isUsed(p)?' · OCCASION · '+condLabel(p):'')).toUpperCase(), tx, y); y += story ? 72 : 60;
   ctx.fillStyle = ivory; ctx.font = `700 ${story?76:62}px ${SERIF}`; for(const l of wrapLines(ctx, p.name, iw, 2)){ ctx.fillText(l, tx, y); y += story ? 80 : 64; }
   y += story ? 56 : 36; ctx.fillStyle = gold; ctx.font = `700 ${story?112:84}px ${SERIF}`; const priceTxt = fmt(p.price).replace(/[\u202f\u00a0]/g,' '); ctx.fillText(priceTxt, tx, y);
   if(p.comparePrice > p.price){ const pw = ctx.measureText(priceTxt).width; ctx.font = `500 ${story?44:36}px ${SANS}`; ctx.fillStyle = muted; const old = fmt(p.comparePrice).replace(/[\u202f\u00a0]/g,' ');
@@ -926,6 +944,7 @@ function viewProduct(){
       <h1>${esc(p.name)}</h1>
       ${(()=>{ const rt=productRating(p.id); return rt.n?`<div class="rate-line">${starsHTML(rt.avg)}<b>${(Math.round(rt.avg*10)/10).toString().replace('.',',')}</b><button data-a="rvGo">${rt.n} avis vérifié${rt.n>1?'s':''}</button></div>`:''; })()}
       ${p.description?`<p class="muted" style="margin:0 0 10px;font-size:16px">${esc(p.description)}</p>`:''}
+      ${isUsed(p)?`<div class="trust-box" style="margin:4px 0 14px;border-color:color-mix(in srgb,var(--indigo) 45%,var(--line))"><div><span>♻️</span><span><b>Occasion · ${esc(condLabel(p))}</b>${esc(CONDITIONS[condKey(p)].d)}${p.conditionNote?`<br><span style="color:var(--ink)">${esc(p.conditionNote)}</span>`:''}</span></div></div>`:''}
       <div class="pdp-price"><span class="price">${hasVar(p)&&selVariant(p)?fmt(vPrice(p,selVariant(p).key)):hasVar(p)&&minPrice(p)<p.price?'<span class="muted small" style="font-family:var(--f-b)">Dès </span>'+fmt(minPrice(p)):fmt(p.price)}</span>${save?`<span class="strike">${fmt(p.comparePrice)}</span>`:''}</div>
       ${save?`<div class="save">Vous économisez ${fmt(save)}</div>`:''}
       ${p.bulkMin>1&&p.bulkPrice>0?`<p class="bulk" style="font-size:14px;margin:10px 0 0">Achat groupé : ${fmt(p.bulkPrice)} l’unité dès ${p.bulkMin} unités</p>`:''}
@@ -950,7 +969,7 @@ function viewProduct(){
 }
 
 function miniCard(p){
-  return `<button class="mini" data-a="product" data-id="${p.id}" aria-label="Voir ${esc(p.name)}"><span class="e">${pImg(p)}</span>${isNew(p)?'<span class="new-band">Nouveau</span>':''}<b>${esc(p.name)}</b><span class="price">${fmt(p.price)}${onSale(p)?`<span class="strike">${fmt(p.comparePrice)}</span>`:''}</span></button>`;
+  return `<button class="mini" data-a="product" data-id="${p.id}" aria-label="Voir ${esc(p.name)}"><span class="e">${pImg(p)}</span>${isNew(p)?'<span class="new-band">Nouveau</span>':''}${isUsed(p)?`<span class="pill info" style="align-self:flex-start;font-size:11px">${esc(condLabel(p))}</span>`:''}<b>${esc(p.name)}</b><span class="price">${fmt(p.price)}${onSale(p)?`<span class="strike">${fmt(p.comparePrice)}</span>`:''}</span></button>`;
 }
 function bundleCard(b){
   const bi = bundleInfo(b), save = bi.regular - b.price;
@@ -1964,6 +1983,8 @@ function productForm(p){
         <div class="field"><label for="pf-name">Nom du produit</label><input class="input" id="pf-name" value="${esc(p.name)}"></div>
         <div class="row"><div class="field"><label for="pf-cat">Catégorie</label><input class="input" id="pf-cat" list="pf-cats" value="${esc(p.category)}"><datalist id="pf-cats">${cats.map(c=>`<option value="${esc(c)}">`).join('')}</datalist></div>
         <div class="field"><label for="pf-sku">SKU / code-barres</label><input class="input" id="pf-sku" value="${esc(p.sku)}"></div></div>
+        <div class="row"><div class="field"><label for="pf-cond">État</label><select class="input" id="pf-cond">${Object.entries(CONDITIONS).map(([k,c])=>`<option value="${k}" ${condKey(p)===k?'selected':''}>${c.l}</option>`).join('')}</select></div>
+        <div class="field" style="flex:2 1 260px"><label for="pf-cnote">Détails sur l’état (occasion)</label><input class="input" id="pf-cnote" value="${esc(p.conditionNote||'')}" placeholder="ex. Petite rayure au dos, acheté en 2024, chargeur fourni"></div></div>
         <div class="row"><div class="field"><label for="pf-cost">Prix d’achat unitaire (${esc(S.settings.currency)})</label><input class="input" id="pf-cost" inputmode="numeric" value="${esc(p.id&&costOf(p.id)?costOf(p.id):'')}" placeholder="Visible uniquement par l’équipe"></div><div class="field"><label>Marge par unité</label><div id="pf-mg" class="price" style="font-size:20px;padding:8px 0">—</div></div></div>
         <div class="row"><div class="field"><label for="pf-price">Prix de vente (${esc(S.settings.currency)})</label><input class="input" id="pf-price" inputmode="numeric" value="${esc(p.price)}"></div>
         <div class="field"><label for="pf-cmp">Prix barré (facultatif)</label><input class="input" id="pf-cmp" inputmode="numeric" value="${esc(p.comparePrice||'')}"></div></div>
@@ -2017,6 +2038,7 @@ function productForm(p){
     const v = id=>$(id).value.trim();
     const data = {name:v('#pf-name'), category:v('#pf-cat')||'Divers', sku:v('#pf-sku'), price:Number(v('#pf-price').replace(/\s/g,'')), comparePrice:Number(v('#pf-cmp').replace(/\s/g,''))||0,
       stock:Math.max(0,parseInt(v('#pf-stock'))||0), ...(()=>{ readVars(); const opts = readOpts(); const keys = new Set(); return vars.length && opts.length ? {options:opts, variants:vars.filter(x=>!keys.has(x.key) && keys.add(x.key)).map(x=>({key:x.key, vals:x.vals, stock:Math.max(0,Number(x.stock)||0), price:Number(x.price)>0?Number(x.price):'', sku:x.sku||''}))} : {options:[], variants:[]}; })(), lowStock:Math.max(0,parseInt(v('#pf-low'))||0), emoji:v('#pf-emoji')||'📦', description:v('#pf-desc'),
+      condition:$('#pf-cond').value, conditionNote:$('#pf-cond').value==='neuf'?'':v('#pf-cnote'),
       highlights:$('#pf-hl').value.trim(), details:$('#pf-details').value.trim(), specs:$('#pf-specs').value.trim(), warranty:v('#pf-war'), active:$('#pf-active').checked,
       bulkMin:Math.max(0,parseInt(v('#pf-bmin'))||0), bulkPrice:Number(v('#pf-bprice').replace(/\s/g,''))||0,
       newUntil:$('#pf-new').checked?(isNew(p)?p.newUntil:Date.now()+30*DAY):0,
@@ -2275,7 +2297,7 @@ document.addEventListener('click', async e=>{
   switch(a){
     case 'closeAll': closeAll(); break;
     case 'go': if(S.view==='product'){ try{ history.pushState({},'',location.pathname); }catch(e){} } S.view=el.dataset.v; S.aq=''; closeAll(); schedule(); window.scrollTo(0,0); break;
-    case 'cat': S.facets={}; S.cat=el.dataset.v; schedule(); if(el.closest('.sale')) setTimeout(()=>$('#catalogue')?.scrollIntoView({behavior:'smooth'}),60); break;
+    case 'cat': S.facets={}; S.grades=[]; S.cat=el.dataset.v; schedule(); if(el.closest('.sale')) setTimeout(()=>$('#catalogue')?.scrollIntoView({behavior:'smooth'}),60); break;
     case 'clearSearch': S.q=''; S.cat='Tout'; schedule(); break;
     case 'scroll': $('#catalogue').scrollIntoView({behavior:matchMedia('(prefers-reduced-motion:reduce)').matches?'auto':'smooth'}); break;
     case 'cart': openCart(); break;
@@ -2312,7 +2334,8 @@ document.addEventListener('click', async e=>{
     case 'optPick': { const sel = S.optSel[S.pid] ||= []; const k = Number(el.dataset.o); sel[k] = sel[k]===el.dataset.v ? undefined : el.dataset.v; S.pqty = 1; schedule(); break; }
     case 'facet': { const o = el.dataset.o, v = el.dataset.v, arr = S.facets[o] ||= []; const i = arr.indexOf(v); if(i>=0) arr.splice(i,1); else arr.push(v); schedule(); break; }
     case 'onlyStock': S.onlyStock = !S.onlyStock; schedule(); break;
-    case 'facetClear': S.facets = {}; S.onlyStock = false; schedule(); break;
+    case 'gradeF': { const i = S.grades.indexOf(el.dataset.v); if(i>=0) S.grades.splice(i,1); else S.grades.push(el.dataset.v); schedule(); break; }
+    case 'facetClear': S.grades = []; S.facets = {}; S.onlyStock = false; schedule(); break;
     case 'pdpAdd': case 'pdpBuy': { const p=S.products.find(x=>x.id===S.pid); if(!p) break; const n=S.pqty||1;
       let v = ''; if(hasVar(p)){ const sv = selVariant(p); if(!sv){ const miss=(p.options||[]).filter((o,i)=>!(S.optSel[p.id]||[])[i]).map(o=>o.name.toLowerCase()); toast('Choisissez : '+miss.join(', ')); $('.opt')?.scrollIntoView({behavior:'smooth', block:'center'}); break; } v = sv.key; }
       const same = l=>!l.b&&l.id===p.id&&(l.v||'')===v, before=S.cart.reduce((t,l)=>t+(same(l)?l.qty:0),0);

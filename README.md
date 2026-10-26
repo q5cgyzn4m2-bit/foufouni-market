@@ -147,3 +147,10 @@ Gestion › **Ambassadeurs** : ajoutez une personne (nom et téléphone obligato
 - Boutique : **filtres** par valeur d'option (pastilles de couleur), « Disponible uniquement ». Page produit : choix des options, combinaisons épuisées barrées, prix et stock de la variante.
 - Panier, caisse (choix de la variante), commandes, inventaire et ajustements fonctionnent variante par variante. Le serveur vérifie la variante, son prix et son stock.
 - Les produits à variantes ne peuvent pas être mis dans un lot.
+
+
+## Produits d'occasion
+
+- Fiche produit › **État** : Neuf, Comme neuf, Très bon état, Bon état, État correct, Reconditionné, avec des **détails sur l'état** (défauts, ancienneté, accessoires).
+- Boutique : section « **Bonnes affaires d'occasion** », catégorie **Occasion**, filtre **État**, mention de l'état sur les vignettes et encadré ♻️ sur la page produit.
+- Catalogue Facebook : `condition` = new / used / refurbished selon l'état.
