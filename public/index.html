@@ -240,6 +240,17 @@ textarea.input{min-height:84px; resize:vertical}
 .star-pick{display:flex; gap:4px}.star-pick button{border:0; background:none; font-size:34px; line-height:1; padding:0 2px; color:var(--line); cursor:pointer}.star-pick button.on{color:var(--indigo)}
 .lightbox{position:fixed; inset:0; z-index:90; background:rgba(0,0,0,.92); display:grid; place-items:center; padding:16px}.lightbox img{max-width:100%; max-height:90vh; border-radius:10px}
 @media (max-width:760px){ .rv-sum{grid-template-columns:minmax(0,1fr); gap:12px} .rv-avg{font-size:48px} }
+/* Variantes et filtres */
+.opt{margin-top:16px}.opt-vals{display:flex; flex-wrap:wrap; gap:8px; margin-top:6px}
+.opt-btn{border:1.5px solid var(--line); background:var(--surface); color:var(--ink); border-radius:10px; padding:8px 14px; font-weight:700; font-size:14px; display:inline-flex; align-items:center; gap:8px}
+.opt-btn[aria-pressed="true"]{border-color:var(--indigo); background:var(--indigo-soft); color:var(--indigo)}
+.opt-btn.out{opacity:.4; text-decoration:line-through}
+.sw{width:16px; height:16px; border-radius:50%; border:1px solid rgba(128,128,128,.6); display:inline-block; flex:none}
+.facets{display:flex; flex-wrap:wrap; gap:8px 18px; align-items:center; margin:-6px 0 20px; font-size:14px}
+.facets .fg{display:flex; flex-wrap:wrap; gap:6px; align-items:center}.facets .fg>span{color:var(--muted); font-weight:600; margin-right:2px}
+.facets button{border:1px solid var(--line); background:transparent; color:var(--muted); border-radius:999px; padding:5px 12px; font-weight:600; font-size:13px; display:inline-flex; align-items:center; gap:6px}
+.facets button[aria-pressed="true"]{border-color:var(--indigo); color:var(--indigo); background:var(--indigo-soft)}
+.var-ed{display:grid; grid-template-columns:minmax(0,1fr) minmax(0,2fr); gap:8px; margin-bottom:8px}
 .empty{border:2px dashed var(--line); border-radius:var(--r-m); padding:48px 20px; text-align:center; color:var(--muted)}
 .empty h3{color:var(--ink); margin-bottom:8px; font-size:20px}
 
@@ -632,10 +643,29 @@ function stockPill(p){
 }
 
 /* --- Boutique --- */
-function shopProducts(){
+S.facets = {}; S.onlyStock = false;
+function shopBase(){
   const q = S.q.trim().toLowerCase();
   return S.products.filter(p=>p.active!==false && (S.cat==='Tout'||(S.cat==='Soldes'&&onSale(p))||(S.cat==='Nouveautés'&&isNew(p))||p.category===S.cat) &&
-    (!q || (p.name+' '+p.category+' '+(p.sku||'')).toLowerCase().includes(q)));
+    (!q || (p.name+' '+p.category+' '+(p.sku||'')+' '+(p.variants||[]).map(v=>v.key).join(' ')).toLowerCase().includes(q)));
+}
+function matchFacets(p){
+  const sel = Object.entries(S.facets).filter(([,vals])=>vals.length);
+  if(S.onlyStock && p.stock<=0) return false;
+  if(!sel.length) return true;
+  if(!hasVar(p)) return false;
+  const opts = p.options||[];
+  return p.variants.some(v=>(!S.onlyStock || v.stock>0) && sel.every(([name, vals])=>{ const i = opts.findIndex(o=>o.name.toLowerCase()===name.toLowerCase()); return i>=0 && vals.includes(String((v.vals||[])[i]||'')); }));
+}
+function shopProducts(){ return shopBase().filter(matchFacets); }
+function facetBar(){
+  const groups = {};
+  shopBase().forEach(p=>(p.options||[]).forEach((o,i)=>{ const key = o.name.trim(); if(!key) return; const g = groups[key.toLowerCase()] ||= {name:key, vals:new Set()}; (p.variants||[]).forEach(v=>{ const x = (v.vals||[])[i]; if(x) g.vals.add(String(x)); }); }));
+  const list = Object.values(groups).filter(g=>g.vals.size);
+  if(!list.length && !S.onlyStock) return '';
+  const any = S.onlyStock || Object.values(S.facets).some(v=>v.length);
+  return `<div class="facets" role="group" aria-label="Filtres">${list.map(g=>`<div class="fg"><span>${esc(g.name)} :</span>${[...g.vals].map(v=>`<button data-a="facet" data-o="${esc(g.name)}" data-v="${esc(v)}" aria-pressed="${(S.facets[g.name]||[]).includes(v)}">${isColorOpt(g.name)?swatch(v):''}${esc(v)}</button>`).join('')}</div>`).join('')}
+    <div class="fg"><button data-a="onlyStock" aria-pressed="${S.onlyStock}">Disponible uniquement</button>${any?'<button data-a="facetClear">✕ Effacer les filtres</button>':''}</div></div>`;
 }
 function viewShop(){
   const st = S.settings;
@@ -671,11 +701,12 @@ function viewShop(){
   return `${ribbon}${hero}${saleBlock}${S.cat==='Tout'?bundleBlock:''}
     <div class="sec-h" id="catalogue"><h2>${S.q?`Résultats pour « ${esc(S.q)} »`:S.cat==='Tout'?'La collection':esc(S.cat)}</h2><span class="muted small">${S.cat==='Lots'?bundles.length+' lot'+(bundles.length>1?'s':''):list.length+' produit'+(list.length>1?'s':'')}</span></div>
     <div class="cats" role="group" aria-label="Catégories">${cats.map(c=>`<button aria-pressed="${S.cat===c}" data-a="cat" data-v="${esc(c)}">${esc(c)}</button>`).join('')}</div>
+    ${S.cat==='Lots'?'':facetBar()}
     ${S.cat==='Lots'?bundleBlock:''}${S.cat==='Lots'?'':list.length?`<div class="grid">${list.map(p=>`
       <article class="card">
         <button class="thumb" data-a="product" data-id="${p.id}" aria-label="Voir ${esc(p.name)}">${pImg(p)}${stockPill(p)}${isNew(p)?'<span class="new-band">Nouveau</span>':''}</button>
         <div class="card-b"><span class="cat">${esc(p.category)}</span><h3>${esc(p.name)}</h3>${(()=>{ const rt=productRating(p.id); return rt.n?`<span class="small">${starsHTML(rt.avg)} <span class="muted">(${rt.n})</span></span>`:''; })()}${p.bulkMin>1&&p.bulkPrice>0?`<span class="bulk">Dès ${p.bulkMin} : ${fmt(p.bulkPrice)} l’unité</span>`:''}
-          <div class="card-f"><span class="price">${fmt(p.price)}${p.comparePrice>p.price?`<span class="strike">${fmt(p.comparePrice)}</span>`:''}</span>
+          <div class="card-f"><span class="price">${hasVar(p)&&minPrice(p)<p.price?'<span class="muted small" style="font-family:var(--f-b)">Dès </span>'+fmt(minPrice(p)):fmt(p.price)}${p.comparePrice>p.price?`<span class="strike">${fmt(p.comparePrice)}</span>`:''}</span>
           <button class="add" data-a="add" data-id="${p.id}" ${p.stock<=0?'disabled':''} aria-label="Ajouter ${esc(p.name)} au panier">+</button></div>
         </div>
       </article>`).join('')}</div>`:empty}
@@ -866,6 +897,15 @@ function openProduct(id){
 window.addEventListener('popstate', ()=>{ let pid=''; try{ pid = new URLSearchParams(location.search).get('p')||''; }catch(e){}
   if(pid && S.products.some(x=>x.id===pid)){ S.view='product'; S.pid=pid; S.pqty=1; } else if(S.view==='product') S.view='shop';
   closeAll(); schedule(); });
+S.optSel = {};
+function selVariant(p){ const sel = S.optSel[p.id]||[]; if(!hasVar(p) || (p.options||[]).some((o,i)=>!sel[i])) return null; return varOf(p, sel.join(' / ')); }
+function optionPicker(p){
+  const sel = S.optSel[p.id] || (S.optSel[p.id] = []);
+  return (p.options||[]).map((o,oi)=>{
+    const avail = val => p.variants.some(v=>(v.stock||0)>0 && (v.vals||[])[oi]===val && (p.options||[]).every((_,k)=>k===oi || !sel[k] || (v.vals||[])[k]===sel[k]));
+    return `<div class="opt"><div class="small muted">${esc(o.name)} : <b style="color:var(--ink)">${esc(sel[oi]||'à choisir')}</b></div><div class="opt-vals">${o.values.map(val=>`<button class="opt-btn${avail(val)?'':' out'}" data-a="optPick" data-o="${oi}" data-v="${esc(val)}" aria-pressed="${sel[oi]===val}">${isColorOpt(o.name)?swatch(val):''}${esc(val)}</button>`).join('')}</div></div>`;
+  }).join('');
+}
 function viewProduct(){
   const p = S.products.find(x=>x.id===S.pid && x.active!==false); if(!p){ S.view='shop'; return viewShop(); }
   const imgs = galleryFor(p), st = S.settings, save = p.comparePrice>p.price ? p.comparePrice-p.price : 0;
@@ -886,10 +926,11 @@ function viewProduct(){
       <h1>${esc(p.name)}</h1>
       ${(()=>{ const rt=productRating(p.id); return rt.n?`<div class="rate-line">${starsHTML(rt.avg)}<b>${(Math.round(rt.avg*10)/10).toString().replace('.',',')}</b><button data-a="rvGo">${rt.n} avis vérifié${rt.n>1?'s':''}</button></div>`:''; })()}
       ${p.description?`<p class="muted" style="margin:0 0 10px;font-size:16px">${esc(p.description)}</p>`:''}
-      <div class="pdp-price"><span class="price">${fmt(p.price)}</span>${save?`<span class="strike">${fmt(p.comparePrice)}</span>`:''}</div>
+      <div class="pdp-price"><span class="price">${hasVar(p)&&selVariant(p)?fmt(vPrice(p,selVariant(p).key)):hasVar(p)&&minPrice(p)<p.price?'<span class="muted small" style="font-family:var(--f-b)">Dès </span>'+fmt(minPrice(p)):fmt(p.price)}</span>${save?`<span class="strike">${fmt(p.comparePrice)}</span>`:''}</div>
       ${save?`<div class="save">Vous économisez ${fmt(save)}</div>`:''}
       ${p.bulkMin>1&&p.bulkPrice>0?`<p class="bulk" style="font-size:14px;margin:10px 0 0">Achat groupé : ${fmt(p.bulkPrice)} l’unité dès ${p.bulkMin} unités</p>`:''}
-      <p style="margin:14px 0 0">${out?'<span class="pill bad">Rupture de stock</span>':`<span class="pill ok">En stock</span>`}</p>
+      ${hasVar(p)?optionPicker(p):''}
+      <p style="margin:14px 0 0">${out?'<span class="pill bad">Rupture de stock</span>':hasVar(p)&&selVariant(p)?`<span class="pill ${selVariant(p).stock>0?'ok':'bad'}">${selVariant(p).stock>0?`En stock · ${selVariant(p).stock}`:'Cette variante est épuisée'}</span>`:`<span class="pill ok">En stock</span>`}</p>
       ${out?'':`<div class="pdp-buy"><div class="qty big"><button data-a="pdpQty" data-d="-1" aria-label="Moins">−</button><span>${q}</span><button data-a="pdpQty" data-d="1" aria-label="Plus">+</button></div>
         <button class="btn primary" data-a="pdpAdd">Ajouter au panier</button><button class="btn ghost" data-a="pdpBuy">Acheter maintenant</button></div>`}
       <div class="trust-box"><div><span>🚚</span><span><b>Livraison à ${esc(st.city)}</b>${st.freeFrom?`Offerte dès ${fmt(st.freeFrom)} d’achat, sinon ${fmt(st.deliveryFee)}. `:''}Retrait en boutique possible.</span></div>
@@ -925,7 +966,15 @@ const DAY = 864e5;
 const isNew = p => (p.newUntil||0) > Date.now();
 const onSale = p => p.comparePrice > p.price;
 const unitPrice = (p,qty) => (p.bulkMin>1 && p.bulkPrice>0 && qty>=p.bulkMin) ? p.bulkPrice : p.price;
-const lineKey = l => l.b ? 'b:'+l.b : l.id;
+const lineKey = l => l.b ? 'b:'+l.b : l.id + (l.v ? '|'+l.v : '');
+const hasVar = p => !!(p && Array.isArray(p.variants) && p.variants.length);
+const varOf = (p, k) => hasVar(p) ? p.variants.find(v=>v.key===k) || null : null;
+const vStock = (p, k) => k && hasVar(p) ? ((varOf(p,k)||{}).stock||0) : p.stock;
+const vPrice = (p, k) => { const v = varOf(p, k); return v && Number(v.price)>0 ? Number(v.price) : p.price; };
+const minPrice = p => hasVar(p) ? Math.min(...p.variants.map(v=>Number(v.price)>0?Number(v.price):p.price)) : p.price;
+const COLORS = {noir:'#111',blanc:'#fff',rouge:'#d62828',bleu:'#1d4ed8','bleu marine':'#1e2a5a',marine:'#1e2a5a',vert:'#2f855a',jaune:'#facc15',orange:'#f97316',rose:'#ec4899',violet:'#7c3aed',gris:'#9ca3af',marron:'#7c4a1e',beige:'#d6c3a1',doré:'#c9a45c',dore:'#c9a45c',or:'#c9a45c',argent:'#c0c0c0',kaki:'#78764a',bordeaux:'#6d1a2b',turquoise:'#14b8a6',crème:'#f4ecd8',creme:'#f4ecd8'};
+const swatch = v => { const c = COLORS[String(v).trim().toLowerCase()]; return c ? `<span class="sw" style="background:${c}"></span>` : ''; };
+const isColorOpt = n => /couleur|color|coloris|teinte/i.test(n||'');
 function bundleInfo(b){
   const comps = (b.items||[]).map(i=>({p:S.products.find(p=>p.id===i.id), qty:i.qty}));
   const ok = comps.length>0 && comps.every(c=>c.p && c.p.active!==false);
@@ -937,13 +986,16 @@ function demand(cart){
   const m = {};
   for(const l of cart){
     if(l.b){ const b=S.bundles.find(x=>x.id===l.b); (b?.items||[]).forEach(i=>m[i.id]=(m[i.id]||0)+i.qty*l.qty); }
-    else m[l.id]=(m[l.id]||0)+l.qty;
+    else { const k = l.id + (l.v ? '|'+l.v : ''); m[k]=(m[k]||0)+l.qty; }
   }
   return m;
 }
 function stockIssue(cart){
-  const m = demand(cart);
-  for(const id in m){ const p=S.products.find(x=>x.id===id); if(!p) return 'Un article n’est plus disponible.'; if(m[id]>p.stock) return `Stock insuffisant pour ${p.name} (${p.stock} disponible).`; }
+  const m = demand(cart), tot = {};
+  for(const k in m){ const [id, v] = k.split('|'); const p=S.products.find(x=>x.id===id); if(!p) return 'Un article n’est plus disponible.';
+    if(v){ const av = vStock(p, v); if(m[k]>av) return `Stock insuffisant pour ${p.name} — ${v} (${av} disponible).`; }
+    tot[id] = (tot[id]||0) + m[k]; }
+  for(const id in tot){ const p=S.products.find(x=>x.id===id); if(tot[id]>p.stock) return `Stock insuffisant pour ${p.name} (${p.stock} disponible).`; }
   return null;
 }
 function addLine(target, match, make, label){
@@ -954,9 +1006,15 @@ function addLine(target, match, make, label){
   if(target==='cart'){ saveCart(); if(label) toast(label); }
   schedule();
 }
-function addToCart(id, qty=1, target='cart'){
+function addToCart(id, qty=1, target='cart', v=''){
   const p = S.products.find(x=>x.id===id); if(!p) return;
-  addLine(target, l=>!l.b && l.id===id, ()=>({id, qty:1}), `${p.name} ajouté au panier`);
+  if(hasVar(p) && !v){ if(target==='pos') return pickVariant(p); return openProduct(id); }
+  addLine(target, l=>!l.b && l.id===id && (l.v||'')===(v||''), ()=>(v?{id, qty:1, v}:{id, qty:1}), `${p.name}${v?' — '+v:''} ajouté au panier`);
+}
+function pickVariant(p){
+  $('#overlay').innerHTML = `<div class="scrim" data-a="closeAll"><div class="modal" role="dialog" aria-modal="true" aria-label="Choisir la variante"><div class="m-h"><h2>${esc(p.name)}</h2><button class="x" data-a="closeAll" aria-label="Fermer">×</button></div>
+    <div class="m-b"><div class="pay-opts" style="grid-template-columns:repeat(auto-fill,minmax(150px,1fr))">${p.variants.map(v=>`<button class="pay-opt" data-pv="${esc(v.key)}" ${v.stock>0?'':'disabled style="opacity:.45"'}><span><b>${(v.vals||[]).map(x=>swatch(x)+esc(x)).join(' / ')}</b><br><span class="muted small">${fmt(vPrice(p,v.key))} · stock ${v.stock||0}</span></span></button>`).join('')}</div></div></div></div>`;
+  $('#overlay').querySelectorAll('[data-pv]').forEach(b=>b.onclick=e=>{ e.stopPropagation(); addToCart(p.id, 1, 'pos', b.dataset.pv); closeAll(); });
 }
 function addBundle(bid, target='cart'){
   const b = S.bundles.find(x=>x.id===bid); if(!b) return;
@@ -978,6 +1036,7 @@ function cartLines(cart){
       return {...l, key:'b:'+l.b, kind:'bundle', b, name:'Lot · '+b.name, unit:b.price, regular:bi.regular, img:b, comps:bi.comps};
     }
     const p = S.products.find(x=>x.id===l.id); if(!p) return null;
+    if(l.v){ if(!varOf(p, l.v)) return null; const unit = vPrice(p, l.v); return {...l, key:lineKey(l), kind:'product', p, name:p.name+' — '+l.v, unit, regular:unit, img:p, bulk:false}; }
     const unit = unitPrice(p, l.qty);
     return {...l, key:l.id, kind:'product', p, name:p.name, unit, regular:p.price, img:p, bulk:unit<p.price};
   }).filter(Boolean);
@@ -985,7 +1044,7 @@ function cartLines(cart){
 function orderItems(lines){
   return lines.map(l=>l.kind==='bundle'
     ? {id:'b:'+l.b.id, bundle:true, name:l.name, price:l.unit, qty:l.qty, components:l.b.items.map(i=>({id:i.id, qty:i.qty}))}
-    : {id:l.id, name:l.name, price:l.unit, qty:l.qty});
+    : {id:l.id, name:l.name, price:l.unit, qty:l.qty, ...(l.v?{variant:l.v}:{})});
 }
 /* --- Ambassadeurs (affiliation) --- */
 const PAID_ST = ['payee','preparation','expediee','livree'];
@@ -1012,8 +1071,18 @@ function affStats(a){
 }
 function expandItems(items){
   const m = {};
-  for(const i of items||[]){ if(i.bundle) (i.components||[]).forEach(c=>m[c.id]=(m[c.id]||0)+c.qty*i.qty); else m[i.id]=(m[i.id]||0)+i.qty; }
-  return Object.entries(m).map(([id,qty])=>({id,qty}));
+  for(const i of items||[]){ if(i.bundle) (i.components||[]).forEach(c=>m[c.id]=(m[c.id]||0)+c.qty*i.qty); else { const k = i.id+(i.variant?'|'+i.variant:''); m[k]=(m[k]||0)+i.qty; } }
+  return Object.entries(m).map(([k,qty])=>{ const [id, v] = k.split('|'); return v ? {id, qty, v} : {id, qty}; });
+}
+/* Déduit (sign = 1) ou remet (sign = -1) le stock, variante par variante */
+async function applyStock(list, sign){
+  const by = {}; list.forEach(x=>(by[x.id] ||= []).push(x));
+  for(const pid in by){ const p = S.products.find(x=>x.id===pid); if(!p) continue;
+    if(hasVar(p) && by[pid].some(x=>x.v)){ const vars = p.variants.map(v=>({...v})); let rest = 0;
+      by[pid].forEach(x=>{ const v = x.v && vars.find(y=>y.key===x.v); if(v) v.stock = Math.max(0, (Number(v.stock)||0) - sign*x.qty); else rest += x.qty; });
+      const tot = vars.reduce((t,v)=>t+(Number(v.stock)||0),0);
+      await patch('products', pid, {variants:vars, stock:Math.max(0, tot)}); }
+    else { const q = by[pid].reduce((t,x)=>t+x.qty,0); await patch('products', pid, {stock:Math.max(0, p.stock - sign*q)}); } }
 }
 function computeTotals(cart, promo, delivery){
   const lines = cartLines(cart);
@@ -1295,7 +1364,7 @@ function posPay(){
     try{
       if(newClient){ const {id:cid, ...cd} = newClient; await put('clients', cid, cd); }
       await put('orders', id, order);
-      for(const l of expandItems(order.items)){ const p = S.products.find(x=>x.id===l.id); if(p) await patch('products', p.id, {stock:Math.max(0,p.stock-l.qty)}); }
+      await applyStock(expandItems(order.items), 1);
       const base = {date:today(), ref:number, orderId:id, createdAt:Date.now(), createdBy:S.uid||'local'};
       if(paid>0) await put('fin-moves', newId('m'), {...base, type:'vente', account:accountFor(st.sel), amount:paid, label:rest>0?`Vente ${number} (acompte)`:`Vente ${number}`, partyId:client?client.id:''});
       if(rest>0) await put('fin-ledger', newId('l'), {...base, partyType:'client', partyId:client.id, kind:'facture', amount:rest, due,
@@ -1345,13 +1414,19 @@ function topTable(){
   ${rows.length>15&&!S.topAll?`<button class="btn ghost sm" data-a="topAll" style="margin-top:10px">Voir les ${rows.length} produits</button>`:''}`:'<p class="muted">Aucune vente sur cette période.</p>'}</div>
   <p class="muted small" style="margin:10px 0 0">Ventes payées, en préparation, expédiées ou livrées (en ligne et en caisse). Remises réparties sur les articles ; un lot est réparti entre ses produits. Marge calculée avec le prix d’achat actuel. « Jours de stock » : nombre de jours avant rupture au rythme de vente de la période.</p></div>`;
 }
+function invDiffs(){
+  const out = [];
+  for(const [k, val] of Object.entries(S.inv)){ if(val===undefined || val==='') continue; const [id, v] = k.split('|'); const p = S.products.find(x=>x.id===id); if(!p) continue;
+    const cur = v ? ((varOf(p,v)||{}).stock||0) : p.stock, n = Number(val); if(n!==cur) out.push({p, v:v||'', cur, n, d:n-cur, k}); }
+  return out;
+}
 function paneStock(){
   const q = S.aq.trim().toLowerCase(), cats = [...new Set(S.products.map(p=>p.category).filter(Boolean))].sort();
   const hasInv = pid => S.inv[pid]!==undefined && S.inv[pid]!=='';
   const list = S.products.filter(p=>(!q || (p.name+' '+(p.sku||'')).toLowerCase().includes(q)) && (!S.stCat || p.category===S.stCat)
-    && (S.stFilter==='all' || (S.stFilter==='low' && p.stock>0 && p.stock<=(p.lowStock||5)) || (S.stFilter==='out' && p.stock<=0) || (S.stFilter==='diff' && hasInv(p.id) && Number(S.inv[p.id])!==p.stock)));
+    && (S.stFilter==='all' || (S.stFilter==='low' && p.stock>0 && p.stock<=(p.lowStock||5)) || (S.stFilter==='out' && p.stock<=0) || (S.stFilter==='diff' && invDiffs().some(x=>x.p.id===p.id))));
   const valCost = S.products.reduce((t,p)=>t+costOf(p.id)*Math.max(0,p.stock),0), valSale = S.products.reduce((t,p)=>t+p.price*Math.max(0,p.stock),0);
-  const diffs = S.products.filter(p=>hasInv(p.id) && Number(S.inv[p.id])!==p.stock), diffVal = diffs.reduce((t,p)=>t+(Number(S.inv[p.id])-p.stock)*costOf(p.id),0);
+  const diffs = invDiffs(), diffVal = diffs.reduce((t,x)=>t+x.d*costOf(x.p.id),0);
   return `<div class="toolbar"><h2 style="font-size:24px;flex:1">Stock et inventaire</h2>${dl?'<button class="btn ghost" data-a="exportStock">Exporter</button>':''}<button class="btn primary" data-a="invValidate" ${diffs.length?'':'disabled'}>Valider l’inventaire${diffs.length?` (${diffs.length})`:''}</button></div>
   <div class="kpis"><div class="kpi"><span>Valeur du stock (prix d’achat)</span><b>${fmt(valCost)}</b></div><div class="kpi"><span>Valeur au prix de vente</span><b>${fmt(valSale)}</b></div>
     <div class="kpi"><span>Ruptures</span><b style="color:${S.products.some(p=>p.stock<=0)?'var(--danger)':'inherit'}">${S.products.filter(p=>p.stock<=0).length}</b></div><div class="kpi"><span>Écarts saisis</span><b style="color:${diffVal<0?'var(--danger)':'inherit'}">${diffs.length}${diffs.length?` · ${diffVal<0?'−':'+'}${fmt(Math.abs(diffVal))}`:''}</b></div></div>
@@ -1360,18 +1435,29 @@ function paneStock(){
     <div class="cats" style="margin:0">${[['all','Tous'],['low','Stock bas'],['out','Ruptures'],['diff','Écarts']].map(([k,l])=>`<button aria-pressed="${S.stFilter===k}" data-a="stFilter" data-v="${k}">${l}</button>`).join('')}</div></div>
   <p class="muted small" style="margin:0 0 10px">Inventaire : saisissez le stock réellement compté dans la colonne « Compté », vérifiez les écarts, puis touchez « Valider l’inventaire ». Pour une réception, une perte ou une casse, utilisez « Ajuster ».</p>
   <div class="panel tbl-wrap">${list.length?`<table><thead><tr><th>Produit</th><th style="text-align:right">Prix d’achat</th><th style="text-align:right">Stock</th><th style="width:110px">Compté</th><th style="text-align:right">Écart</th><th style="text-align:right">Valeur</th><th></th></tr></thead><tbody>
-  ${list.map(p=>{ const c=hasInv(p.id)?Number(S.inv[p.id]):null, d = c===null?null:c-p.stock; return `<tr><td><b>${esc(p.name)}</b><div class="muted small">${esc(p.sku||'')} · ${esc(p.category||'')}</div></td>
+  ${list.map(p=>hasVar(p) ? `<tr><td><b>${esc(p.name)}</b><div class="muted small">${esc(p.sku||'')} · ${esc(p.category||'')} · ${p.variants.length} variantes</div></td><td style="text-align:right">${costOf(p.id)?fmt(costOf(p.id)):'<span class="muted">—</span>'}</td><td style="text-align:right"><span class="pill ${p.stock<=0?'bad':p.stock<=(p.lowStock||5)?'warn':'ok'}">${p.stock}</span></td><td></td><td></td><td style="text-align:right">${costOf(p.id)?fmt(costOf(p.id)*Math.max(0,p.stock)):'—'}</td><td><button class="btn ghost sm" data-a="stockAdj" data-id="${p.id}">Ajuster</button></td></tr>`
+    + p.variants.map((v,vi)=>{ const k=p.id+'|'+v.key, c=hasInv(k)?Number(S.inv[k]):null, d=c===null?null:c-(v.stock||0); return `<tr><td style="padding-left:28px" class="small">↳ ${(v.vals||[]).map(x=>swatch(x)+' '+esc(x)).join(' / ')}</td><td></td><td style="text-align:right" class="small">${v.stock||0}</td>
+      <td><input class="input" id="inv-${p.id}-${vi}" data-inv="${esc(k)}" inputmode="numeric" value="${c===null?'':c}" placeholder="${v.stock||0}" style="padding:6px 8px" aria-label="Stock compté pour ${esc(p.name)} ${esc(v.key)}"></td>
+      <td style="text-align:right">${d===null?'':d===0?'<span class="pill ok">OK</span>':`<b class="${d>0?'amt-in':'amt-out'}">${d>0?'+':''}${d}</b>`}</td><td></td><td></td></tr>`; }).join('')
+  : (()=>{ const c=hasInv(p.id)?Number(S.inv[p.id]):null, d = c===null?null:c-p.stock; return `<tr><td><b>${esc(p.name)}</b><div class="muted small">${esc(p.sku||'')} · ${esc(p.category||'')}</div></td>
     <td style="text-align:right">${costOf(p.id)?fmt(costOf(p.id)):'<span class="muted">—</span>'}</td><td style="text-align:right"><span class="pill ${p.stock<=0?'bad':p.stock<=(p.lowStock||5)?'warn':'ok'}">${p.stock}</span></td>
     <td><input class="input" id="inv-${p.id}" data-inv="${p.id}" inputmode="numeric" value="${c===null?'':c}" placeholder="${p.stock}" style="padding:6px 8px" aria-label="Stock compté pour ${esc(p.name)}"></td>
     <td style="text-align:right">${d===null?'':d===0?'<span class="pill ok">OK</span>':`<b class="${d>0?'amt-in':'amt-out'}">${d>0?'+':''}${d}</b>`}</td>
-    <td style="text-align:right">${costOf(p.id)?fmt(costOf(p.id)*Math.max(0,p.stock)):'—'}</td><td><button class="btn ghost sm" data-a="stockAdj" data-id="${p.id}">Ajuster</button></td></tr>`; }).join('')}</tbody></table>`:'<p class="muted">Aucun produit ne correspond.</p>'}</div>
+    <td style="text-align:right">${costOf(p.id)?fmt(costOf(p.id)*Math.max(0,p.stock)):'—'}</td><td><button class="btn ghost sm" data-a="stockAdj" data-id="${p.id}">Ajuster</button></td></tr>`; })()).join('')}</tbody></table>`:'<p class="muted">Aucun produit ne correspond.</p>'}</div>
   <div class="panel tbl-wrap"><h3>Historique des mouvements</h3>${S.stockMoves.length?`<table><thead><tr><th>Date</th><th>Produit</th><th>Mouvement</th><th style="text-align:right">Quantité</th><th style="text-align:right">Stock</th><th>Note</th></tr></thead><tbody>
   ${S.stockMoves.slice(0, S.movesAll?500:30).map(m=>{ const p=S.products.find(x=>x.id===m.productId); return `<tr><td class="small" style="white-space:nowrap">${dateFr(m.createdAt)}</td><td>${esc(p?p.name:m.productName||'')}</td><td class="small">${esc(MOVE_LABEL[m.type]||m.type)}</td>
     <td style="text-align:right"><b class="${m.delta>=0?'amt-in':'amt-out'}">${m.delta>0?'+':''}${m.delta}</b></td><td style="text-align:right" class="small">${m.before} → ${m.after}</td><td class="small muted">${esc(m.note||'')}${m.by?` · ${esc(m.by)}`:''}</td></tr>`; }).join('')}</tbody></table>
   ${S.stockMoves.length>30&&!S.movesAll?'<button class="btn ghost sm" data-a="movesAll" style="margin-top:10px">Tout afficher</button>':''}`:'<p class="muted">Les inventaires et ajustements apparaîtront ici. Les ventes déduisent le stock automatiquement.</p>'}</div>`;
 }
 const MOVE_LABEL = {inventaire:'Inventaire', entree:'Réception / entrée', sortie:'Perte / casse / sortie', correction:'Correction'};
-async function recordMove(p, after, type, note, extra){
+async function recordMove(p, after, type, note, extra, vkey){
+  if(vkey && hasVar(p)){
+    const vars = p.variants.map(v=>({...v})), v = vars.find(x=>x.key===vkey); if(!v) return;
+    const before = Number(v.stock)||0; v.stock = Math.max(0, after);
+    await patch('products', p.id, {variants:vars, stock:vars.reduce((t,x)=>t+(Number(x.stock)||0),0)});
+    p.variants = vars;
+    return put('stock-moves', newId('s'), {productId:p.id, productName:p.name+' — '+vkey, variant:vkey, type, before, after:v.stock, delta:v.stock-before, note:note||'', by:S.myName||'', createdAt:Date.now(), ...(extra||{})});
+  }
   const before = p.stock;
   await patch('products', p.id, {stock:Math.max(0, after)});
   await put('stock-moves', newId('s'), {productId:p.id, productName:p.name, type, before, after:Math.max(0,after), delta:Math.max(0,after)-before, note:note||'', by:S.myName||'', createdAt:Date.now(), ...(extra||{})});
@@ -1379,7 +1465,8 @@ async function recordMove(p, after, type, note, extra){
 function stockAdjust(id){
   const p = S.products.find(x=>x.id===id); if(!p) return;
   $('#overlay').innerHTML = `<div class="scrim" data-a="closeAll"><div class="modal" role="dialog" aria-modal="true" aria-label="Ajuster le stock"><div class="m-h"><h2>Ajuster le stock</h2><button class="x" data-a="closeAll" aria-label="Fermer">×</button></div>
-    <div class="m-b"><p style="margin-top:0"><b>${esc(p.name)}</b> · stock actuel : <b>${p.stock}</b></p>
+    <div class="m-b"><p style="margin-top:0"><b>${esc(p.name)}</b> · stock actuel : <b id="ad-cur">${p.stock}</b></p>
+    ${hasVar(p)?`<div class="field"><label for="ad-v">Variante</label><select class="input" id="ad-v">${p.variants.map(v=>`<option value="${esc(v.key)}">${esc(v.key)} · stock ${v.stock||0}</option>`).join('')}</select></div>`:''}
     <div class="cats" role="group" aria-label="Type">${[['entree','+ Réception / entrée'],['sortie','− Perte / casse'],['correction','= Corriger à']].map(([k,l],i)=>`<button aria-pressed="${i===0}" data-adj="${k}">${l}</button>`).join('')}</div>
     <div class="row"><div class="field"><label for="ad-q" id="ad-ql">Quantité reçue</label><input class="input" id="ad-q" inputmode="numeric"></div>
     <div class="field" id="ad-cw"><label for="ad-c">Nouveau prix d’achat unitaire (facultatif)</label><input class="input" id="ad-c" inputmode="numeric" placeholder="${costOf(p.id)||''}"></div></div>
@@ -1388,31 +1475,31 @@ function stockAdjust(id){
     <p class="muted" id="ad-res" style="margin:0"></p><div class="small" id="ad-err" style="color:var(--danger)"></div></div>
     <div class="m-f"><button class="btn primary" id="ad-ok">Enregistrer</button></div></div></div>`;
   let type = 'entree';
-  const upd = ()=>{ const q = Math.max(0, parseInt($('#ad-q').value)||0), after = type==='entree' ? p.stock+q : type==='sortie' ? p.stock-q : q;
+  const cur = ()=> hasVar(p) ? ((varOf(p, $('#ad-v').value)||{}).stock||0) : p.stock;
+  const upd = ()=>{ $('#ad-cur').textContent = cur(); const base = cur(), q = Math.max(0, parseInt($('#ad-q').value)||0), after = type==='entree' ? base+q : type==='sortie' ? base-q : q;
     $('#ad-ql').textContent = type==='entree'?'Quantité reçue':type==='sortie'?'Quantité retirée':'Nouveau stock';
     $('#ad-cw').style.display = $('#ad-sw').style.display = type==='entree'?'':'none';
     $('#ad-res').textContent = $('#ad-q').value==='' ? '' : `Stock après l’opération : ${Math.max(0,after)}`; return after; };
   $('#overlay').querySelectorAll('[data-adj]').forEach(b=>b.onclick=e=>{ e.stopPropagation(); type=b.dataset.adj; $('#overlay').querySelectorAll('[data-adj]').forEach(x=>x.setAttribute('aria-pressed', x===b)); upd(); });
-  $('#ad-q').oninput = upd; $('#ad-q').focus();
+  $('#ad-q').oninput = upd; if($('#ad-v')) $('#ad-v').onchange = upd; $('#ad-q').focus();
   $('#ad-ok').onclick = async ()=>{ if($('#ad-q').value===''){ $('#ad-err').textContent='Indiquez une quantité.'; return; }
-    const after = upd(); if(type==='sortie' && after<0){ $('#ad-err').textContent=`Le stock ne peut pas descendre sous 0 (stock actuel ${p.stock}).`; return; }
+    const after = upd(); if(type==='sortie' && after<0){ $('#ad-err').textContent=`Le stock ne peut pas descendre sous 0 (stock actuel ${cur()}).`; return; }
     const cost = Number(($('#ad-c').value||'').replace(/\s/g,''))||0, sup = S.suppliers.find(f=>f.id===$('#ad-s').value);
     $('#ad-ok').disabled = true;
-    try{ await recordMove(p, after, type, [$('#ad-n').value.trim(), sup?'Fournisseur : '+sup.name:''].filter(Boolean).join(' · '), sup?{supplierId:sup.id}:null);
+    try{ await recordMove(p, after, type, [$('#ad-n').value.trim(), sup?'Fournisseur : '+sup.name:''].filter(Boolean).join(' · '), sup?{supplierId:sup.id}:null, hasVar(p)?$('#ad-v').value:undefined);
       if(type==='entree' && cost>0) await put('costs', p.id, {cost, updatedAt:Date.now()});
       closeAll(); toast('Stock mis à jour'); }
     catch(e){ dbErr(e); $('#ad-err').textContent='Enregistrement impossible.'; $('#ad-ok').disabled=false; } };
 }
 async function invValidate(){
-  const diffs = S.products.filter(p=>S.inv[p.id]!==undefined && S.inv[p.id]!=='' && Number(S.inv[p.id])!==p.stock);
-  if(!diffs.length) return;
-  const val = diffs.reduce((t,p)=>t+(Number(S.inv[p.id])-p.stock)*costOf(p.id),0);
+  const diffs = invDiffs(); if(!diffs.length) return;
+  const val = diffs.reduce((t,x)=>t+x.d*costOf(x.p.id),0);
   $('#overlay').innerHTML = `<div class="scrim" data-a="closeAll"><div class="modal" role="dialog" aria-modal="true" aria-label="Valider l’inventaire"><div class="m-h"><h2>Valider l’inventaire</h2><button class="x" data-a="closeAll" aria-label="Fermer">×</button></div>
-    <div class="m-b"><p style="margin-top:0">${diffs.length} produit${diffs.length>1?'s':''} vont être mis au stock compté :</p><div class="tbl-wrap"><table><tbody>${diffs.map(p=>{ const d=Number(S.inv[p.id])-p.stock; return `<tr><td>${esc(p.name)}</td><td style="text-align:right">${p.stock} → <b>${Number(S.inv[p.id])}</b></td><td style="text-align:right"><b class="${d>0?'amt-in':'amt-out'}">${d>0?'+':''}${d}</b></td></tr>`; }).join('')}</tbody></table></div>
+    <div class="m-b"><p style="margin-top:0">${diffs.length} ligne${diffs.length>1?'s':''} vont être mises au stock compté :</p><div class="tbl-wrap"><table><tbody>${diffs.map(x=>`<tr><td>${esc(x.p.name)}${x.v?' — '+esc(x.v):''}</td><td style="text-align:right">${x.cur} → <b>${x.n}</b></td><td style="text-align:right"><b class="${x.d>0?'amt-in':'amt-out'}">${x.d>0?'+':''}${x.d}</b></td></tr>`).join('')}</tbody></table></div>
     <p>Valeur des écarts au prix d’achat : <b class="${val<0?'amt-out':'amt-in'}">${val<0?'−':'+'}${fmt(Math.abs(val))}</b></p><div class="field"><label for="iv-n">Note (facultatif)</label><input class="input" id="iv-n" value="Inventaire du ${new Date().toLocaleDateString('fr-FR')}"></div></div>
     <div class="m-f"><button class="btn ghost" data-a="closeAll">Annuler</button><button class="btn primary" id="iv-ok">Valider ${diffs.length} ajustement${diffs.length>1?'s':''}</button></div></div></div>`;
   $('#iv-ok').onclick = async ()=>{ $('#iv-ok').disabled = true; const note = $('#iv-n').value.trim();
-    try{ for(const p of diffs){ await recordMove(p, Math.max(0, parseInt(S.inv[p.id])||0), 'inventaire', note); delete S.inv[p.id]; } closeAll(); toast('Inventaire validé'); schedule(); }
+    try{ for(const x of diffs){ const p = S.products.find(y=>y.id===x.p.id); await recordMove(p, Math.max(0, x.n), 'inventaire', note, null, x.v||undefined); delete S.inv[x.k]; } closeAll(); toast('Inventaire validé'); schedule(); }
     catch(e){ dbErr(e); toast('Une partie de l’inventaire n’a pas pu être enregistrée.'); $('#iv-ok').disabled=false; } };
 }
 
@@ -1823,7 +1910,7 @@ function bundleForm(b){
   const isNewB = !b; b = b || {name:'',emoji:'🎁',description:'',price:'',items:[],active:true};
   let rows = (b.items||[]).map(i=>({...i})); if(!rows.length) rows = [{id:'',qty:1},{id:'',qty:1}];
   let f = {name:b.name, emoji:b.emoji||'🎁', description:b.description||'', price:b.price, active:b.active!==false, affPct:b.affPct??''};
-  const opts = id => `<option value="">Choisir un produit…</option>${S.products.map(p=>`<option value="${p.id}" ${p.id===id?'selected':''}>${esc(p.name)} · ${fmt(p.price)}</option>`).join('')}`;
+  const opts = id => `<option value="">Choisir un produit…</option>${S.products.filter(p=>!hasVar(p)).map(p=>`<option value="${p.id}" ${p.id===id?'selected':''}>${esc(p.name)} · ${fmt(p.price)}</option>`).join('')}`;
   const read = ()=>{ f={name:$('#bf-name').value.trim(), emoji:$('#bf-emoji').value.trim()||'🎁', description:$('#bf-desc').value.trim(), price:$('#bf-price').value, active:$('#bf-active').checked, affPct:$('#bf-aff').value.trim()};
     rows=[...document.querySelectorAll('.b-row')].map(r=>({id:r.querySelector('select').value, qty:Math.max(1,parseInt(r.querySelector('input').value)||1)})); };
   const sum = ()=>rows.reduce((t,r)=>{ const p=S.products.find(x=>x.id===r.id); return t+(p?p.price*r.qty:0); },0);
@@ -1880,6 +1967,10 @@ function productForm(p){
         <div class="row"><div class="field"><label for="pf-cost">Prix d’achat unitaire (${esc(S.settings.currency)})</label><input class="input" id="pf-cost" inputmode="numeric" value="${esc(p.id&&costOf(p.id)?costOf(p.id):'')}" placeholder="Visible uniquement par l’équipe"></div><div class="field"><label>Marge par unité</label><div id="pf-mg" class="price" style="font-size:20px;padding:8px 0">—</div></div></div>
         <div class="row"><div class="field"><label for="pf-price">Prix de vente (${esc(S.settings.currency)})</label><input class="input" id="pf-price" inputmode="numeric" value="${esc(p.price)}"></div>
         <div class="field"><label for="pf-cmp">Prix barré (facultatif)</label><input class="input" id="pf-cmp" inputmode="numeric" value="${esc(p.comparePrice||'')}"></div></div>
+        <div class="panel" style="padding:14px;margin-bottom:14px"><h3 style="font-size:19px;margin-bottom:4px">Variantes : couleur, taille, pointure…</h3><p class="muted small" style="margin:0 0 10px">Facultatif. Une option par ligne, les valeurs séparées par des virgules. Chaque combinaison a son stock, et un prix si différent.</p>
+          <datalist id="opt-names"><option>Couleur</option><option>Taille</option><option>Pointure</option><option>Matière</option><option>Capacité</option><option>Modèle</option><option>Longueur</option></datalist>
+          ${[0,1,2].map(i=>`<div class="var-ed"><input class="input" id="vo-n${i}" list="opt-names" placeholder="${['Couleur','Taille','Autre option'][i]}" value="${esc((p.options||[])[i]?.name||'')}"><input class="input" id="vo-v${i}" placeholder="${['Noir, Blanc, Rouge','S, M, L, XL','…'][i]}" value="${esc(((p.options||[])[i]?.values||[]).join(', '))}"></div>`).join('')}
+          <button type="button" class="btn ghost sm" id="vo-gen">Créer / mettre à jour les variantes</button><div id="vo-table" style="margin-top:10px"></div></div>
         <div class="row"><div class="field"><label for="pf-stock">Stock</label><input class="input" id="pf-stock" inputmode="numeric" value="${esc(p.stock)}"></div>
         <div class="field"><label for="pf-low">Alerte stock bas à</label><input class="input" id="pf-low" inputmode="numeric" value="${esc(p.lowStock??5)}"></div></div>
         <div class="row"><div class="field"><label for="pf-bmin">Prix de gros dès (unités)</label><input class="input" id="pf-bmin" inputmode="numeric" value="${esc(p.bulkMin||'')}" placeholder="ex. 10"></div>
@@ -1904,6 +1995,18 @@ function productForm(p){
       else { const [it] = items.splice(k,1); if(it.kind==='old') removed.push(it.id); }
       drawGal(); }); };
   drawGal(); loadExtras(p.gallery).then(drawGal);
+  let vars = (p.variants||[]).map(v=>({...v}));
+  const readOpts = ()=>[0,1,2].map(i=>({name:$('#vo-n'+i).value.trim(), values:[...new Set($('#vo-v'+i).value.split(',').map(x=>x.trim()).filter(Boolean))]})).filter(o=>o.name && o.values.length);
+  const readVars = ()=>{ document.querySelectorAll('[data-vr]').forEach(r=>{ const v = vars[Number(r.dataset.vr)]; if(!v) return; v.stock = Math.max(0, parseInt(r.querySelector('[data-k="stock"]').value)||0); v.price = Number(r.querySelector('[data-k="price"]').value.replace(/\s/g,''))||''; v.sku = r.querySelector('[data-k="sku"]').value.trim(); }); };
+  const syncStock = ()=>{ if(vars.length){ $('#pf-stock').value = vars.reduce((t,v)=>t+(Number(v.stock)||0),0); $('#pf-stock').readOnly = true; } else $('#pf-stock').readOnly = false; };
+  const drawVars = ()=>{ $('#vo-table').innerHTML = vars.length ? `<div class="tbl-wrap"><table><thead><tr><th>Variante</th><th style="width:90px">Stock</th><th style="width:120px">Prix (vide = normal)</th><th style="width:120px">SKU</th></tr></thead><tbody>${vars.map((v,i)=>`<tr data-vr="${i}"><td><b>${(v.vals||[]).map(x=>swatch(x)+' '+esc(x)).join(' / ')}</b></td><td><input class="input" data-k="stock" inputmode="numeric" value="${v.stock||0}" style="padding:6px 8px"></td><td><input class="input" data-k="price" inputmode="numeric" value="${v.price||''}" style="padding:6px 8px"></td><td><input class="input" data-k="sku" value="${esc(v.sku||'')}" style="padding:6px 8px"></td></tr>`).join('')}</tbody></table></div><p class="muted small" style="margin:6px 0 0">Le stock total du produit est la somme des variantes.</p>` : '';
+    document.querySelectorAll('[data-vr] input').forEach(x=>x.oninput=()=>{ readVars(); syncStock(); }); syncStock(); };
+  $('#vo-gen').onclick = e=>{ e.preventDefault(); readVars(); const opts = readOpts();
+    if(!opts.length){ vars = []; drawVars(); return; }
+    let combos = [[]]; opts.forEach(o=>{ combos = combos.flatMap(c=>o.values.map(v=>[...c, v])); });
+    if(combos.length>60){ toast('60 variantes maximum : réduisez le nombre de valeurs.'); return; }
+    vars = combos.map(vals=>{ const key = vals.join(' / '), old = vars.find(v=>v.key===key); return old ? {...old, vals} : {key, vals, stock:0, price:'', sku:''}; }); drawVars(); };
+  drawVars();
   const mg = ()=>{ const c = Number($('#pf-cost').value.replace(/\s/g,''))||0, pr = Number($('#pf-price').value.replace(/\s/g,''))||0, el = $('#pf-mg');
     if(!c || !pr){ el.textContent='—'; el.style.color=''; return; } const m = pr-c; el.textContent = `${fmt(m)} · ${pct(m,pr)} %`; el.style.color = m<0?'var(--danger)':'var(--kola)'; };
   $('#pf-cost').oninput = $('#pf-price').oninput = mg; mg();
@@ -1913,7 +2016,7 @@ function productForm(p){
   $('#pf-save').onclick = async ()=>{
     const v = id=>$(id).value.trim();
     const data = {name:v('#pf-name'), category:v('#pf-cat')||'Divers', sku:v('#pf-sku'), price:Number(v('#pf-price').replace(/\s/g,'')), comparePrice:Number(v('#pf-cmp').replace(/\s/g,''))||0,
-      stock:Math.max(0,parseInt(v('#pf-stock'))||0), lowStock:Math.max(0,parseInt(v('#pf-low'))||0), emoji:v('#pf-emoji')||'📦', description:v('#pf-desc'),
+      stock:Math.max(0,parseInt(v('#pf-stock'))||0), ...(()=>{ readVars(); const opts = readOpts(); const keys = new Set(); return vars.length && opts.length ? {options:opts, variants:vars.filter(x=>!keys.has(x.key) && keys.add(x.key)).map(x=>({key:x.key, vals:x.vals, stock:Math.max(0,Number(x.stock)||0), price:Number(x.price)>0?Number(x.price):'', sku:x.sku||''}))} : {options:[], variants:[]}; })(), lowStock:Math.max(0,parseInt(v('#pf-low'))||0), emoji:v('#pf-emoji')||'📦', description:v('#pf-desc'),
       highlights:$('#pf-hl').value.trim(), details:$('#pf-details').value.trim(), specs:$('#pf-specs').value.trim(), warranty:v('#pf-war'), active:$('#pf-active').checked,
       bulkMin:Math.max(0,parseInt(v('#pf-bmin'))||0), bulkPrice:Number(v('#pf-bprice').replace(/\s/g,''))||0,
       newUntil:$('#pf-new').checked?(isNew(p)?p.newUntil:Date.now()+30*DAY):0,
@@ -1984,12 +2087,12 @@ function orderDetail(o){
 async function setOrderStatus(o, st){
   const upd = {status:st, updatedAt:Date.now()};
   if(st!=='annulee' && st!=='en_attente' && !o.stockApplied){
-    for(const i of expandItems(o.items)){ const p=S.products.find(x=>x.id===i.id); if(p) await patch('products',p.id,{stock:Math.max(0,p.stock-i.qty)}); }
+    await applyStock(expandItems(o.items), 1);
     upd.stockApplied = true;
     if(o.payment?.status==='à encaisser') upd.payment = {...o.payment, status:'encaissé'};
   }
   if(st==='annulee' && o.stockApplied){
-    for(const i of expandItems(o.items)){ const p=S.products.find(x=>x.id===i.id); if(p) await patch('products',p.id,{stock:p.stock+i.qty}); }
+    await applyStock(expandItems(o.items), -1);
     upd.stockApplied = false;
   }
   await patch('orders', o.id, upd);
@@ -2172,7 +2275,7 @@ document.addEventListener('click', async e=>{
   switch(a){
     case 'closeAll': closeAll(); break;
     case 'go': if(S.view==='product'){ try{ history.pushState({},'',location.pathname); }catch(e){} } S.view=el.dataset.v; S.aq=''; closeAll(); schedule(); window.scrollTo(0,0); break;
-    case 'cat': S.cat=el.dataset.v; schedule(); if(el.closest('.sale')) setTimeout(()=>$('#catalogue')?.scrollIntoView({behavior:'smooth'}),60); break;
+    case 'cat': S.facets={}; S.cat=el.dataset.v; schedule(); if(el.closest('.sale')) setTimeout(()=>$('#catalogue')?.scrollIntoView({behavior:'smooth'}),60); break;
     case 'clearSearch': S.q=''; S.cat='Tout'; schedule(); break;
     case 'scroll': $('#catalogue').scrollIntoView({behavior:matchMedia('(prefers-reduced-motion:reduce)').matches?'auto':'smooth'}); break;
     case 'cart': openCart(); break;
@@ -2205,11 +2308,17 @@ document.addEventListener('click', async e=>{
       $('#overlay').innerHTML = `<div class="scrim" data-a="closeAll"><div class="modal" role="dialog" aria-modal="true" aria-label="Répondre"><div class="m-h"><h2>Répondre à ${esc(r.name||'ce client')}</h2><button class="x" data-a="closeAll" aria-label="Fermer">×</button></div><div class="m-b"><div class="field"><label for="rr-t">Votre réponse publique</label><textarea class="input" id="rr-t" maxlength="600">${esc(r.reply||'')}</textarea></div></div><div class="m-f"><button class="btn primary" id="rr-s">Publier la réponse</button></div></div></div>`;
       $('#rr-s').onclick = async ()=>{ try{ await patch('reviews', id, {reply:$('#rr-t').value.trim()}); closeAll(); toast('Réponse publiée'); }catch(err){ dbErr(err); } }; break; }
     case 'galGo': { const g=$('#gal'), n=Number(el.dataset.i); if(g) g.scrollTo({left:g.clientWidth*n, behavior:'smooth'}); document.querySelectorAll('.gal-th button').forEach((b,k)=>b.setAttribute('aria-current', k===n)); break; }
-    case 'pdpQty': { const p=S.products.find(x=>x.id===S.pid); S.pqty=Math.min(Math.max(1,(S.pqty||1)+Number(el.dataset.d)), Math.max(1,p?p.stock:1)); schedule(); break; }
-    case 'pdpAdd': case 'pdpBuy': { const p=S.products.find(x=>x.id===S.pid); if(!p) break; const n=S.pqty||1, before=S.cart.reduce((t,l)=>t+(l.id===p.id?l.qty:0),0);
-      for(let k=0;k<n;k++) addLine('cart', l=>!l.b&&l.id===p.id, ()=>({id:p.id, qty:1}), '');
-      const added=S.cart.reduce((t,l)=>t+(l.id===p.id?l.qty:0),0)-before; saveCart();
-      if(added>0) toast(`${added} × ${p.name} ajouté${added>1?'s':''} au panier`);
+    case 'pdpQty': { const p=S.products.find(x=>x.id===S.pid); const sv = p&&hasVar(p)?selVariant(p):null; S.pqty=Math.min(Math.max(1,(S.pqty||1)+Number(el.dataset.d)), Math.max(1,sv?sv.stock:(p?p.stock:1))); schedule(); break; }
+    case 'optPick': { const sel = S.optSel[S.pid] ||= []; const k = Number(el.dataset.o); sel[k] = sel[k]===el.dataset.v ? undefined : el.dataset.v; S.pqty = 1; schedule(); break; }
+    case 'facet': { const o = el.dataset.o, v = el.dataset.v, arr = S.facets[o] ||= []; const i = arr.indexOf(v); if(i>=0) arr.splice(i,1); else arr.push(v); schedule(); break; }
+    case 'onlyStock': S.onlyStock = !S.onlyStock; schedule(); break;
+    case 'facetClear': S.facets = {}; S.onlyStock = false; schedule(); break;
+    case 'pdpAdd': case 'pdpBuy': { const p=S.products.find(x=>x.id===S.pid); if(!p) break; const n=S.pqty||1;
+      let v = ''; if(hasVar(p)){ const sv = selVariant(p); if(!sv){ const miss=(p.options||[]).filter((o,i)=>!(S.optSel[p.id]||[])[i]).map(o=>o.name.toLowerCase()); toast('Choisissez : '+miss.join(', ')); $('.opt')?.scrollIntoView({behavior:'smooth', block:'center'}); break; } v = sv.key; }
+      const same = l=>!l.b&&l.id===p.id&&(l.v||'')===v, before=S.cart.reduce((t,l)=>t+(same(l)?l.qty:0),0);
+      for(let k=0;k<n;k++) addLine('cart', same, ()=>(v?{id:p.id, qty:1, v}:{id:p.id, qty:1}), '');
+      const added=S.cart.reduce((t,l)=>t+(same(l)?l.qty:0),0)-before; saveCart();
+      if(added>0) toast(`${added} × ${p.name}${v?' — '+v:''} ajouté${added>1?'s':''} au panier`);
       if(a==='pdpBuy' && added>0){ if(!enabledProcs().length){ openCart(); break; } openCheckout(); } break; }
     case 'pdpCat': S.cat=el.dataset.v; S.view='shop'; try{ history.pushState({},'',location.pathname); }catch(e){} schedule(); setTimeout(()=>$('#catalogue')?.scrollIntoView({behavior:'smooth'}),80); break;
     case 'pushProduct': S.pushPre = id; S.view = 'admin'; S.tab = 'alerts'; closeAll(); schedule(); break;

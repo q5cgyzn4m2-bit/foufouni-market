@@ -113,7 +113,7 @@
     if (me) return; // l'équipe connectée n'est pas suivie
     clearTimeout(syncT);
     syncT = setTimeout(() => {
-      const items = S.cart.map(l => l.b ? { bundle: l.b, qty: l.qty } : { id: l.id, qty: l.qty });
+      const items = S.cart.map(l => l.b ? { bundle: l.b, qty: l.qty } : (l.v ? { id: l.id, qty: l.qty, v: l.v } : { id: l.id, qty: l.qty }));
       api('POST', '/api/carts', { id: cartId, items, contact }).catch(() => {});
     }, now ? 0 : 2500);
   }
@@ -178,7 +178,7 @@
     const btn = document.querySelector('[data-a="coNext"]'); btn.disabled = true; btn.textContent = 'Préparation du paiement…';
     try {
       const r = await api('POST', '/api/orders', {
-        items: S.cart.map(l => l.b ? { bundle: l.b, qty: l.qty } : { id: l.id, qty: l.qty }), promoCode: S.appliedPromo ? S.appliedPromo.code : '',
+        items: S.cart.map(l => l.b ? { bundle: l.b, qty: l.qty } : (l.v ? { id: l.id, qty: l.qty, v: l.v } : { id: l.id, qty: l.qty })), promoCode: S.appliedPromo ? S.appliedPromo.code : '',
         customer: { name: CO.name, phone: CO.phone, address: CO.address, city: CO.city, note: CO.note },
         delivery: CO.delivery, method: CO.method, cartId, ref: refCode()
       });

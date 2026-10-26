@@ -205,9 +205,22 @@ function expandItems(items) {
   const m = new Map();
   for (const i of items || []) {
     if (i.bundle) for (const c of i.components || []) m.set(c.id, (m.get(c.id) || 0) + c.qty * i.qty);
-    else m.set(i.id, (m.get(i.id) || 0) + i.qty);
+    else { const k = i.id + (i.variant ? '|' + i.variant : ''); m.set(k, (m.get(k) || 0) + i.qty); }
   }
-  return [...m].map(([id, qty]) => ({ id, qty }));
+  return [...m].map(([k, qty]) => { const [id, v] = k.split('|'); return v ? { id, qty, v } : { id, qty }; });
+}
+const hasVar = p => !!(p && Array.isArray(p.variants) && p.variants.length);
+/* Déduit le stock, variante par variante si besoin */
+function applyStock(list, sign) {
+  const by = {}; list.forEach(x => (by[x.id] ||= []).push(x));
+  for (const pid in by) {
+    const p = getDoc('products', pid); if (!p) continue;
+    if (hasVar(p) && by[pid].some(x => x.v)) {
+      const vars = p.variants.map(v => ({ ...v }));
+      by[pid].forEach(x => { const v = x.v && vars.find(y => y.key === x.v); if (v) v.stock = Math.max(0, (Number(v.stock) || 0) - sign * x.qty); });
+      putDoc('products', pid, { ...p, variants: vars, stock: vars.reduce((t, v) => t + (Number(v.stock) || 0), 0) });
+    } else { const q = by[pid].reduce((t, x) => t + x.qty, 0); putDoc('products', pid, { ...p, stock: Math.max(0, (p.stock || 0) - sign * q) }); }
+  }
 }
 /* ================= Ambassadeurs ================= */
 const PAID_ST = ['payee', 'preparation', 'expediee', 'livree'];
@@ -226,13 +239,18 @@ function computeOrder(items, promoCode, delivery, ref) {
     const q = Number(it && it.qty);
     if (!Number.isInteger(q) || q < 1 || q > 999) throw httpErr(400, 'Panier invalide.');
     if (it.bundle) { const id = String(it.bundle); if (!validId(id)) throw httpErr(400, 'Panier invalide.'); bundleQty.set(id, (bundleQty.get(id) || 0) + q); }
-    else { const id = String(it.id); if (!validId(id)) throw httpErr(400, 'Panier invalide.'); prodQty.set(id, (prodQty.get(id) || 0) + q); }
+    else { const id = String(it.id), v = String(it.v || '').slice(0, 120); if (!validId(id)) throw httpErr(400, 'Panier invalide.'); const k = id + (v ? '|' + v : ''); prodQty.set(k, (prodQty.get(k) || 0) + q); }
   }
   const lines = [];
-  for (const [id, qty] of prodQty) {
+  for (const [k, qty] of prodQty) {
+    const [id, v] = k.split('|');
     const p = getDoc('products', id);
     if (!p || p.active === false) throw httpErr(400, 'Un article de votre panier n’est plus disponible.');
-    lines.push({ id, name: p.name, price: unitPrice(p, qty), qty });
+    if (hasVar(p)) {
+      const vr = v && p.variants.find(x => x.key === v);
+      if (!vr) throw httpErr(400, `Choisissez la variante de ${p.name}.`);
+      lines.push({ id, name: p.name + ' — ' + v, price: Math.round(Number(vr.price) > 0 ? Number(vr.price) : Number(p.price) || 0), qty, variant: v });
+    } else lines.push({ id, name: p.name, price: unitPrice(p, qty), qty });
   }
   for (const [bid, qty] of bundleQty) {
     const b = getDoc('bundles', bid);
@@ -240,10 +258,13 @@ function computeOrder(items, promoCode, delivery, ref) {
     for (const c of b.items) { const p = getDoc('products', c.id); if (!p || p.active === false) throw httpErr(400, `Le lot ${b.name} n’est plus disponible.`); }
     lines.push({ id: 'b:' + bid, bundle: true, name: 'Lot · ' + b.name, price: Math.round(Number(b.price) || 0), qty, components: b.items.map(c => ({ id: c.id, qty: Number(c.qty) || 1 })) });
   }
-  for (const { id, qty } of expandItems(lines)) {
+  const totals = {};
+  for (const { id, qty, v } of expandItems(lines)) {
     const p = getDoc('products', id);
-    if (qty > (p.stock || 0)) throw httpErr(409, `Stock insuffisant pour ${p.name} (${p.stock || 0} disponible).`);
+    if (v) { const vr = (p.variants || []).find(x => x.key === v), av = vr ? Number(vr.stock) || 0 : 0; if (qty > av) throw httpErr(409, `Stock insuffisant pour ${p.name} — ${v} (${av} disponible).`); }
+    totals[id] = (totals[id] || 0) + qty;
   }
+  for (const id in totals) { const p = getDoc('products', id); if (totals[id] > (p.stock || 0)) throw httpErr(409, `Stock insuffisant pour ${p.name} (${p.stock || 0} disponible).`); }
   const s = settings();
   const subtotal = lines.reduce((t, l) => t + l.price * l.qty, 0);
   const shipping = delivery === 'livraison' ? (subtotal >= Number(s.freeFrom || 0) ? 0 : Math.round(Number(s.deliveryFee) || 0)) : 0;
@@ -268,9 +289,7 @@ function computeOrder(items, promoCode, delivery, ref) {
 const markPaid = (orderId, info) => {
   const o = getDoc('orders', orderId);
   if (!o || o.status !== 'en_attente') return false;
-  if (!o.stockApplied) for (const i of expandItems(o.items)) {
-    const p = getDoc('products', i.id); if (p) putDoc('products', i.id, { ...p, stock: Math.max(0, (p.stock || 0) - i.qty) });
-  }
+  if (!o.stockApplied) applyStock(expandItems(o.items), 1);
   putDoc('orders', orderId, { ...o, status: 'payee', stockApplied: true, updatedAt: Date.now(),
     payment: { ...o.payment, status: 'réussi', ref: info.ref || o.payment.ref, paidAt: Date.now() } });
   console.log(`Paiement confirmé ${o.number} (${o.payment.method}) ${o.total}`);
@@ -423,6 +442,7 @@ app.use('/api', (req, res, next) => {
 
 /* --- Public --- */
 const publicProduct = p => ({ id: p.id, name: p.name, sku: p.sku, category: p.category, price: p.price, comparePrice: p.comparePrice, stock: p.stock, lowStock: p.lowStock, emoji: p.emoji, image: p.image, description: p.description, active: true, createdAt: p.createdAt, bulkMin: p.bulkMin || 0, bulkPrice: p.bulkPrice || 0, newUntil: p.newUntil || 0,
+  options: Array.isArray(p.options) ? p.options : [], variants: Array.isArray(p.variants) ? p.variants.map(v => ({ key: v.key, vals: v.vals, stock: v.stock, price: v.price })) : [],
   gallery: Array.isArray(p.gallery) ? p.gallery : [], highlights: p.highlights || '', details: p.details || '', specs: p.specs || '', warranty: p.warranty || '' });
 app.get('/api/public/catalog', (req, res) => {
   const reviews = allDocs('reviews').filter(r => r.status !== 'hidden').sort((a, b) => b.createdAt - a.createdAt).slice(0, 1500)
@@ -535,7 +555,7 @@ app.post('/api/carts', h((req, res) => {
   for (const it of (Array.isArray(b.items) ? b.items : []).slice(0, 50)) {
     const q = Math.min(999, Math.max(1, parseInt(it?.qty) || 1));
     if (it?.bundle) { const x = validId(String(it.bundle)) && getDoc('bundles', String(it.bundle)); if (x) lines.push({ name: 'Lot · ' + x.name, qty: q, price: Number(x.price) || 0 }); }
-    else { const x = validId(String(it?.id)) && getDoc('products', String(it.id)); if (x) lines.push({ name: x.name, qty: q, price: unitPrice(x, q) }); }
+    else { const x = validId(String(it?.id)) && getDoc('products', String(it.id)); const v = String(it?.v || ''); const vr = v && hasVar(x) ? x.variants.find(y => y.key === v) : null; if (x) lines.push({ name: x.name + (vr ? ' — ' + v : ''), qty: q, price: vr && Number(vr.price) > 0 ? Number(vr.price) : unitPrice(x, q) }); }
   }
   if (!lines.length) { if (prev) store.del('carts', id); return res.json({ ok: true }); }
   const c = b.contact || {};

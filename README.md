@@ -139,3 +139,11 @@ Gestion › **Ambassadeurs** : ajoutez une personne (nom et téléphone obligato
 - **Prix d'achat** dans la fiche produit (visible uniquement par l'équipe), avec la marge par unité. Colonnes « Achat » et « Marge » dans la liste des produits.
 - **Tableau de bord › Produits phares** : quantités vendues, chiffre d'affaires, coût, marge, taux de marge, stock et jours de stock restants, sur 7, 30 ou 90 jours ou depuis le début. Tri par CA, quantité ou marge, export CSV.
 - **Gestion › Stock & inventaire** : valeur du stock, inventaire (saisie du stock compté, écarts, validation groupée), ajustements (réception avec nouveau prix d'achat et fournisseur, perte ou casse, correction) et historique des mouvements.
+
+
+## Variantes et filtres (couleur, taille, pointure…)
+
+- Fiche produit › **Variantes** : jusqu'à 3 options (ex. Couleur : Noir, Blanc · Taille : S, M, L), puis « Créer / mettre à jour les variantes ». Chaque combinaison a son **stock**, un **prix** si différent et un **SKU**. Le stock du produit est la somme des variantes.
+- Boutique : **filtres** par valeur d'option (pastilles de couleur), « Disponible uniquement ». Page produit : choix des options, combinaisons épuisées barrées, prix et stock de la variante.
+- Panier, caisse (choix de la variante), commandes, inventaire et ajustements fonctionnent variante par variante. Le serveur vérifie la variante, son prix et son stock.
+- Les produits à variantes ne peuvent pas être mis dans un lot.
