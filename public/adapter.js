@@ -49,7 +49,7 @@
       if (!PUSH_OK) { S._push = IS_IOS && !STANDALONE ? 'ios' : 'no'; return; }
       if (Notification.permission === 'denied') { S._push = 'denied'; return; }
       const reg = await navigator.serviceWorker.ready, sub = await reg.pushManager.getSubscription();
-      S._push = sub && Notification.permission === 'granted' ? 'on' : 'off';
+      S._push = sub && Notification.permission === 'granted' ? 'on' : 'off'; S._pushEndpoint = sub ? sub.endpoint : '';
     } catch (e) { S._push = 'no'; }
   }
   function iosHelp() {
@@ -66,7 +66,7 @@
       let sub = await reg.pushManager.getSubscription();
       if (!sub) sub = await reg.pushManager.subscribe({ userVisibleOnly: true, applicationServerKey: u8(key) });
       await api('POST', '/api/push/subscribe', { subscription: sub.toJSON(), orders: myOrders(), promo: true });
-      S._push = 'on'; schedule(); toast('🔔 Alertes activées : vous serez prévenu de chaque étape et de nos promos');
+      S._push = 'on'; S._pushEndpoint = sub.endpoint; syncCart(true); schedule(); toast('🔔 Alertes activées : vous serez prévenu de chaque étape et de nos promos');
     } catch (e) { toast('Activation impossible : ' + (e.message || 'réessayez plus tard')); }
   }
   async function syncAlerts() {
@@ -114,11 +114,11 @@
     clearTimeout(syncT);
     syncT = setTimeout(() => {
       const items = S.cart.map(l => l.b ? { bundle: l.b, qty: l.qty } : (l.v ? { id: l.id, qty: l.qty, v: l.v } : { id: l.id, qty: l.qty }));
-      api('POST', '/api/carts', { id: cartId, items, contact }).catch(() => {});
+      api('POST', '/api/carts', { id: cartId, items, contact, push: S._pushEndpoint || '' }).catch(() => {});
     }, now ? 0 : 2500);
   }
   const baseSaveCart = window.saveCart;
-  window.saveCart = function () { baseSaveCart(); syncCart(false); };
+  window.saveCart = function () { baseSaveCart(); syncCart(false); try { localStorage.setItem('ffm-cart-at', String(Date.now())); } catch (e) {} };
 
   /* ---------- démarrage ---------- */
   window.boot = async function () {
@@ -132,7 +132,105 @@
     handleReturn();
     if (window.__ffmNewRef && !me) api('POST', '/api/aff/click', { code: window.__ffmNewRef }).catch(() => {});
     affSpace();
+    try { if (new URLSearchParams(location.search).get('panier') && !me) { history.replaceState(null, '', location.pathname); setTimeout(openCart, 400); } } catch (e) {}
+    setupAssistant();
   };
+
+  /* ---------- assistant IA pour les clients ---------- */
+  const AI = { open: false, msgs: [], busy: false };
+  try { AI.msgs = JSON.parse(sessionStorage.getItem('ffm-ai') || '[]'); } catch (e) {}
+  const aiSave = () => { try { sessionStorage.setItem('ffm-ai', JSON.stringify(AI.msgs.slice(-30))); } catch (e) {} };
+  function aiFormat(t) {
+    let h = esc(t).replace(/\*\*(.+?)\*\*/g, '<b>$1</b>');
+    h = h.replace(/\[\[([A-Za-z0-9._~:@+-]{1,64})\]\]/g, (m, id) => { const p = S.products.find(x => x.id === id && x.active !== false); if (!p) return '';
+      return `<button class="ai-prod" data-ai-p="${esc(id)}"><span class="ai-pi">${pImg(p)}</span><span><b>${esc(p.name)}</b><br><span class="price" style="font-size:16px">${fmt(hasVar(p) ? minPrice(p) : p.price)}</span>${p.stock <= 0 ? ' <span class="pill bad">Rupture</span>' : ''}</span><span class="ai-go">Voir ›</span></button>`; });
+    return h.replace(/\n/g, '<br>');
+  }
+  function aiDraw() {
+    let box = $('#ai-box'); if (!box) return;
+    const name = S.settings.assistantName || 'Fanta';
+    box.innerHTML = !AI.open ? '' : `<div class="ai-panel" role="dialog" aria-label="Assistant ${esc(name)}"><div class="ai-h"><span class="mark" style="width:30px;height:30px"></span><div style="flex:1"><b>${esc(name)}</b><div class="small" style="color:var(--muted)">Assistante ${esc(S.settings.shopName)} · répond en quelques secondes</div></div><button class="x" data-ai="close" aria-label="Fermer">×</button></div>
+      <div class="ai-msgs" id="ai-msgs">${AI.msgs.length ? '' : `<div class="ai-m bot">Bonjour 👋 Je suis ${esc(name)}. Je peux vous aider à trouver un produit, comparer, ou vous expliquer la livraison et le paiement.</div>`}${AI.msgs.map(m => `<div class="ai-m ${m.role === 'user' ? 'me' : 'bot'}">${m.role === 'user' ? esc(m.content) : aiFormat(m.content)}${m.actions ? `<div class="ai-act">${m.actions}</div>` : ''}</div>`).join('')}${AI.busy ? '<div class="ai-m bot"><span class="ai-dots"><i></i><i></i><i></i></span></div>' : ''}</div>
+      ${AI.msgs.length ? '' : `<div class="ai-sug">${['Quels produits sont en promo ?', 'Comment se passe la livraison ?', 'Comment payer ?', 'Aidez-moi à choisir un cadeau'].map(q => `<button data-ai-q="${esc(q)}">${esc(q)}</button>`).join('')}</div>`}
+      <form class="ai-in" id="ai-form"><label class="sr" for="ai-t">Votre message</label><input id="ai-t" autocomplete="off" maxlength="600" placeholder="Posez votre question…" ${AI.busy ? 'disabled' : ''}><button class="btn primary" ${AI.busy ? 'disabled' : ''} aria-label="Envoyer">➤</button></form></div>`;
+    $('#ai-fab').hidden = AI.open;
+    const ms = $('#ai-msgs'); if (ms) ms.scrollTop = ms.scrollHeight;
+    const f = $('#ai-form'); if (f) { f.onsubmit = e => { e.preventDefault(); aiSend($('#ai-t').value); }; if (!AI.busy) setTimeout(() => $('#ai-t') && $('#ai-t').focus(), 50); }
+  }
+  async function aiSend(text) {
+    text = String(text || '').trim(); if (!text || AI.busy) return;
+    AI.msgs.push({ role: 'user', content: text }); AI.busy = true; aiDraw();
+    try {
+      const r = await api('POST', '/api/assistant', { messages: AI.msgs.filter(m => !m.local).map(m => ({ role: m.role, content: m.content })), cart: S.cart.filter(l => !l.b).map(l => ({ id: l.id, qty: l.qty, v: l.v || '' })), productId: S.view === 'product' ? S.pid : '' });
+      AI.msgs.push({ role: 'assistant', content: r.reply });
+    } catch (e) { AI.msgs.push({ role: 'assistant', content: e.message + (S.settings.phone ? ' Vous pouvez aussi nous appeler au ' + S.settings.phone + '.' : ''), local: true }); }
+    AI.busy = false; aiSave(); aiDraw();
+  }
+  function setupAssistant() {
+    if (me || !S.settings.assistant || $('#ai-fab')) return;
+    const css = document.createElement('style');
+    css.textContent = `#ai-fab{position:fixed;right:18px;bottom:calc(22px + env(safe-area-inset-bottom,0px));z-index:45;border:0;border-radius:999px;background:var(--indigo);color:var(--on-indigo);font:700 15px var(--f-b);padding:13px 18px;box-shadow:var(--shadow);display:flex;gap:8px;align-items:center}
+      .ai-panel{position:fixed;right:18px;bottom:calc(18px + env(safe-area-inset-bottom,0px));z-index:60;width:min(390px,calc(100vw - 24px));height:min(600px,calc(100vh - 110px));background:var(--surface);border:1px solid var(--line);border-radius:20px;box-shadow:var(--shadow);display:flex;flex-direction:column;overflow:hidden}
+      .ai-h{display:flex;gap:10px;align-items:center;padding:12px 14px;border-bottom:1px solid var(--line)}
+      .ai-msgs{flex:1;overflow:auto;padding:14px;display:flex;flex-direction:column;gap:10px}
+      .ai-m{max-width:88%;padding:10px 13px;border-radius:14px;font-size:14.5px;line-height:1.5}
+      .ai-m.bot{background:var(--surface-2);align-self:flex-start;border-bottom-left-radius:4px}.ai-m.me{background:var(--indigo);color:var(--on-indigo);align-self:flex-end;border-bottom-right-radius:4px}
+      .ai-prod{display:flex;gap:10px;align-items:center;width:100%;margin:8px 0 2px;padding:8px;border:1px solid var(--line);border-radius:12px;background:var(--surface);color:var(--ink);text-align:left}
+      .ai-pi{width:48px;height:48px;flex:none;border-radius:8px;overflow:hidden;background:#fff;display:grid;place-items:center;font-size:26px}.ai-pi img{width:100%;height:100%;object-fit:cover}
+      .ai-go{margin-left:auto;color:var(--indigo);font-weight:700;font-size:13px}
+      .ai-act{display:flex;gap:6px;flex-wrap:wrap;margin-top:8px}.ai-act button{border:1px solid var(--indigo);background:transparent;color:var(--indigo);border-radius:999px;padding:6px 12px;font-weight:700;font-size:13px}
+      .ai-sug{display:flex;gap:6px;flex-wrap:wrap;padding:0 14px 10px}.ai-sug button{border:1px solid var(--line);background:transparent;color:var(--ink);border-radius:999px;padding:6px 11px;font-size:13px}
+      .ai-in{display:flex;gap:8px;padding:10px;border-top:1px solid var(--line)}.ai-in input{flex:1;padding:10px 12px;border-radius:999px;border:1px solid var(--line);background:var(--bg)}.ai-in .btn{border-radius:50%;width:42px;height:42px;padding:0}
+      .ai-dots i{display:inline-block;width:7px;height:7px;margin:0 2px;border-radius:50%;background:var(--muted);animation:aib 1s infinite}.ai-dots i:nth-child(2){animation-delay:.15s}.ai-dots i:nth-child(3){animation-delay:.3s}
+      @keyframes aib{50%{opacity:.25;transform:translateY(-3px)}}
+      @media (max-width:760px){#ai-fab{bottom:calc(140px + env(safe-area-inset-bottom,0px));right:12px;width:52px;height:52px;padding:0;justify-content:center;font-size:22px}#ai-fab span{display:none}.ai-panel{right:6px;left:6px;width:auto;bottom:calc(6px + env(safe-area-inset-bottom,0px));height:calc(100vh - 80px)}}
+      @media (prefers-reduced-motion:reduce){.ai-dots i{animation:none}}`;
+    document.head.appendChild(css);
+    const fab = document.createElement('button'); fab.id = 'ai-fab'; fab.innerHTML = '💬 <span>Besoin d’aide ?</span>'; fab.setAttribute('aria-label', 'Discuter avec l’assistante');
+    fab.onclick = () => { AI.open = true; aiDraw(); }; document.body.appendChild(fab);
+    const box = document.createElement('div'); box.id = 'ai-box'; document.body.appendChild(box);
+    box.addEventListener('click', e => {
+      const t = e.target.closest('[data-ai],[data-ai-q],[data-ai-p],[data-ai-do]'); if (!t) return;
+      if (t.dataset.ai === 'close') { AI.open = false; aiDraw(); }
+      if (t.dataset.aiQ) aiSend(t.dataset.aiQ);
+      if (t.dataset.aiP) { openProduct(t.dataset.aiP); if (window.innerWidth < 760) { AI.open = false; aiDraw(); } }
+      if (t.dataset.aiDo === 'cart') { AI.open = false; aiDraw(); openCart(); }
+      if (t.dataset.aiDo === 'checkout') { AI.open = false; aiDraw(); if (enabledProcs().length) openCheckout(); else openCart(); }
+    });
+    /* Bon retour : un panier attend depuis plus de 30 minutes */
+    let at = 0; try { at = Number(localStorage.getItem('ffm-cart-at')) || 0; } catch (e) {}
+    const lines = cartLines(S.cart);
+    if (lines.length && at && Date.now() - at > 30 * 60e3 && !sessionStorage.getItem('ffm-ai-welcome')) {
+      try { sessionStorage.setItem('ffm-ai-welcome', '1'); } catch (e) {}
+      const off = S.settings.featuredPromo;
+      setTimeout(() => { AI.msgs.push({ role: 'assistant', local: true, content: `Bon retour 👋 Votre panier vous attend : **${lines.slice(0, 2).map(l => l.name).join(', ')}${lines.length > 2 ? '…' : ''}**. Avez-vous une question avant de commander ?${off && off.code ? ` Pensez au code **${off.code}**.` : ''}`, actions: '<button data-ai-do="cart">Voir mon panier</button><button data-ai-do="checkout">Finaliser ma commande</button>' }); AI.open = true; aiSave(); aiDraw(); }, 3500);
+    }
+    if (AI.msgs.length && sessionStorage.getItem('ffm-ai-open') === '1') { AI.open = true; aiDraw(); }
+  }
+
+  /* ---------- Gestion : assistant et paniers abandonnés ---------- */
+  let cartsData = null;
+  async function loadCarts() { try { cartsData = await api('GET', '/api/admin/carts'); } catch (e) { cartsData = { error: e.message }; } schedule(); }
+  window.paneCarts = function () {
+    if (!cartsData) { loadCarts(); return '<div class="empty"><div class="spinner"></div>Chargement…</div>'; }
+    if (cartsData.error) return `<div class="empty"><h3>Indisponible</h3><p>${esc(cartsData.error)}</p></div>`;
+    const st = S.settings, carts = cartsData.carts, val = carts.reduce((t, c) => t + c.value, 0), withPhone = carts.filter(c => c.contact && c.contact.phone).length;
+    return `<div class="toolbar"><h2 style="font-size:24px;flex:1">Assistant IA et paniers abandonnés</h2><button class="btn ghost" data-srv="cartsReload">Actualiser</button></div>
+    <div class="panel"><h3>Assistante IA pour vos clients</h3>
+      <p style="margin:0 0 12px">${cartsData.ai ? '<span class="pill ok">Connectée</span> Une bulle « Besoin d’aide ? » s’affiche dans la boutique : elle répond aux questions et recommande vos produits, à partir de votre catalogue réel.' : '<span class="pill bad">Clé API manquante</span> Ajoutez la variable <b>ANTHROPIC_API_KEY</b> sur Render pour activer l’assistante.'}</p>
+      <div class="row"><div class="field"><label for="as-name">Prénom de l’assistante</label><input class="input" id="as-name" value="${esc(st.assistantName || 'Fanta')}" maxlength="30"></div>
+      <div class="field"><label for="as-code">Code promo proposé lors des relances</label><select class="input" id="as-code"><option value="">— Aucun —</option>${S.promos.filter(p => p.active).map(p => `<option ${p.code === st.relaunchCode ? 'selected' : ''}>${esc(p.code)}</option>`).join('')}</select></div></div>
+      <div class="field"><label for="as-info">Informations utiles pour l’assistante</label><textarea class="input" id="as-info" maxlength="1500" placeholder="ex. Ouvert du lundi au samedi, 8 h – 19 h. Boutique à Hamdallaye ACI, près de la pharmacie. Livraison en 24 h à Bamako. Échange possible sous 7 jours.">${esc(st.assistantInfo || '')}</textarea></div>
+      <label class="row" style="align-items:center;gap:10px;margin-bottom:8px"><span class="switch" style="flex:0 0 42px"><input type="checkbox" id="as-on" ${st.assistantOn !== false ? 'checked' : ''}><span></span></span><span>Afficher l’assistante dans la boutique</span></label>
+      <label class="row" style="align-items:center;gap:10px;margin-bottom:14px"><span class="switch" style="flex:0 0 42px"><input type="checkbox" id="as-push" ${st.relaunchPush !== false ? 'checked' : ''}><span></span></span><span>Relancer automatiquement par notification les clients qui ont activé les alertes</span></label>
+      <button class="btn primary" data-srv="aiSave">Enregistrer</button></div>
+    <div class="kpis" style="grid-template-columns:repeat(3,1fr)"><div class="kpi"><span>Paniers abandonnés (7 j)</span><b>${carts.length}</b></div><div class="kpi"><span>Valeur à récupérer</span><b>${fmt(val)}</b></div><div class="kpi"><span>Avec numéro de téléphone</span><b>${withPhone}</b></div></div>
+    <div class="panel tbl-wrap"><h3>Paniers à relancer</h3>${carts.length ? `<table><thead><tr><th>Quand</th><th>Contenu</th><th>Valeur</th><th>Client</th><th></th></tr></thead><tbody>${carts.map(c => `<tr><td class="small" style="white-space:nowrap">${dateFr(c.updatedAt)}</td><td class="small">${c.lines.map(l => `${l.qty} × ${esc(l.name)}`).join('<br>')}</td><td><b>${fmt(c.value)}</b></td>
+      <td class="small">${c.contact && (c.contact.name || c.contact.phone) ? `${esc(c.contact.name || '')}<br>${esc(c.contact.phone || '')}` : '<span class="muted">Anonyme</span>'}${c.pushed ? '<br><span class="pill info">Relancé par notification</span>' : ''}${c.relaunchedAt ? `<br><span class="pill ok">WhatsApp ${dateFr(c.relaunchedAt)}</span>` : ''}</td>
+      <td>${c.contact && c.contact.phone ? `<button class="btn primary sm" data-srv="relance" data-id="${c.id}" style="white-space:nowrap">💬 Relancer</button>` : ''}</td></tr>`).join('')}</tbody></table>` : '<p class="muted">Aucun panier abandonné pour le moment.</p>'}
+      <p class="muted small" style="margin:10px 0 0">« Relancer » prépare un message WhatsApp personnalisé${cartsData.ai ? ', rédigé par l’assistante' : ''}, que vous relisez avant l’envoi. Le numéro est connu quand le client a commencé à remplir le formulaire de commande.</p></div>`;
+  };
+
 
   /* ---------- espace personnel de l'ambassadeur (?espace=…) ---------- */
   async function affSpace() {
@@ -281,6 +379,10 @@
     const a = el.dataset.srv;
     try {
       if (a === 'login') loginModal();
+      if (a === 'cartsReload') { cartsData = null; schedule(); }
+      if (a === 'aiSave') { const s2 = structuredClone(S.settings); s2.assistantName = $('#as-name').value.trim() || 'Fanta'; s2.relaunchCode = $('#as-code').value; s2.assistantInfo = $('#as-info').value.trim(); s2.assistantOn = $('#as-on').checked; s2.relaunchPush = $('#as-push').checked;
+        await api('PUT', '/api/admin/settings/main', s2); toast('Réglages de l’assistante enregistrés'); reload(); }
+      if (a === 'relance') { el.disabled = true; const r = await api('POST', `/api/admin/carts/${encodeURIComponent(el.dataset.id)}/relance`); window.open(r.wa, '_blank'); cartsData = null; schedule(); }
       if (a === 'alerts') { closeAll(); await enableAlerts(); }
       if (a === 'pushSend') {
         const title = $('#pu-title').value.trim(), body = $('#pu-body').value.trim(), productId = $('#pu-prod').value;

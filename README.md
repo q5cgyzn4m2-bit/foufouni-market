@@ -154,3 +154,16 @@ Gestion › **Ambassadeurs** : ajoutez une personne (nom et téléphone obligato
 - Fiche produit › **État** : Neuf, Comme neuf, Très bon état, Bon état, État correct, Reconditionné, avec des **détails sur l'état** (défauts, ancienneté, accessoires).
 - Boutique : section « **Bonnes affaires d'occasion** », catégorie **Occasion**, filtre **État**, mention de l'état sur les vignettes et encadré ♻️ sur la page produit.
 - Catalogue Facebook : `condition` = new / used / refurbished selon l'état.
+
+
+## Lots : photos des produits
+
+Sans photo propre, un lot affiche automatiquement un **montage des photos de ses produits** (2 à 4 vignettes), dans la boutique, le panier et la caisse. Chaque produit du lot apparaît avec sa vignette cliquable.
+
+## Assistante IA et relance des paniers abandonnés
+
+- **Variable Render** : `ANTHROPIC_API_KEY`, la clé API créée sur console.anthropic.com. L'usage est facturé par Anthropic selon le nombre de messages. Facultatif : `ANTHROPIC_MODEL` (par défaut `claude-haiku-5-5`).
+- Les clients voient une bulle **« Besoin d'aide ? »** : l'assistante répond à partir du catalogue réel (prix, stock, variantes, état, lots, livraison, paiement) et affiche des **fiches produit cliquables**. Elle n'invente ni prix ni promotion, et ne passe pas commande à la place du client. Limite : 30 messages par 10 minutes et par visiteur.
+- **Bon retour** : un client qui revient plus de 30 minutes après avoir rempli son panier est accueilli par l'assistante, avec les boutons « Voir mon panier » et « Finaliser ma commande ».
+- **Relance automatique par notification** du client qui a activé les alertes, au moment où le panier est considéré abandonné (`ABANDON_MINUTES`). Le code promo de relance est mentionné s'il est choisi.
+- **Gestion › Assistant & paniers** : prénom de l'assistante, informations utiles (horaires, adresse…), code promo de relance, liste des paniers abandonnés et bouton **💬 Relancer**, qui prépare un message WhatsApp personnalisé à relire avant l'envoi.
