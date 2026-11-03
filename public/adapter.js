@@ -18,7 +18,7 @@
     try {
       if (me) {
         const s = await api('GET', '/api/admin/state');
-        S.products = s.products; S.bundles = s.bundles || []; S.promos = s.promos; S.affiliates = s.affiliates || []; S.affPayouts = s.affPayouts || []; S.reviews = s.reviews || []; S.costs = Object.fromEntries((s.costs || []).map(c => [c.id, Number(c.cost) || 0])); S.stockMoves = s.stockMoves || [];
+        S.products = s.products; S.bundles = s.bundles || []; S.promos = s.promos; S.affiliates = s.affiliates || []; S.affPayouts = s.affPayouts || []; S.visits = s.visits || []; S.reviews = s.reviews || []; S.costs = Object.fromEntries((s.costs || []).map(c => [c.id, Number(c.cost) || 0])); S.stockMoves = s.stockMoves || [];
         S.clients = (s.clients||[]).sort((a,b)=>a.name.localeCompare(b.name)); S.suppliers = (s.suppliers||[]).sort((a,b)=>a.name.localeCompare(b.name));
         S.moves = s.moves || []; S.ledger = s.ledger || []; S.finConfig = s.finConfig || {}; S.orders = s.orders; S.users = s.users;
         S.settings = mergeSettings(s.settings); providers = s.providers; configured = s.configured || {}; notif = s.notifications || {};
@@ -131,6 +131,7 @@
     clearInterval(pollT); pollT = setInterval(load, me ? 15000 : 60000);
     handleReturn();
     if (window.__ffmNewRef && !me) api('POST', '/api/aff/click', { code: window.__ffmNewRef }).catch(() => {});
+    if (window.__ffmNewSrc && !me) api('POST', '/api/visit', { src: window.__ffmNewSrc }).catch(() => {});
     affSpace();
     try { if (new URLSearchParams(location.search).get('panier') && !me) { history.replaceState(null, '', location.pathname); setTimeout(openCart, 400); } } catch (e) {}
     setupAssistant();
@@ -278,7 +279,7 @@
       const r = await api('POST', '/api/orders', {
         items: S.cart.map(l => l.b ? { bundle: l.b, qty: l.qty } : (l.v ? { id: l.id, qty: l.qty, v: l.v } : { id: l.id, qty: l.qty })), promoCode: S.appliedPromo ? S.appliedPromo.code : '',
         customer: { name: CO.name, phone: CO.phone, address: CO.address, city: CO.city, note: CO.note },
-        delivery: CO.delivery, method: CO.method, cartId, ref: refCode()
+        delivery: CO.delivery, method: CO.method, cartId, ref: refCode(), source: srcCode()
       });
       addMine(r.id, r.token); syncAlerts();
       clearTimeout(syncT); cartId = newCartId(); contact = null; try { localStorage.setItem('ffm-cart-id', cartId); } catch (e) {}

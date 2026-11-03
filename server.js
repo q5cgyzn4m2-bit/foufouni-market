@@ -58,6 +58,7 @@ const newOrderId = () => 'o' + Date.now().toString(36) + rnd(5).toLowerCase();
 const httpErr = (status, message) => Object.assign(new Error(message), { status });
 const validId = id => /^[A-Za-z0-9._~:@+-]{1,64}$/.test(id);
 const today = () => new Date().toISOString().slice(0, 10);
+const addDays = (d, n) => { const x = new Date(d + 'T12:00:00Z'); x.setUTCDate(x.getUTCDate() + n); return x.toISOString().slice(0, 10); };
 
 function hashPw(pw) { const salt = crypto.randomBytes(16); return salt.toString('hex') + ':' + crypto.scryptSync(pw, salt, 64).toString('hex'); }
 function checkPw(pw, stored) {
@@ -498,6 +499,18 @@ app.post('/api/promo/check', h((req, res) => {
   res.json({ promo: p });
 }));
 
+/* Visites apportées par les liens suivis des réseaux sociaux (?src=facebook…) */
+app.post('/api/visit', h((req, res) => {
+  const src = String(req.body?.src || '').toLowerCase().replace(/[^a-z0-9_-]/g, '').slice(0, 20);
+  if (src && !limited('visit:' + req.ip + ':' + src, 1, 3600e3)) {
+    const v = getDoc('visits', src) || { count: 0, days: {} }, d = today(), days = { ...(v.days || {}) };
+    days[d] = (days[d] || 0) + 1;
+    for (const k of Object.keys(days)) if (k < addDays(d, -60)) delete days[k];
+    putDoc('visits', src, { count: (v.count || 0) + 1, days, lastAt: Date.now() });
+  }
+  res.json({ ok: true });
+}));
+
 /* Assistante IA pour les clients */
 app.post('/api/assistant', h(async (req, res) => {
   const s = settings();
@@ -703,6 +716,7 @@ app.post('/api/orders', h(async (req, res) => {
   const order = {
     number: 'FM-' + new Date().toISOString().slice(2, 10).replace(/-/g, '') + '-' + rnd(4),
     items: t.lines, subtotal: t.subtotal, discount: t.discount, shipping: t.shipping, total: t.total, promoCode: t.promoCode, affiliate: t.affiliate,
+    source: String(b.source || '').toLowerCase().replace(/[^a-z0-9_-]/g, '').slice(0, 20),
     customer, delivery, payment: { method, status: method === 'cod' ? 'à encaisser' : 'en attente', ref: '' },
     status: 'en_attente', channel: 'en ligne', stockApplied: false, createdAt: Date.now(), createdBy: 'web', token: randomToken()
   };
@@ -756,6 +770,7 @@ app.get('/api/admin/state', requireStaff, (req, res) => {
     affiliates: allDocs('affiliates').sort((a, b) => a.name.localeCompare(b.name)), affPayouts: allDocs('aff-payouts').sort((a, b) => b.createdAt - a.createdAt),
     costs: allDocs('costs'), stockMoves: allDocs('stock-moves').sort((a, b) => b.createdAt - a.createdAt).slice(0, 1000),
     ai: !!env.ANTHROPIC_API_KEY,
+    visits: allDocs('visits').map(v => ({ id: v.id, count: v.count || 0, count30: Object.entries(v.days || {}).filter(([k]) => k >= addDays(today(), -30)).reduce((t, [, n]) => t + n, 0) })),
     reviews: allDocs('reviews').sort((a, b) => b.createdAt - a.createdAt),
     bundles: allDocs('bundles').sort((a, b) => (b.createdAt || 0) - (a.createdAt || 0)),
     promos: allDocs('promos').sort((a, b) => (b.createdAt || 0) - (a.createdAt || 0)),

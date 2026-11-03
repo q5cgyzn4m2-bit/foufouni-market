@@ -167,3 +167,10 @@ Sans photo propre, un lot affiche automatiquement un **montage des photos de ses
 - **Bon retour** : un client qui revient plus de 30 minutes après avoir rempli son panier est accueilli par l'assistante, avec les boutons « Voir mon panier » et « Finaliser ma commande ».
 - **Relance automatique par notification** du client qui a activé les alertes, au moment où le panier est considéré abandonné (`ABANDON_MINUTES`). Le code promo de relance est mentionné s'il est choisi.
 - **Gestion › Assistant & paniers** : prénom de l'assistante, informations utiles (horaires, adresse…), code promo de relance, liste des paniers abandonnés et bouton **💬 Relancer**, qui prépare un message WhatsApp personnalisé à relire avant l'envoi.
+
+
+## Studio réseaux sociaux et liens suivis
+
+- **Gestion › Studio réseaux** : choisissez un sujet (la boutique, les soldes, les nouveautés, l'occasion, un code promo, un lot ou un produit), un réseau (Facebook, Instagram, WhatsApp, TikTok, X, LinkedIn, affiche avec QR code) et un format aux bonnes dimensions (publication carrée 1080×1080, portrait 1080×1350, story 1080×1920, couverture Facebook 1640×624, X 1600×900, LinkedIn 1200×627).
+- Le visuel est dessiné aux couleurs de la marque, avec un texte de publication adapté au réseau (hashtags pour Instagram et TikTok, texte court pour X…).
+- **Liens suivis** : `?src=facebook`, avec `&p=ID` (produit), `&cat=Soldes` (catégorie) ou `&promo=CODE` (le code s'applique tout seul au panier). Les visites (`/api/visit`) et les commandes (`source`) de chaque réseau s'affichent dans le Studio.

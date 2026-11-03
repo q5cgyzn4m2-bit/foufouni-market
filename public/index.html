@@ -613,6 +613,8 @@ function render(){
   else { S.view='shop'; m.innerHTML = viewShop(); }
   if(fid){ const el = document.getElementById(fid); if(el && el.closest('#main,#topbar')){ el.focus(); try{ if(ss!=null) el.setSelectionRange(ss,ss); }catch(e){} } }
   if(S.view==='admin' && S.tab==='team') resolveNames();
+  if(S.view==='admin' && S.tab==='studio') setTimeout(studioRender, 0);
+  if(!S._deep && S.ready && S.products.length && window.__ffmCat){ const c = window.__ffmCat; if(['Tout','Soldes','Nouveautés','Occasion','Lots'].includes(c) || S.products.some(p=>p.category===c)){ S.cat = c; setTimeout(()=>$('#catalogue')?.scrollIntoView({behavior:'smooth'}), 400); } window.__ffmCat = null; }
   if(!S._deep && S.ready && S.products.length){ S._deep = true; let pid=''; try{ pid = new URLSearchParams(location.search).get('p')||''; }catch(e){}
     if(pid && S.products.some(x=>x.id===pid && x.active!==false) && S.view==='shop'){ S.view='product'; S.pid=pid; S.pqty=1; schedule(); } }
   if(S.isAdmin && !S._remShown){ const n = reminders().late.length; if(n){ S._remShown = true; toast(`${n} créance${n>1?'s':''} client arrivée${n>1?'s':''} à échéance : touchez la cloche pour relancer`); } }
@@ -838,7 +840,7 @@ function shareProduct(id){
       <a class="pay-opt" href="https://wa.me/?text=${encodeURIComponent(txt)}" target="_blank" rel="noopener" style="text-decoration:none;color:inherit"><span class="pay-logo" style="background:#25D366">W</span><b>WhatsApp</b></a>
       <a class="pay-opt" href="https://www.facebook.com/sharer/sharer.php?u=${encodeURIComponent(link)}" target="_blank" rel="noopener" style="text-decoration:none;color:inherit"><span class="pay-logo" style="background:#1877F2">f</span><b>Facebook</b></a>
       <button class="pay-opt" data-sh="copy"><span class="pay-logo" style="background:#5D6070">🔗</span><span><b>Copier le lien</b><br><span class="muted small" style="word-break:break-all">${esc(link)}</span></span></button></div>
-    ${S.isAdmin?`<button class="btn ghost block" data-a="visual" data-id="${p.id}" style="margin-top:14px">🖼 Créer un visuel à publier</button>`:''}${S.isAdmin&&isServer()?`<button class="btn ghost block" data-a="pushProduct" data-id="${p.id}" style="margin-top:8px">📣 Annoncer aux clients (notification)</button>`:''}</div></div></div>`;
+    ${S.isAdmin?`<button class="btn ghost block" data-a="visual" data-id="${p.id}" style="margin-top:14px">🖼 Créer un visuel à publier</button><button class="btn ghost block" data-a="studioFor" data-id="${p.id}" style="margin-top:8px">📐 Tous les formats (Studio réseaux)</button>`:''}${S.isAdmin&&isServer()?`<button class="btn ghost block" data-a="pushProduct" data-id="${p.id}" style="margin-top:8px">📣 Annoncer aux clients (notification)</button>`:''}</div></div></div>`;
   $('#overlay').querySelectorAll('[data-sh]').forEach(b=>b.onclick = async e=>{ e.stopPropagation();
     if(b.dataset.sh==='copy'){ try{ await navigator.clipboard.writeText(link); toast('Lien copié'); }catch(err){ toast(link); } }
     if(b.dataset.sh==='native'){ try{ await navigator.share({title:p.name, text:txt.split('\n')[0], url:link}); }catch(err){} } });
@@ -858,6 +860,161 @@ function bogolanBand(ctx, x, y, w, h){
   ctx.restore();
 }
 function rrect(ctx, x, y, w, h, r){ ctx.beginPath(); ctx.moveTo(x+r, y); ctx.arcTo(x+w, y, x+w, y+h, r); ctx.arcTo(x+w, y+h, x, y+h, r); ctx.arcTo(x, y+h, x, y, r); ctx.arcTo(x, y, x+w, y, r); ctx.closePath(); }
+/* --- Studio réseaux sociaux --- */
+const FORMATS = {
+  facebook:[['post','Publication carrée',1080,1080],['post45','Publication portrait',1080,1350],['story','Story',1080,1920],['cover','Couverture de page',1640,624]],
+  instagram:[['post45','Publication',1080,1350],['post','Publication carrée',1080,1080],['story','Story / Reel',1080,1920]],
+  whatsapp:[['story','Statut',1080,1920],['post','Image à partager',1080,1080]],
+  tiktok:[['story','Vidéo / photo',1080,1920]],
+  x:[['wide','Publication',1600,900]],
+  linkedin:[['wide2','Publication',1200,627]],
+  qr:[['post45','Affiche avec QR code',1080,1350]]
+};
+const loadImg = src => new Promise(ok=>{ const im=new Image(); im.onload=()=>ok(im); im.onerror=()=>ok(null); im.src=src; });
+function subjectList(){
+  const live = S.products.filter(p=>p.active!==false);
+  const out = [['shop','La boutique']];
+  if(live.some(onSale)) out.push(['sale','Les soldes']);
+  if(live.some(isNew)) out.push(['new','Les nouveautés']);
+  if(live.some(isUsed)) out.push(['used','L’occasion']);
+  S.promos.filter(p=>p.active).forEach(p=>out.push(['promo:'+p.code,'Code promo '+p.code]));
+  S.bundles.filter(b=>b.active!==false && bundleInfo(b).ok).forEach(b=>out.push(['bundle:'+b.id,'Lot · '+b.name]));
+  live.forEach(p=>out.push(['product:'+p.id,'Produit · '+p.name]));
+  return out;
+}
+function subjectData(key){
+  const st = S.settings, live = S.products.filter(p=>p.active!==false && p.stock>0), withImg = a => [...a].sort((x,y)=>(!!y.image)-(!!x.image));
+  const pics = a => withImg(a).slice(0,4).map(p=>p.image||p.emoji||'📦');
+  const [kind, id] = key.split(':');
+  if(kind==='product'){ const p = S.products.find(x=>x.id===id); if(!p) return null; const off = p.comparePrice>p.price ? Math.round((1-p.price/p.comparePrice)*100) : 0;
+    return {kicker:(p.category||'')+(isUsed(p)?' · Occasion · '+condLabel(p):''), title:p.name, sub:p.description||lines(p.highlights).slice(0,2).join(' · '), price:hasVar(p)&&minPrice(p)<p.price?'Dès '+fmt(minPrice(p)):fmt(p.price), old:off?fmt(p.comparePrice):'', badge:off?`−${off}%`:isNew(p)?'NOUVEAU':'', imgs:[p.image||p.emoji||'📦', ...(p.gallery||[]).map(extraSrc).filter(Boolean)].slice(0,1), link:'p='+encodeURIComponent(p.id), tag:p.category}; }
+  if(kind==='bundle'){ const b = S.bundles.find(x=>x.id===id); if(!b) return null; const bi = bundleInfo(b); const off = bi.regular>b.price ? Math.round((1-b.price/bi.regular)*100) : 0;
+    return {kicker:'Lot · Achat groupé', title:b.name, sub:bi.comps.map(c=>`${c.qty} × ${c.p.name}`).join(' · '), price:fmt(b.price), old:off?fmt(bi.regular):'', badge:off?`−${off}%`:'', imgs:bi.comps.slice(0,4).map(c=>c.p.image||c.p.emoji||'📦'), link:'cat=Lots', tag:'Lots'}; }
+  if(kind==='promo'){ const pr = S.promos.find(x=>x.code===id); if(!pr) return null; const lab = pr.type==='percent'?`−${pr.value} %`:pr.type==='fixed'?`−${fmt(pr.value)}`:'Livraison offerte';
+    return {kicker:'Code promo', title:pr.type==='shipping'?'La livraison offerte':`${lab} sur votre commande`, sub:`${pr.minOrder?'Dès '+fmt(pr.minOrder)+' d’achat':'Sur toute la boutique'}${pr.expiresAt?' · jusqu’au '+dateOnly(pr.expiresAt):''}`, code:pr.code, imgs:pics(live), link:'promo='+encodeURIComponent(pr.code), tag:'Promo'}; }
+  if(kind==='sale'){ const a = live.filter(onSale); const mx = Math.max(...a.map(p=>Math.round((1-p.price/p.comparePrice)*100)));
+    return {kicker:'Soldes', title:`Jusqu’à −${mx} %`, sub:`${a.length} article${a.length>1?'s':''} en promotion, en quantité limitée`, badge:`−${mx}%`, imgs:pics(a), link:'cat=Soldes', tag:'Soldes'}; }
+  if(kind==='new'){ const a = live.filter(isNew); return {kicker:'Nouveautés', title:'Ça vient d’arriver', sub:a.slice(0,3).map(p=>p.name).join(' · '), badge:'NOUVEAU', imgs:pics(a), link:'cat='+encodeURIComponent('Nouveautés'), tag:'Nouveautés'}; }
+  if(kind==='used'){ const a = live.filter(isUsed); return {kicker:'Bonnes affaires d’occasion', title:'Comme neuf, prix doux', sub:'Articles contrôlés, état décrit honnêtement', imgs:pics(a), link:'cat=Occasion', tag:'Occasion'}; }
+  return {kicker:'Boutique en ligne · '+st.city, title:st.tagline||st.shopName, sub:st.intro||'', imgs:pics(live), link:'', tag:''};
+}
+function studioLink(d, net){ const q = [d.link, 'src='+net].filter(Boolean).join('&'); return shopUrl()+'?'+q; }
+async function drawPoster(d, W, H, net){
+  const c = document.createElement('canvas'); c.width=W; c.height=H; const ctx = c.getContext('2d');
+  const SERIF='"Cormorant Garamond", Georgia, serif', SANS='Manrope, "Segoe UI", Arial, sans-serif';
+  try{ await Promise.all([document.fonts.load('700 80px "Cormorant Garamond"'), document.fonts.load('700 40px Manrope')]); }catch(e){}
+  const gold='#C9A45C', ivory='#F2EBDD', muted='#A99E8A', st=S.settings, u=Math.min(W,H)/1080, wide=W/H>1.3;
+  ctx.fillStyle='#100E0B'; ctx.fillRect(0,0,W,H);
+  const g = ctx.createRadialGradient(W*0.2,H*0.15,0,W*0.2,H*0.15,Math.max(W,H)*0.8); g.addColorStop(0,'rgba(201,164,92,.16)'); g.addColorStop(1,'rgba(201,164,92,0)'); ctx.fillStyle=g; ctx.fillRect(0,0,W,H);
+  const band = Math.round(Math.max(22, 36*u)); bogolanBand(ctx,0,0,W,band); bogolanBand(ctx,0,H-band,W,band);
+  const pad = Math.round(60*u);
+  // zone image
+  const box = wide ? {x:pad, y:band+pad, w:Math.round(W*0.42), h:H-2*(band+pad)} : {x:pad, y:band+pad*(H>1500?2.2:1), w:W-2*pad, h:Math.round(H*(H>1500?0.45:H>1200?0.46:0.42))};
+  ctx.save(); rrect(ctx, box.x, box.y, box.w, box.h, 34*u); ctx.fillStyle='#FFFFFF'; ctx.fill(); ctx.clip();
+  const imgs = (d.imgs||[]).slice(0,4), n = Math.max(1, imgs.length), cols = n>1?2:1, rows = n>2?2:1;
+  const cells = n===3 ? [[0,0,1,2],[1,0,1,1],[1,1,1,1]] : Array.from({length:n},(_,i)=>[i%cols, Math.floor(i/cols), 1, 1]);
+  for(let i=0;i<n;i++){ const [cx,cy,cw,ch] = cells[i], gx = box.x + cx*box.w/cols, gy = box.y + cy*box.h/rows, gw = cw*box.w/cols, gh = ch*box.h/rows, src = imgs[i];
+    if(n>1){ ctx.fillStyle = (cx+cy)%2 ? '#F6F1E7' : '#FFFFFF'; ctx.fillRect(gx,gy,gw,gh); }
+    if(src && /^(data:|blob:|\/|https?:)/.test(src)){ const im = await loadImg(src); if(im){ const k = Math.max(gw/im.width, gh/im.height); ctx.drawImage(im, gx+(gw-im.width*k)/2, gy+(gh-im.height*k)/2, im.width*k, im.height*k); } }
+    else { ctx.fillStyle='#F6F1E7'; ctx.fillRect(gx,gy,gw,gh); ctx.font = `${Math.round(Math.min(gw,gh)*0.5)}px "Apple Color Emoji","Segoe UI Emoji","Noto Color Emoji",sans-serif`; ctx.textAlign='center'; ctx.textBaseline='middle'; ctx.fillText(src||'📦', gx+gw/2, gy+gh/2+6); ctx.textBaseline='alphabetic'; }
+    if(n>1){ ctx.strokeStyle='rgba(16,14,11,.15)'; ctx.lineWidth=3; ctx.strokeRect(gx,gy,gw,gh); } }
+  ctx.restore(); ctx.strokeStyle='rgba(201,164,92,.6)'; ctx.lineWidth=3*u; rrect(ctx, box.x, box.y, box.w, box.h, 34*u); ctx.stroke();
+  if(d.badge){ const r = 92*u, cx = box.x+box.w-r*0.75, cy = box.y+r*0.75; ctx.fillStyle=gold; ctx.beginPath(); ctx.arc(cx,cy,r,0,7); ctx.fill(); ctx.fillStyle='#14110D'; ctx.textAlign='center'; let fs = r*0.62; ctx.font=`800 ${fs}px ${SANS}`; while(ctx.measureText(d.badge).width > r*1.6 && fs>10){ fs-=2; ctx.font=`800 ${fs}px ${SANS}`; } ctx.fillText(d.badge, cx, cy+fs*0.35); }
+  // zone texte : mise en page adaptative (le texte se réduit pour tenir au-dessus du bouton)
+  const tx = wide ? box.x+box.w+pad : pad, tw = wide ? W-tx-pad : W-2*pad-(net==='qr'?330*u:0);
+  const centerStory = !wide && H>1500, X = centerStory ? W/2 : tx;
+  const top = wide ? band+pad+20*u : box.y+box.h+pad*0.9;
+  const ctaTop = H-band-pad*0.9-82*u-(H>1500?70*u:58*u);
+  const bottom = wide ? ctaTop-30*u : ctaTop-34*u;
+  const layout = (f, draw)=>{
+    let y = top; const al = centerStory ? 'center' : 'left'; ctx.textAlign = al;
+    const ks = 26*u*Math.max(0.8,f); y += ks; if(draw){ ctx.fillStyle=gold; ctx.font=`800 ${Math.round(ks)}px ${SANS}`; ctx.fillText(String(d.kicker||'').toUpperCase(), X, y); }
+    y += 22*u*f;
+    const ts = (wide ? 78 : H>1500 ? 96 : 84)*u*f; ctx.font=`700 ${ts}px ${SERIF}`; const tl = wrapLines(ctx, d.title, tw, 2);
+    for(const l of tl){ y += ts*0.98; if(draw){ ctx.fillStyle=ivory; ctx.font=`700 ${ts}px ${SERIF}`; ctx.fillText(l, X, y); } }
+    if(d.sub){ const ss = 31*u*Math.max(0.85,f); ctx.font=`500 ${ss}px ${SANS}`; const sl = wrapLines(ctx, d.sub, tw, wide?3:2); y += 14*u*f;
+      for(const l of sl){ y += ss*1.35; if(draw){ ctx.fillStyle=muted; ctx.font=`500 ${ss}px ${SANS}`; ctx.fillText(l, X, y); } } }
+    if(d.price){ const ps = (H>1500?112:wide?86:96)*u*f, pt = d.price.replace(/[\u202f\u00a0]/g,' '); y += 22*u*f + ps*0.82;
+      if(draw){ ctx.fillStyle=gold; ctx.font=`700 ${ps}px ${SERIF}`; ctx.fillText(pt, X, y); }
+      if(d.old){ ctx.font=`700 ${ps}px ${SERIF}`; const pw = ctx.measureText(pt).width, os = 38*u*Math.max(0.85,f); ctx.font=`500 ${os}px ${SANS}`; const ot = d.old.replace(/[\u202f\u00a0]/g,' '), ow = ctx.measureText(ot).width;
+        const fits = pw+24*u+ow <= tw;
+        if(centerStory || !fits){ y += os*1.5; if(draw){ ctx.fillStyle=muted; ctx.fillText(ot, X, y); ctx.fillRect(centerStory?X-ow/2:X, y-os*0.34, ow, 3*u); } }
+        else if(draw){ const ox = X+pw+24*u, oy = y-8*u; ctx.textAlign='left'; ctx.fillStyle=muted; ctx.fillText(ot, ox, oy); ctx.fillRect(ox, oy-os*0.34, ow, 3*u); ctx.textAlign=al; } } }
+    if(d.code){ const cs = 56*u*f; ctx.font=`800 ${cs}px ${SANS}`; const cw = ctx.measureText(d.code).width+80*u*f, chh = cs*1.85, cx0 = centerStory ? W/2-cw/2 : X; y += 26*u*f;
+      if(draw){ ctx.setLineDash([14*u,10*u]); ctx.strokeStyle=gold; ctx.lineWidth=4*u; rrect(ctx, cx0, y, cw, chh, 18*u); ctx.stroke(); ctx.setLineDash([]); ctx.fillStyle=gold; ctx.textAlign='center'; ctx.fillText(d.code, cx0+cw/2, y+chh*0.67); ctx.textAlign=al; }
+      y += chh; }
+    return y;
+  };
+  let f = centerStory ? 1.45 : wide ? 1.3 : 1; while(f>0.5 && layout(f,false) > bottom) f -= 0.04;
+  if(centerStory || wide){ const hgt = layout(f,false)-top, shift = Math.max(0, (bottom-top-hgt)/2); ctx.save(); ctx.translate(0, shift); layout(f,true); ctx.restore(); }
+  else layout(f,true);
+  // pied : appel à l'action + QR code éventuel
+  const host = (()=>{ try{ return new URL(shopUrl()).host; }catch(e){ return ''; } })();
+  const cta = net==='qr' ? 'Commandez en ligne' : 'Commandez sur '+(host||st.shopName), fy = H-band-pad*0.9;
+  if(net==='qr'){ const qs = Math.round(300*u), qx = W-pad-qs, qy = H-band-pad-qs; await drawQR(ctx, studioLink(d,'qr'), qx, qy, qs); ctx.fillStyle=muted; ctx.textAlign='center'; ctx.font=`600 ${Math.round(24*u)}px ${SANS}`; ctx.fillText('Scannez pour commander', qx+qs/2, qy-14*u); ctx.textAlign='left'; }
+  let cfs = 32*u*(centerStory?1.3:1); ctx.font=`800 ${Math.round(cfs)}px ${SANS}`; const maxW = net==='qr'?W-2*pad-330*u:tw; while(ctx.measureText(cta).width+70*u > maxW && cfs>14){ cfs-=1; ctx.font=`800 ${Math.round(cfs)}px ${SANS}`; }
+  const bw = Math.min(maxW, ctx.measureText(cta).width+70*u), bh = 82*u*(centerStory?1.2:1), bx = centerStory ? W/2-bw/2 : (wide?tx:pad), by = ctaTop-(centerStory?16*u:0);
+  if(net!=='qr' || W>0){ ctx.fillStyle=gold; rrect(ctx, bx, by, bw, bh, bh/2); ctx.fill(); ctx.fillStyle='#14110D'; ctx.textAlign='center'; ctx.fillText(cta, bx+bw/2, by+bh*0.63); }
+  ctx.textAlign = centerStory?'center':'left'; ctx.fillStyle=gold; ctx.font=`700 ${Math.round(40*u)}px ${SERIF}`; ctx.fillText(st.shopName, centerStory?W/2:(wide?tx:pad), fy);
+  if(st.phone){ ctx.fillStyle=ivory; ctx.font=`600 ${Math.round(26*u)}px ${SANS}`; ctx.textAlign = centerStory?'center':'right'; ctx.fillText('📞 '+st.phone, centerStory?W/2:(net==='qr'?W-pad-320*u:W-pad), centerStory?fy+40*u:fy); }
+  return await new Promise(ok=>c.toBlob(b=>ok(b),'image/png'));
+}
+/* QR code dessiné à partir d'une librairie légère, chargée seulement si besoin */
+async function drawQR(ctx, text, x, y, size){
+  try{ if(!window.qrcode) await new Promise((ok,ko)=>{ const sc=document.createElement('script'); sc.src='https://cdnjs.cloudflare.com/ajax/libs/qrcode-generator/1.4.4/qrcode.min.js'; sc.onload=ok; sc.onerror=ko; document.head.appendChild(sc); });
+    const q = window.qrcode(0,'M'); q.addData(text); q.make(); const n = q.getModuleCount(), m = size/(n+4);
+    ctx.fillStyle='#FFFFFF'; rrect(ctx, x, y, size, size, 14); ctx.fill(); ctx.fillStyle='#14110D';
+    for(let r=0;r<n;r++) for(let cc=0;cc<n;cc++) if(q.isDark(r,cc)) ctx.fillRect(Math.floor(x+(cc+2)*m), Math.floor(y+(r+2)*m), Math.ceil(m), Math.ceil(m));
+  }catch(e){ ctx.fillStyle='#FFFFFF'; rrect(ctx, x, y, size, size, 14); ctx.fill(); ctx.fillStyle='#14110D'; ctx.font='600 22px sans-serif'; ctx.textAlign='center'; ctx.fillText('QR indisponible', x+size/2, y+size/2); ctx.textAlign='left'; }
+}
+function studioCaption(d, net){
+  const st = S.settings, link = studioLink(d, net), tags = ['#Bamako','#Mali','#'+st.shopName.normalize('NFD').replace(/[^A-Za-z0-9]/g,''), d.tag?'#'+String(d.tag).normalize('NFD').replace(/[^A-Za-z0-9]/g,''):'' ].filter(Boolean).join(' ');
+  const price = d.price ? `${d.price}${d.old?' au lieu de '+d.old:''}` : '';
+  const head = d.code ? `🎁 ${d.title} avec le code ${d.code}` : `${d.kicker&&d.kicker!==d.title?'✨ '+d.kicker+' : ':''}${d.title}`;
+  const pay = 'Orange Money, Wave ou paiement à la livraison';
+  if(net==='x') return `${head}${price?' — '+price:''}\n${link}\n#Bamako #Mali`.slice(0,280);
+  if(net==='whatsapp') return `${head}${price?'\n💰 '+price:''}\n👉 ${link}${st.phone?'\n📞 '+st.phone:''}`;
+  if(net==='linkedin') return `${head}${price?' — '+price+'.':'.'}\n${d.sub||st.intro||''}\nCommande en ligne, livraison à ${st.city}, ${pay}.\n${link}`;
+  if(net==='instagram' || net==='tiktok') return `${head}${price?'\n💰 '+price:''}\n${d.sub?d.sub+'\n':''}🚚 Livraison à ${st.city} · 💳 ${pay}\n🔗 Lien dans la bio : ${link}\n\n${tags} #ShoppingMali #MadeInMali`;
+  return `${head}${price?'\n💰 '+price:''}\n${d.sub?d.sub+'\n':''}🚚 Livraison à ${st.city}${st.freeFrom?', offerte dès '+fmt(st.freeFrom):''}\n💳 ${pay}\n👉 Commandez ici : ${link}${st.phone?'\n📞 '+st.phone:''}\n\n${tags}`;
+}
+S.studio = {subject:'shop', net:'facebook', fmt:'post'};
+function paneStudio(){
+  const ss = S.studio, subj = subjectList(); if(!subj.some(x=>x[0]===ss.subject)) ss.subject='shop';
+  const fmts = FORMATS[ss.net]; if(!fmts.some(f=>f[0]===ss.fmt)) ss.fmt = fmts[0][0];
+  const d = subjectData(ss.subject), link = d ? studioLink(d, ss.net) : '';
+  const stats = studioStats();
+  return `<div class="toolbar"><h2 style="font-size:24px;flex:1">Studio réseaux sociaux</h2></div>
+  <div class="panel"><div class="row" style="align-items:flex-end"><div class="field" style="flex:2 1 280px"><label for="sd-subj">Que voulez-vous promouvoir ?</label><select class="input" id="sd-subj" data-studio="subject">${subj.map(([k,l])=>`<option value="${esc(k)}" ${k===ss.subject?'selected':''}>${esc(l)}</option>`).join('')}</select></div></div>
+    <div class="cats" role="group" aria-label="Réseau" style="margin:6px 0 10px">${Object.entries(NETS).map(([k,l])=>`<button aria-pressed="${ss.net===k}" data-a="sdNet" data-v="${k}">${l}</button>`).join('')}</div>
+    <div class="cats" role="group" aria-label="Format" style="margin:0">${fmts.map(([k,l,w,h])=>`<button aria-pressed="${ss.fmt===k}" data-a="sdFmt" data-v="${k}">${l} · ${w}×${h}</button>`).join('')}</div></div>
+  <div class="row" style="align-items:flex-start;gap:20px">
+    <div class="panel" style="flex:1 1 320px;text-align:center"><div id="sd-prev" style="min-height:240px;display:grid;place-items:center"><div class="spinner"></div></div></div>
+    <div class="panel" style="flex:1 1 320px"><div class="field"><label for="sd-cap">Texte de publication (${esc(NETS[ss.net])})</label><textarea class="input" id="sd-cap" style="min-height:200px">${esc(d?studioCaption(d, ss.net):'')}</textarea></div>
+      <div class="field"><label>Lien suivi pour ${esc(NETS[ss.net])}</label><div class="row" style="gap:8px"><input class="input" id="sd-link" value="${esc(link)}" readonly style="flex:1"><button class="btn ghost sm" data-a="sdCopyLink" style="flex:0">Copier</button></div></div>
+      <div class="fin-actions"><button class="btn primary" data-a="sdDl">⬇️ Télécharger l’image</button>${navigator.canShare?'<button class="btn ghost" data-a="sdShare">↗ Partager</button>':''}<button class="btn ghost" data-a="sdCopy">Copier le texte</button></div>
+      <p class="muted small" style="margin:0">Chaque réseau a son propre lien : les visites et les commandes qu’il apporte s’affichent ci-dessous.</p></div></div>
+  <div class="panel tbl-wrap"><h3>Résultats par réseau (30 derniers jours)</h3><table><thead><tr><th>Réseau</th>${isServer()?'<th style="text-align:right">Visites</th>':''}<th style="text-align:right">Commandes</th><th style="text-align:right">Chiffre d’affaires</th></tr></thead><tbody>
+    ${stats.map(r=>`<tr><td><b>${esc(r.label)}</b></td>${isServer()?`<td style="text-align:right">${r.visits}</td>`:''}<td style="text-align:right">${r.orders}</td><td style="text-align:right">${fmt(r.revenue)}</td></tr>`).join('')}</tbody></table>
+    <p class="muted small" style="margin:10px 0 0">Une commande est attribuée au réseau du dernier lien suivi cliqué par le client (pendant 30 jours).</p></div>`;
+}
+function studioStats(){
+  const since = Date.now()-30*864e5, rows = {};
+  Object.entries(NETS).forEach(([k,l])=>rows[k]={label:l, visits:0, orders:0, revenue:0});
+  (S.visits||[]).forEach(v=>{ if(rows[v.id]) rows[v.id].visits = v.count30!==undefined ? v.count30 : v.count||0; });
+  S.orders.forEach(o=>{ if(!o.source || o.status==='annulee' || o.status==='en_attente' || (o.createdAt||0)<since) return; const r = rows[o.source] || (rows[o.source]={label:o.source, visits:0, orders:0, revenue:0}); r.orders++; r.revenue += o.total; });
+  return Object.values(rows);
+}
+async function studioRender(){
+  const box = $('#sd-prev'); if(!box) return;
+  const ss = S.studio, d = subjectData(ss.subject); if(!d){ box.textContent='Sujet introuvable.'; return; }
+  const [, , W, H] = FORMATS[ss.net].find(f=>f[0]===ss.fmt) || FORMATS[ss.net][0];
+  const key = JSON.stringify([ss, S.products.length, S.settings.shopName]); if(S._sdKey===key && S._sdBlob){ if(!box.querySelector('img')) box.innerHTML = `<img src="${S._sdUrl}" alt="Aperçu du visuel" style="max-width:100%;max-height:62vh;border-radius:12px;border:1px solid var(--line)">`; return; }
+  S._sdKey = key; box.innerHTML = '<div class="spinner"></div>';
+  const blob = await drawPoster(d, W, H, ss.net); if(S._sdKey!==key) return;
+  if(S._sdUrl) URL.revokeObjectURL(S._sdUrl); S._sdBlob = blob; S._sdUrl = URL.createObjectURL(blob);
+  box.innerHTML = `<img src="${S._sdUrl}" alt="Aperçu du visuel" style="max-width:100%;max-height:62vh;border-radius:12px;border:1px solid var(--line)"><div class="muted small" style="margin-top:8px">${W} × ${H} px</div>`;
+}
 async function makeVisual(p, story){
   const W = 1080, H = story ? 1920 : 1080, c = document.createElement('canvas'); c.width = W; c.height = H; const ctx = c.getContext('2d');
   const SERIF = '"Cormorant Garamond", Georgia, "Times New Roman", serif', SANS = 'Manrope, "Segoe UI", Arial, sans-serif';
@@ -1149,6 +1306,7 @@ function promoBox(target){
   return `<label class="sr" for="promo-${target}">Code promo</label><div class="promo-in"><input class="input" id="promo-${target}" placeholder="Code promo" autocomplete="off"><button class="btn ghost" data-a="applyPromo" data-t="${target}">Appliquer</button></div><div class="small" id="promo-msg-${target}" style="margin-top:6px;color:var(--danger)"></div>`;
 }
 function openCart(){
+  try{ const pc = localStorage.getItem('ffm-promo'); if(pc && !S.appliedPromo){ const sub = computeTotals(S.cart, null, 'livraison').subtotal; validatePromo(pc, sub).then(r=>{ if(r.promo && !S.appliedPromo){ S.appliedPromo = r.promo; localStorage.removeItem('ffm-promo'); toast(`Code ${pc} appliqué`); const d=$('#drawer-body'); if(d) d.innerHTML = cartBody(); } }).catch(()=>{}); } }catch(e){}
   const rc = refCode();
   if(rc && !S.appliedPromo) validatePromo(rc, 0).then(r=>{ if(r.promo && r.promo.affiliate && !S.appliedPromo){ S.appliedPromo = r.promo; if(r.promo.value) toast(`Remise ambassadeur ${rc} appliquée : −${r.promo.value} %`); const d=$('#drawer-body'); if(d) d.innerHTML = cartBody(); } }).catch(()=>{});
   $('#overlay').innerHTML = `<div class="drawer-wrap" data-a="closeAll"><aside class="drawer" role="dialog" aria-modal="true" aria-label="Panier">
@@ -1222,6 +1380,7 @@ async function coNext(){
       items:orderItems(t.lines),
       subtotal:t.subtotal, discount:t.discount, shipping:t.shipping, total:t.total,
       promoCode:S.appliedPromo?S.appliedPromo.code:'',
+      source:srcCode(),
       affiliate:S.appliedPromo&&S.appliedPromo.affiliate?{id:S.appliedPromo.affiliate.id, code:S.appliedPromo.code, discountPct:S.appliedPromo.value, commission:affCommission(t.lines, S.appliedPromo.value)}:null,
       customer:{name:CO.name, phone:CO.phone, address:CO.address, city:CO.city, note:CO.note},
       delivery:CO.delivery, payment:{method:CO.method, ref, status:CO.method==='cod'?'à encaisser':'réussi'+(S.settings.testMode?' (test)':'')},
@@ -1882,10 +2041,10 @@ function billForm(type, x){
 }
 
 /* --- Gestion --- */
-const TABS = [['dash','Tableau de bord'],['products','Produits'],['stock','Stock & inventaire'],['bundles','Lots'],['orders','Commandes'],['promos','Codes promo'],['affiliates','Ambassadeurs'],['reviews','Avis clients'],['alerts','Alertes clients'],['carts','Assistant & paniers'],['payments','Paiements'],['team','Équipe']];
+const TABS = [['dash','Tableau de bord'],['products','Produits'],['stock','Stock & inventaire'],['bundles','Lots'],['orders','Commandes'],['promos','Codes promo'],['affiliates','Ambassadeurs'],['reviews','Avis clients'],['studio','Studio réseaux'],['alerts','Alertes clients'],['carts','Assistant & paniers'],['payments','Paiements'],['team','Équipe']];
 function viewAdmin(){
   const pending = S.orders.filter(o=>o.status==='en_attente'||(o.status==='payee'&&!o.stockApplied)).length;
-  const panes = {dash:paneDash, products:paneProducts, stock:paneStock, bundles:paneBundles, orders:paneOrders, promos:panePromos, affiliates:paneAffiliates, reviews:paneReviews, alerts:()=>window.paneAlerts?window.paneAlerts():'', carts:()=>window.paneCarts?window.paneCarts():'', payments:panePayments, team:paneTeam};
+  const panes = {dash:paneDash, products:paneProducts, stock:paneStock, bundles:paneBundles, orders:paneOrders, promos:panePromos, affiliates:paneAffiliates, reviews:paneReviews, studio:paneStudio, alerts:()=>window.paneAlerts?window.paneAlerts():'', carts:()=>window.paneCarts?window.paneCarts():'', payments:panePayments, team:paneTeam};
   return `<div class="admin"><nav class="side" aria-label="Gestion">${TABS.filter(([k])=>!['alerts','carts'].includes(k)||isServer()).map(([k,l])=>`<button data-a="tab" data-v="${k}" ${S.tab===k?'aria-current="page"':''}>${l}${k==='orders'&&pending?`<span class="pill warn">${pending}</span>`:''}</button>`).join('')}</nav>
     <section>${panes[S.tab]()}</section></div>`;
 }
@@ -2296,6 +2455,7 @@ document.addEventListener('change', async e=>{
   if(a==='selPromo'){ t.checked?S.selPromos.add(t.dataset.id):S.selPromos.delete(t.dataset.id); schedule(); }
   if(a==='selAll'){ S.selPromos = t.checked ? new Set(S.promos.map(p=>p.code)) : new Set(); schedule(); }
   if(t.dataset.top==='sort'){ S.topSort=t.value; schedule(); }
+  if(t.dataset.studio==='subject'){ S.studio.subject=t.value; schedule(); }
   if(t.dataset.stk==='cat'){ S.stCat=t.value; schedule(); }
   if(t.dataset.fin==='acc'){ S.trAcc=t.value; schedule(); }
   if(t.dataset.fin==='type'){ S.trType=t.value; schedule(); }
@@ -2325,6 +2485,14 @@ document.addEventListener('click', async e=>{
     case 'newBundle': bundleForm(null); break;
     case 'newAff': affForm(null); break;
     case 'shareProduct': shareProduct(id); break;
+    case 'sdNet': S.studio.net = el.dataset.v; schedule(); break;
+    case 'sdFmt': S.studio.fmt = el.dataset.v; schedule(); break;
+    case 'sdCopyLink': try{ await navigator.clipboard.writeText($('#sd-link').value); toast('Lien copié'); }catch(err){ toast($('#sd-link').value); } break;
+    case 'sdCopy': try{ await navigator.clipboard.writeText($('#sd-cap').value); toast('Texte copié'); }catch(err){} break;
+    case 'sdDl': { if(!S._sdBlob) break; const ss=S.studio, name = `${S.settings.shopName.normalize('NFD').replace(/[^A-Za-z0-9]+/g,'-').toLowerCase()}-${ss.subject.replace(/[^a-z0-9]+/gi,'-')}-${ss.net}-${ss.fmt}.png`;
+      if(dl) save(name, S._sdBlob); else { const a=document.createElement('a'); a.href=S._sdUrl; a.download=name; document.body.appendChild(a); a.click(); a.remove(); } break; }
+    case 'sdShare': { if(!S._sdBlob) break; const f = new File([S._sdBlob], 'visuel.png', {type:'image/png'}); try{ if(navigator.canShare({files:[f]})) await navigator.share({files:[f], text:$('#sd-cap').value}); else toast('Partage non disponible : téléchargez l’image.'); }catch(err){} break; }
+    case 'studioFor': S.studio.subject = 'product:'+id; S.view='admin'; S.tab='studio'; closeAll(); schedule(); break;
     case 'topDays': S.topDays=Number(el.dataset.v); S.topAll=false; schedule(); break;
     case 'topAll': S.topAll=true; schedule(); break;
     case 'stFilter': S.stFilter=el.dataset.v; schedule(); break;
@@ -2413,6 +2581,15 @@ document.addEventListener('click', async e=>{
   }
 });
 
+const NETS = {facebook:'Facebook', instagram:'Instagram', whatsapp:'WhatsApp', tiktok:'TikTok', x:'X (Twitter)', linkedin:'LinkedIn', qr:'Affiche / QR code'};
+function captureSrc(){
+  try{ const q = new URLSearchParams(location.search), src = (q.get('src')||'').toLowerCase().replace(/[^a-z0-9_-]/g,'').slice(0,20);
+    if(src){ localStorage.setItem('ffm-src', JSON.stringify({src, at:Date.now()})); window.__ffmNewSrc = src; }
+    const pc = (q.get('promo')||'').trim().toUpperCase().replace(/[^A-Z0-9_-]/g,'').slice(0,30); if(pc) localStorage.setItem('ffm-promo', pc);
+    const cat = q.get('cat'); if(cat) window.__ffmCat = cat; }catch(e){}
+}
+function srcCode(){ try{ const r = JSON.parse(localStorage.getItem('ffm-src')||'null'); if(r && Date.now()-r.at < 30*864e5) return r.src; }catch(e){} return ''; }
+captureSrc();
 captureRef();
 renderTop(); renderBnav();
 </script>
