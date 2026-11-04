@@ -896,7 +896,8 @@ function parseVideo(url){
     return {kind:'YouTube', tall, thumb:`https://i.ytimg.com/vi/${m[1]}/hqdefault.jpg`, embed:`https://www.youtube-nocookie.com/embed/${m[1]}?autoplay=1&rel=0&playsinline=1&modestbranding=1`}; }
   if((m = u.match(/tiktok\.com\/.*\/video\/(\d+)/))) return {kind:'TikTok', tall:true, embed:`https://www.tiktok.com/embed/v2/${m[1]}`};
   if((m = u.match(/instagram\.com\/(?:reel|reels|p|tv)\/([A-Za-z0-9_-]+)/))) return {kind:'Instagram', tall:true, embed:`https://www.instagram.com/reel/${m[1]}/embed`};
-  if(/facebook\.com\/.+\/(videos|reel)\/|fb\.watch\/|facebook\.com\/(watch|reel)/.test(u)) return {kind:'Facebook', tall:/reel/.test(u), embed:`https://www.facebook.com/plugins/video.php?href=${encodeURIComponent(u)}&show_text=false&autoplay=true`};
+  if(/^https?:\/\/((vm|vt)\.tiktok\.com|(www\.)?tiktok\.com\/t\/|fb\.watch|(www\.|m\.|web\.)?facebook\.com\/share\/)/.test(u)) return {kind:'short', short:true};
+  if(/facebook\.com\/.+\/(videos|reel)\/|facebook\.com\/(watch|reel)/.test(u)) return {kind:'Facebook', tall:/reel/.test(u), embed:`https://www.facebook.com/plugins/video.php?href=${encodeURIComponent(u)}&show_text=false&autoplay=true`};
   if((m = u.match(/vimeo\.com\/(?:video\/)?(\d+)/))) return {kind:'Vimeo', tall:false, embed:`https://player.vimeo.com/video/${m[1]}?autoplay=1`};
   // Plateformes chinoises
   if((m = u.match(/bilibili\.com\/video\/(BV[0-9A-Za-z]{10})/))) return {kind:'Bilibili', cn:true, tall:false, embed:`https://player.bilibili.com/player.html?bvid=${m[1]}&autoplay=1&high_quality=1&danmaku=0`};
@@ -908,7 +909,7 @@ function parseVideo(url){
   if(/weibo\.(com|cn)\/(tv\/show|\d+\/|detail\/)/.test(u)) return {kind:'Weibo', cn:true, tall:false, link:u};
   if(/channels\.weixin\.qq\.com|mp\.weixin\.qq\.com/.test(u)) return {kind:'WeChat', cn:true, tall:true, link:u};
   if(/^https:\/\/.+\.(mp4|webm|mov|m3u8)(\?.*)?$/i.test(u)) return {kind:/alicdn|taobao|tmall|1688|aliexpress|alibaba/i.test(u)?'Alibaba (1688 / Taobao / AliExpress)':'Vidéo', cn:/alicdn|taobao|tmall|1688/i.test(u), tall:false, file:u};
-  if(/^https?:\/\/(v\.douyin\.com|b23\.tv|v\.kuaishou\.com|m\.tb\.cn|e\.tb\.cn|qr\.1688\.com|a\.aliexpress\.com)\//.test(u)) return {kind:'short', short:true};
+  if(/^https?:\/\/(v\.douyin\.com|b23\.tv|v\.kuaishou\.com|m\.tb\.cn|e\.tb\.cn|qr\.1688\.com|a\.aliexpress\.com|youtube\.com\/shorts\/?$)\//.test(u)) return {kind:'short', short:true};
   return null;
 }
 function videoBlock(p){
@@ -917,7 +918,8 @@ function videoBlock(p){
   const inner = v.file ? `<video src="${esc(v.file)}" controls playsinline preload="metadata" ${poster?`poster="${esc(poster)}"`:''}></video>`
     : v.link ? `<a class="face" href="${esc(v.link)}" target="_blank" rel="noopener" style="background-image:url('${esc(poster)}')"><span class="play">▶</span><span class="vt">${esc(p.lpVideoTitle||'Voir la vidéo')} · sur ${esc(v.kind)} ↗</span></a>`
     : `<button class="face" data-a="lpPlay" data-v="${esc(v.embed)}" style="background-image:url('${esc(poster)}')" aria-label="Lire la vidéo"><span class="play">▶</span><span class="vt">${esc(p.lpVideoTitle||'Voir '+p.name+' en vidéo')}</span></button>`;
-  return `<section class="lp-sec" id="lp-video"><h2>${esc(p.lpVideoTitle||'Découvrez-le en vidéo')}</h2><div class="vid${v.tall?' tall':''}">${inner}</div></section>`;
+  const fallback = v.link || v.file ? '' : `<p class="small muted" style="text-align:center;margin:10px 0 0">La vidéo ne s’affiche pas ? <a href="${esc(p.lpVideo)}" target="_blank" rel="noopener" style="color:var(--indigo);font-weight:700">L’ouvrir sur ${esc(v.kind)} ↗</a></p>`;
+  return `<section class="lp-sec" id="lp-video"><h2>${esc(p.lpVideoTitle||'Découvrez-le en vidéo')}</h2><div class="vid${v.tall?' tall':''}">${inner}</div>${fallback}</section>`;
 }
 function viewLanding(){
   const p = S.products.find(x=>x.id===S.pid && x.active!==false); if(!p){ S.view='shop'; return viewShop(); }
@@ -2365,8 +2367,13 @@ function productForm(p){
       else { const [it] = items.splice(k,1); if(it.kind==='old') removed.push(it.id); }
       drawGal(); }); };
   drawGal(); loadExtras(p.gallery).then(drawGal);
-  { const chk = ()=>{ const val = $('#lp-vid').value.trim(), v = parseVideo(val), ok = $('#lp-vid-ok'); ok.textContent = !val ? '' : !v ? 'Lien non reconnu : copiez le lien de la vidéo depuis la plateforme (YouTube, TikTok, Facebook, Instagram, Douyin, Bilibili, Youku…).' : v.short ? 'Lien court : ouvrez-le dans votre navigateur, puis copiez ici l’adresse complète qui s’affiche.' : `✓ Vidéo ${v.kind} reconnue${v.link?' (elle s’ouvrira sur la plateforme)':' (lecture dans la page)'}${v.cn?'. Attention : les plateformes chinoises sont souvent lentes ou bloquées hors de Chine ; pour vos clients au Mali, republiez si possible la vidéo sur YouTube ou TikTok.':''}`; ok.style.color = !v || v.short ? 'var(--danger)' : v.cn ? '#C98A2E' : 'var(--kola)'; };
-    $('#lp-vid').oninput = chk; chk(); }
+  { const chk = ()=>{ const val = $('#lp-vid').value.trim(), v = parseVideo(val), ok = $('#lp-vid-ok'); ok.textContent = !val ? '' : !v ? 'Lien non reconnu : copiez le lien de la vidéo depuis la plateforme (YouTube, TikTok, Facebook, Instagram, Douyin, Bilibili, Youku…).' : v.short ? (window.resolveLink ? 'Lien court : développement automatique…' : 'Lien court : ouvrez-le dans votre navigateur, puis copiez ici l’adresse complète qui s’affiche.') : `✓ Vidéo ${v.kind} reconnue${v.link?' (elle s’ouvrira sur la plateforme)':' (lecture dans la page)'}${v.cn?'. Attention : les plateformes chinoises sont souvent lentes ou bloquées hors de Chine ; pour vos clients au Mali, republiez si possible la vidéo sur YouTube ou TikTok.':''}`; ok.style.color = !v || v.short ? 'var(--danger)' : v.cn ? '#C98A2E' : 'var(--kola)'; };
+    let tmr = null;
+    const expand = async ()=>{ const val = $('#lp-vid').value.trim(), v = parseVideo(val); if(!v || !v.short || !window.resolveLink) return;
+      const ok = $('#lp-vid-ok'); ok.textContent = 'Lien court : développement en cours…'; ok.style.color = 'var(--muted)';
+      try{ const full = await window.resolveLink(val); if(full && full !== val){ $('#lp-vid').value = full; chk(); if(parseVideo(full) && !parseVideo(full).short) ok.textContent = '✓ Lien court développé automatiquement · ' + ok.textContent.replace(/^✓ /,''); } else chk(); }
+      catch(e){ chk(); } };
+    $('#lp-vid').oninput = ()=>{ chk(); clearTimeout(tmr); tmr = setTimeout(expand, 500); }; chk(); expand(); }
   // vue 360°
   let spinItems = (p.spin||[]).map(id=>({kind:'old', id})), spinRemoved = [];
   const drawSpin = ()=>{ const b = $('#pf-spin'); if(b) b.textContent = spinItems.length ? `${spinItems.length} photo${spinItems.length>1?'s':''} pour la vue 360°${spinItems.length<4?' (4 minimum pour l’afficher)':''}` : 'Aucune vue 360° pour l’instant.'; };

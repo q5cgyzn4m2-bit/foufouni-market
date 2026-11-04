@@ -514,6 +514,26 @@ app.post('/api/visit', h((req, res) => {
   res.json({ ok: true });
 }));
 
+/* Développe un lien court de partage (TikTok, Facebook, Douyin…) en lien complet.
+   Seuls ces services sont interrogés, pour éviter tout appel vers d'autres adresses. */
+const SHORT_HOSTS = new Set(['vm.tiktok.com', 'vt.tiktok.com', 'www.tiktok.com', 'tiktok.com', 'fb.watch', 'www.facebook.com', 'facebook.com', 'm.facebook.com', 'web.facebook.com',
+  'v.douyin.com', 'b23.tv', 'v.kuaishou.com', 'm.tb.cn', 'e.tb.cn', 'youtu.be']);
+app.post('/api/admin/resolve-link', requireStaff, h(async (req, res) => {
+  let u = String(req.body?.url || '').trim().slice(0, 600);
+  for (let i = 0; i < 6; i++) {
+    let x; try { x = new URL(u); } catch (e) { throw httpErr(400, 'Lien invalide.'); }
+    if (!/^https?:$/.test(x.protocol) || !SHORT_HOSTS.has(x.hostname)) break;
+    let r; try {
+      r = await fetch(u, { method: 'GET', redirect: 'manual', signal: AbortSignal.timeout(8000),
+        headers: { 'user-agent': 'Mozilla/5.0 (iPhone; CPU iPhone OS 17_0 like Mac OS X) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/17.0 Mobile/15E148 Safari/604.1', 'accept-language': 'fr-FR,fr' } });
+    } catch (e) { break; }
+    const loc = r.headers.get('location'); if (!loc) break;
+    const next = new URL(loc, u).href; if (next === u) break; u = next;
+    if (/\/login|checkpoint/.test(u)) break;
+  }
+  res.json({ url: u });
+}));
+
 /* Rédaction de la page de vente par l'assistante (équipe) */
 app.post('/api/admin/ai/landing', requireStaff, h(async (req, res) => {
   const pid = String(req.body?.productId || ''), p = validId(pid) && getDoc('products', pid);

@@ -264,6 +264,7 @@
     reload();
   };
   window.lpAI = productId => api('POST', '/api/admin/ai/landing', { productId });
+  window.resolveLink = async url => (await api('POST', '/api/admin/resolve-link', { url })).url;
   window.validatePromo = async (code, subtotal) => { try { return await api('POST', '/api/promo/check', { code, subtotal }); } catch (e) { return { err: e.message }; } };
   window.enabledProcs = () => Object.entries(S.settings.processors).filter(([k, v]) => v.enabled && PROCESSORS[k] && providers.includes(k));
 
