@@ -486,6 +486,7 @@ const publicProduct = p => ({ id: p.id, name: p.name, sku: p.sku, category: p.ca
   condition: p.condition || 'neuf', conditionNote: p.conditionNote || '',
   lpHook: p.lpHook || '', lpSub: p.lpSub || '', lpProblem: p.lpProblem || '', lpSolution: p.lpSolution || '', lpUsages: p.lpUsages || '', lpFaq: p.lpFaq || '', lpOffer: p.lpOffer || '', lpUntil: p.lpUntil || '',
   angleCaps: Array.isArray(p.angleCaps) ? p.angleCaps : [], spin: Array.isArray(p.spin) ? p.spin : [],
+  lpVideo: p.lpVideo || '', lpVideoTitle: p.lpVideoTitle || '',
   options: Array.isArray(p.options) ? p.options : [], variants: Array.isArray(p.variants) ? p.variants.map(v => ({ key: v.key, vals: v.vals, stock: v.stock, price: v.price })) : [],
   gallery: Array.isArray(p.gallery) ? p.gallery : [], highlights: p.highlights || '', details: p.details || '', specs: p.specs || '', warranty: p.warranty || '' });
 app.get('/api/public/catalog', (req, res) => {
