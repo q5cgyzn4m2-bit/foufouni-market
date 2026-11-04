@@ -894,7 +894,7 @@ function parseVideo(url){
   const u = String(url||'').trim(); if(!u) return null; let m;
   if((m = u.match(/(?:youtube\.com\/(?:watch\?(?:.*&)?v=|shorts\/|embed\/|live\/)|youtu\.be\/)([A-Za-z0-9_-]{11})/))) { const tall = /shorts\//.test(u);
     return {kind:'YouTube', tall, thumb:`https://i.ytimg.com/vi/${m[1]}/hqdefault.jpg`, embed:`https://www.youtube-nocookie.com/embed/${m[1]}?autoplay=1&rel=0&playsinline=1&modestbranding=1`}; }
-  if((m = u.match(/tiktok\.com\/.*\/video\/(\d+)/))) return {kind:'TikTok', tall:true, embed:`https://www.tiktok.com/embed/v2/${m[1]}`};
+  if((m = u.match(/tiktok\.com\/.*\/video\/(\d+)/))) return {kind:'TikTok', tall:true, embed:`https://www.tiktok.com/player/v1/${m[1]}?autoplay=1&controls=1&progress_bar=1&play_button=1&volume_control=1&fullscreen_button=1&music_info=0&description=0&rel=0&native_context_menu=0&closed_caption=0`};
   if((m = u.match(/instagram\.com\/(?:reel|reels|p|tv)\/([A-Za-z0-9_-]+)/))) return {kind:'Instagram', tall:true, embed:`https://www.instagram.com/reel/${m[1]}/embed`};
   if(/^https?:\/\/((vm|vt)\.tiktok\.com|(www\.)?tiktok\.com\/t\/|fb\.watch|(www\.|m\.|web\.)?facebook\.com\/share\/)/.test(u)) return {kind:'short', short:true};
   if(/facebook\.com\/.+\/(videos|reel)\/|facebook\.com\/(watch|reel)/.test(u)) return {kind:'Facebook', tall:/reel/.test(u), embed:`https://www.facebook.com/plugins/video.php?href=${encodeURIComponent(u)}&show_text=false&autoplay=true`};
@@ -2693,7 +2693,7 @@ document.addEventListener('click', async e=>{
     case 'newAff': affForm(null); break;
     case 'shareProduct': shareProduct(id); break;
     case 'openLanding': openLanding(id); break;
-    case 'lpPlay': { const box = el.closest('.vid'); if(box) box.innerHTML = `<iframe src="${esc(el.dataset.v)}" title="Vidéo du produit" allow="autoplay; encrypted-media; picture-in-picture; fullscreen" allowfullscreen loading="lazy"></iframe>`; break; }
+    case 'lpPlay': { const box = el.closest('.vid'); if(box) box.innerHTML = `<iframe src="${esc(el.dataset.v)}" title="Vidéo du produit" allow="autoplay; encrypted-media; picture-in-picture; fullscreen; clipboard-write" allowfullscreen referrerpolicy="strict-origin-when-cross-origin"></iframe>`; break; }
     case 'lpVideoGo': $('#lp-video')?.scrollIntoView({behavior:'smooth', block:'center'}); break;
     case 'lpZoom': { const p = S.products.find(x=>x.id===S.pid); const src = p && galleryFor(p)[Number(el.dataset.v)]; if(src) zoomBox(src); break; }
     case 'sdNet': S.studio.net = el.dataset.v; schedule(); break;

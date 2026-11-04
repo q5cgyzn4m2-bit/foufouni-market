@@ -440,7 +440,7 @@ app.use((req, res, next) => {
   };
   next();
 });
-app.use((req, res, next) => { res.set({ 'X-Content-Type-Options': 'nosniff', 'Referrer-Policy': 'same-origin', 'X-Frame-Options': 'DENY' }); next(); });
+app.use((req, res, next) => { res.set({ 'X-Content-Type-Options': 'nosniff', 'Referrer-Policy': 'strict-origin-when-cross-origin', 'X-Frame-Options': 'DENY' }); next(); });
 
 /* --- Webhook Wave : corps brut obligatoire pour vérifier la signature --- */
 app.post('/webhooks/wave', express.raw({ type: () => true, limit: '200kb' }), (req, res) => {
