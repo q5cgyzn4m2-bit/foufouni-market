@@ -174,3 +174,12 @@ Sans photo propre, un lot affiche automatiquement un **montage des photos de ses
 - **Gestion › Studio réseaux** : choisissez un sujet (la boutique, les soldes, les nouveautés, l'occasion, un code promo, un lot ou un produit), un réseau (Facebook, Instagram, WhatsApp, TikTok, X, LinkedIn, affiche avec QR code) et un format aux bonnes dimensions (publication carrée 1080×1080, portrait 1080×1350, story 1080×1920, couverture Facebook 1640×624, X 1600×900, LinkedIn 1200×627).
 - Le visuel est dessiné aux couleurs de la marque, avec un texte de publication adapté au réseau (hashtags pour Instagram et TikTok, texte court pour X…).
 - **Liens suivis** : `?src=facebook`, avec `&p=ID` (produit), `&cat=Soldes` (catégorie) ou `&promo=CODE` (le code s'applique tout seul au panier). Les visites (`/api/visit`) et les commandes (`source`) de chaque réseau s'affichent dans le Studio.
+
+
+## Page de vente par produit (`/?lp=ID`)
+
+- Page longue, pensée pour les publicités : accroche, prix et économie, choix des options, bouton « Commander maintenant » toujours visible, compte à rebours si l'offre a une date de fin.
+- **Angles visuels** : chaque photo devient une section légendée (« Sous tous les angles »), zoom en touchant l'image, **vue à 360°** à partir de 4 à 36 photos prises tout autour du produit.
+- **Angles de vente** : le problème et la solution, les points forts, « Idéal pour… » (usages), le détail et les caractéristiques, les avis vérifiés, la confiance (livraison, paiement, garantie, contact) et une FAQ complétée automatiquement.
+- Fiche produit › **✨ Page de vente** : tous les textes, les légendes des photos et la vue 360°. Le bouton **« Rédiger avec l'assistante »** propose les textes (nécessite `ANTHROPIC_API_KEY`) ; ils ne remplissent que les champs vides et doivent être relus.
+- Le Studio réseaux et le bouton Partager donnent le lien de la page de vente ; l'aperçu Facebook et WhatsApp reprend l'accroche.

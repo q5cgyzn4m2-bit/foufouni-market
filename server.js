@@ -484,6 +484,8 @@ app.use('/api', (req, res, next) => {
 /* --- Public --- */
 const publicProduct = p => ({ id: p.id, name: p.name, sku: p.sku, category: p.category, price: p.price, comparePrice: p.comparePrice, stock: p.stock, lowStock: p.lowStock, emoji: p.emoji, image: p.image, description: p.description, active: true, createdAt: p.createdAt, bulkMin: p.bulkMin || 0, bulkPrice: p.bulkPrice || 0, newUntil: p.newUntil || 0,
   condition: p.condition || 'neuf', conditionNote: p.conditionNote || '',
+  lpHook: p.lpHook || '', lpSub: p.lpSub || '', lpProblem: p.lpProblem || '', lpSolution: p.lpSolution || '', lpUsages: p.lpUsages || '', lpFaq: p.lpFaq || '', lpOffer: p.lpOffer || '', lpUntil: p.lpUntil || '',
+  angleCaps: Array.isArray(p.angleCaps) ? p.angleCaps : [], spin: Array.isArray(p.spin) ? p.spin : [],
   options: Array.isArray(p.options) ? p.options : [], variants: Array.isArray(p.variants) ? p.variants.map(v => ({ key: v.key, vals: v.vals, stock: v.stock, price: v.price })) : [],
   gallery: Array.isArray(p.gallery) ? p.gallery : [], highlights: p.highlights || '', details: p.details || '', specs: p.specs || '', warranty: p.warranty || '' });
 app.get('/api/public/catalog', (req, res) => {
@@ -509,6 +511,28 @@ app.post('/api/visit', h((req, res) => {
     putDoc('visits', src, { count: (v.count || 0) + 1, days, lastAt: Date.now() });
   }
   res.json({ ok: true });
+}));
+
+/* Rédaction de la page de vente par l'assistante (équipe) */
+app.post('/api/admin/ai/landing', requireStaff, h(async (req, res) => {
+  const pid = String(req.body?.productId || ''), p = validId(pid) && getDoc('products', pid);
+  if (!p) throw httpErr(404, 'Produit introuvable.');
+  if (!env.ANTHROPIC_API_KEY) throw httpErr(503, 'Ajoutez la clé ANTHROPIC_API_KEY sur Render pour utiliser l’assistante.');
+  const s = settings(), nPhotos = (p.image ? 1 : 0) + (Array.isArray(p.gallery) ? p.gallery.length : 0);
+  const info = `Produit : ${p.name}\nCatégorie : ${p.category || ''}\nPrix : ${money(p.price)}${p.comparePrice > p.price ? ' (au lieu de ' + money(p.comparePrice) + ')' : ''}\nÉtat : ${CONDITION_LABEL[p.condition] || 'Neuf'}${p.conditionNote ? ' — ' + p.conditionNote : ''}\nDescription : ${p.description || ''}\nPoints forts : ${String(p.highlights || '').replace(/\n/g, '; ')}\nCaractéristiques : ${String(p.specs || '').replace(/\n/g, '; ')}\nDétails : ${String(p.details || '').slice(0, 800)}\nGarantie : ${p.warranty || ''}\nVariantes : ${(p.variants || []).map(v => v.key).join(', ')}\nNombre de photos : ${nPhotos}`;
+  const system = `Tu es rédacteur publicitaire pour ${s.shopName}, boutique en ligne à ${s.city} (Mali). Tu écris en français simple, chaleureux et vendeur, adapté aux clients maliens (fêtes, famille, Tabaski, mariages, rentrée, saison des pluies selon le produit), avec le vouvoiement.
+N'invente AUCUNE caractéristique, matière, taille, garantie, délai ou chiffre absent des informations : reste général si une information manque.
+Réponds UNIQUEMENT avec un objet JSON valide, sans texte autour, de la forme :
+{"hook":"accroche de 6 à 10 mots","sub":"sous-titre d'une phrase","problem":"le problème du client, 1 à 2 phrases","solution":"comment ce produit le résout, 1 à 2 phrases","usages":["Titre : texte court", "..."],"faq":[{"q":"question","a":"réponse"}],"highlights":["point fort court", "..."],"captions":[{"t":"titre de l'angle photo","d":"ce que le client doit remarquer"}]}
+usages : 3 éléments. faq : 3 questions propres au produit (pas sur le paiement ni la livraison). highlights : 4 éléments. captions : exactement ${Math.max(1, nPhotos)} éléments, dans l'ordre des photos (vue d'ensemble, détails, finitions…).`;
+  const txt = await askClaude(system, [{ role: 'user', content: info }], 1200);
+  let out; try { out = JSON.parse(txt.replace(/^[^{]*/, '').replace(/[^}]*$/, '')); } catch (e) { throw httpErr(502, 'Réponse de l’assistante illisible, réessayez.'); }
+  const str = (v, n) => String(v || '').slice(0, n);
+  res.json({ hook: str(out.hook, 90), sub: str(out.sub, 200), problem: str(out.problem, 400), solution: str(out.solution, 400),
+    usages: (Array.isArray(out.usages) ? out.usages : []).slice(0, 5).map(x => str(x, 120)),
+    faq: (Array.isArray(out.faq) ? out.faq : []).slice(0, 5).map(f => ({ q: str(f && f.q, 140), a: str(f && f.a, 400) })).filter(f => f.q && f.a),
+    highlights: (Array.isArray(out.highlights) ? out.highlights : []).slice(0, 6).map(x => str(x, 90)),
+    captions: (Array.isArray(out.captions) ? out.captions : []).slice(0, 8).map(c => ({ t: str(c && c.t, 60), d: str(c && c.d, 220) })) });
 }));
 
 /* Assistante IA pour les clients */
@@ -870,13 +894,13 @@ const plain = n => new Intl.NumberFormat('fr-FR').format(Math.round(n || 0)).rep
 const productImage = (id, p) => (p && /^data:image\//.test(p.image || '')) ? `${BASE_URL}/img/p/${encodeURIComponent(id)}` : `${BASE_URL}/og-image.jpg`;
 function sendPage(req, res) {
   if (!INDEX_HTML) return res.status(500).send('Page introuvable : le dossier public manque sur le serveur.');
-  const s = settings(), pid = String(req.query.p || '');
+  const s = settings(), pid = String(req.query.p || req.query.lp || ''), isLp = !!req.query.lp;
   const found = validId(pid) ? getDoc('products', pid) : null, p = found && found.active !== false ? found : null;
-  const title = p ? `${p.name} — ${plain(p.price)} FCFA | ${s.shopName}` : `${s.shopName} — ${s.tagline || 'Boutique en ligne'}`;
+  const title = p ? `${isLp && p.lpHook ? p.lpHook : p.name} — ${plain(p.price)} FCFA | ${s.shopName}` : `${s.shopName} — ${s.tagline || 'Boutique en ligne'}`;
   const desc = p
     ? `${p.condition && p.condition !== 'neuf' ? `Occasion · ${({ comme_neuf: 'Comme neuf', tres_bon: 'Très bon état', bon: 'Bon état', correct: 'État correct', reconditionne: 'Reconditionné' })[p.condition] || 'Occasion'}. ` : ''}${p.comparePrice > p.price ? `Promo : ${plain(p.price)} FCFA au lieu de ${plain(p.comparePrice)} FCFA. ` : ''}${p.description || p.category || ''} Commandez chez ${s.shopName} : mobile money ou paiement à la livraison.`.replace(/\s+/g, ' ').trim()
     : (s.intro || 'Commandez en ligne, payez par mobile money ou à la livraison.');
-  const img = p ? productImage(pid, p) : `${BASE_URL}/og-image.jpg`, url = p ? `${BASE_URL}/?p=${encodeURIComponent(pid)}` : `${BASE_URL}/`;
+  const img = p ? productImage(pid, p) : `${BASE_URL}/og-image.jpg`, url = p ? `${BASE_URL}/?${isLp ? 'lp' : 'p'}=${encodeURIComponent(pid)}` : `${BASE_URL}/`;
   const meta = [
     ['name', 'description', desc], ['property', 'og:type', p ? 'product' : 'website'], ['property', 'og:site_name', s.shopName], ['property', 'og:locale', 'fr_FR'],
     ['property', 'og:title', title], ['property', 'og:description', desc], ['property', 'og:url', url], ['property', 'og:image', img],

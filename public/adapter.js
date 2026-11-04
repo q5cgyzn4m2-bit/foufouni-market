@@ -263,6 +263,7 @@
     await api('POST', '/api/reviews', { orderId: o.id, token: m.t, productId: item.id, rating: r.rating, comment: r.comment, name: r.name, photos: r.photos });
     reload();
   };
+  window.lpAI = productId => api('POST', '/api/admin/ai/landing', { productId });
   window.validatePromo = async (code, subtotal) => { try { return await api('POST', '/api/promo/check', { code, subtotal }); } catch (e) { return { err: e.message }; } };
   window.enabledProcs = () => Object.entries(S.settings.processors).filter(([k, v]) => v.enabled && PROCESSORS[k] && providers.includes(k));
 
