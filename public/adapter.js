@@ -264,6 +264,10 @@
     reload();
   };
   window.lpAI = productId => api('POST', '/api/admin/ai/landing', { productId });
+  window.posQrOrder = (items, promo) => api('POST', '/api/admin/pos/qr-order', { items: items.map(l => l.b ? { bundle: l.b, qty: l.qty } : (l.v ? { id: l.id, qty: l.qty, v: l.v } : { id: l.id, qty: l.qty })), promoCode: promo ? promo.code : '' });
+  window.orderStatus = (id, t) => api('GET', `/api/orders/${encodeURIComponent(id)}?t=${encodeURIComponent(t)}`);
+  window.payExistingOrder = (id, t, method) => api('POST', `/api/orders/${encodeURIComponent(id)}/pay`, { t, method });
+  window.cancelQrOrder = id => api('PATCH', `/api/admin/orders/${encodeURIComponent(id)}`, { status: 'annulee' }).then(() => reload());
   window.resolveLink = async url => (await api('POST', '/api/admin/resolve-link', { url })).url;
   window.validatePromo = async (code, subtotal) => { try { return await api('POST', '/api/promo/check', { code, subtotal }); } catch (e) { return { err: e.message }; } };
   window.enabledProcs = () => Object.entries(S.settings.processors).filter(([k, v]) => v.enabled && PROCESSORS[k] && providers.includes(k));

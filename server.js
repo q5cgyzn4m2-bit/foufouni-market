@@ -487,7 +487,8 @@ const publicProduct = p => ({ id: p.id, name: p.name, sku: p.sku, category: p.ca
   lpHook: p.lpHook || '', lpSub: p.lpSub || '', lpProblem: p.lpProblem || '', lpSolution: p.lpSolution || '', lpUsages: p.lpUsages || '', lpFaq: p.lpFaq || '', lpOffer: p.lpOffer || '', lpUntil: p.lpUntil || '',
   angleCaps: Array.isArray(p.angleCaps) ? p.angleCaps : [], spin: Array.isArray(p.spin) ? p.spin : [],
   lpVideo: p.lpVideo || '', lpVideoTitle: p.lpVideoTitle || '',
-  options: Array.isArray(p.options) ? p.options : [], variants: Array.isArray(p.variants) ? p.variants.map(v => ({ key: v.key, vals: v.vals, stock: v.stock, price: v.price })) : [],
+  options: Array.isArray(p.options) ? p.options : [], variants: Array.isArray(p.variants) ? p.variants.map(v => ({ key: v.key, vals: v.vals, stock: v.stock, price: v.price, barcode: v.barcode || '' })) : [],
+  barcode: p.barcode || '',
   gallery: Array.isArray(p.gallery) ? p.gallery : [], highlights: p.highlights || '', details: p.details || '', specs: p.specs || '', warranty: p.warranty || '' });
 app.get('/api/public/catalog', (req, res) => {
   const reviews = allDocs('reviews').filter(r => r.status !== 'hidden').sort((a, b) => b.createdAt - a.createdAt).slice(0, 1500)
@@ -795,6 +796,35 @@ app.get('/api/orders/:id', h(async (req, res) => {
   await refreshPayment(o, id, false);
   o = getDoc('orders', id);
   res.json(publicOrder(o, id));
+}));
+
+/* Paiement par QR au comptoir : le vendeur crée la commande, le client la paie sur son téléphone */
+app.post('/api/admin/pos/qr-order', requireStaff, h(async (req, res) => {
+  const b = req.body || {}, t = computeOrder(b.items, b.promoCode, 'retrait');
+  if (t.total < 100) throw httpErr(400, 'Montant trop faible pour un paiement mobile.');
+  if (!providers().some(k => k !== 'cod')) throw httpErr(400, 'Aucun paiement mobile (Wave, Orange Money) n’est activé.');
+  const id = newOrderId(), order = {
+    number: 'FM-' + new Date().toISOString().slice(2, 10).replace(/-/g, '') + '-' + rnd(4),
+    items: t.lines, subtotal: t.subtotal, discount: t.discount, shipping: 0, total: t.total, promoCode: t.promoCode, affiliate: t.affiliate,
+    customer: { name: 'Client comptoir' }, delivery: 'retrait', payment: { method: 'qr', status: 'en attente', ref: '' },
+    status: 'en_attente', channel: 'caisse', stockApplied: false, createdAt: Date.now(), createdBy: req.user.name, token: randomToken() };
+  putDoc('orders', id, order);
+  res.json({ id, token: order.token, number: order.number, total: order.total });
+}));
+app.post('/api/orders/:id/pay', h(async (req, res) => {
+  if (limited('pay:' + req.ip, 20, 600e3)) throw httpErr(429, 'Trop de tentatives. Réessayez plus tard.');
+  const id = req.params.id, o = validId(id) && getDoc('orders', id);
+  if (!o || !req.body?.t || !safeEq(o.token, String(req.body.t))) throw httpErr(404, 'Commande introuvable.');
+  if (o.status !== 'en_attente') throw httpErr(400, o.status === 'payee' ? 'Cette commande est déjà payée.' : 'Cette commande n’est plus payable.');
+  const method = String(req.body.method || '');
+  if (method === 'cod' || !providers().includes(method)) throw httpErr(400, 'Ce moyen de paiement n’est pas disponible.');
+  patchDoc('orders', id, { payment: { ...o.payment, method, status: 'en attente' } });
+  const order = getDoc('orders', id); let redirect = null;
+  try {
+    if (method === 'wave') { const s2 = await waveCreate(order, id); patchDoc('orders', id, { payment: { ...order.payment, sessionId: s2.id } }); redirect = s2.wave_launch_url; }
+    else if (method === 'orange') { const r = await omCreate(order, id); patchDoc('orders', id, { payment: { ...order.payment, payToken: r.pay_token, notifToken: r.notif_token } }); redirect = r.payment_url; }
+  } catch (e) { console.error('Paiement QR', method, e.message); throw httpErr(502, 'Le service de paiement ne répond pas. Réessayez ou payez au comptoir.'); }
+  res.json({ redirect });
 }));
 
 /* --- Équipe : connexion --- */

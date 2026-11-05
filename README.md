@@ -185,3 +185,12 @@ Sans photo propre, un lot affiche automatiquement un **montage des photos de ses
 - Le Studio réseaux et le bouton Partager donnent le lien de la page de vente ; l'aperçu Facebook et WhatsApp reprend l'accroche.
 
 - **Vidéo** : collez le lien d'une vidéo YouTube (dont Shorts), TikTok, Facebook, Instagram, Vimeo, ou d'une plateforme chinoise : Douyin, Bilibili, Youku, Xigua (lecture dans la page), Kuaishou, Weibo, WeChat (bouton qui ouvre la plateforme), ainsi que les vidéos .mp4 de 1688, Taobao ou AliExpress. Les liens courts (v.douyin.com, b23.tv…) doivent être ouverts une fois pour copier l'adresse complète. Les plateformes chinoises peuvent être lentes ou bloquées hors de Chine.
+
+
+## Codes-barres, QR codes et terminal de caisse
+
+- **Code-barres EAN-13** pour chaque produit et chaque variante : créé automatiquement (préfixe 2, réservé à l'usage en magasin) ou saisi ou scanné depuis l'emballage du fabricant (fiche produit › Code-barres et QR code).
+- **QR code « Scannez pour payer »** : ouvre directement le paiement du produit (`/?pay=ID&v=variante`) sur le téléphone du client. Il est affiché en miniature sur la page produit et sur les étiquettes.
+- **Étiquettes** : Gestion › Produits › 🏷️ Étiquettes (ou depuis une fiche). Formats thermique 50 × 30 mm, feuille A4 63 × 34 mm, colis 100 × 50 mm. Chaque étiquette porte le nom, le prix, le code-barres et le QR code.
+- **Caisse façon terminal** : écran d'affichage, champ de scan, **douchette USB ou Bluetooth** (aucun réglage : elle tape le code et Entrée), **caméra** du téléphone ou de la tablette, bip de confirmation. Un code inconnu est signalé.
+- **QR de paiement** à la caisse : le terminal affiche un QR code avec le montant, le client le scanne et paie par Wave ou Orange Money sur son téléphone (`/api/admin/pos/qr-order`, `/api/orders/:id/pay`). L'écran passe à « Paiement reçu ✓ » dès la confirmation.

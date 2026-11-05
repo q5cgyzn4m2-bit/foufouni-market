@@ -302,6 +302,30 @@ textarea.input{min-height:84px; resize:vertical}
 .vid .face::before{content:''; position:absolute; inset:0; background:linear-gradient(180deg,rgba(0,0,0,.05),rgba(0,0,0,.55))}
 .vid .play{position:relative; width:86px; height:86px; border-radius:50%; background:var(--indigo); color:var(--on-indigo); display:grid; place-items:center; font-size:34px; box-shadow:0 10px 30px rgba(0,0,0,.5); padding-left:6px}
 .vid .vt{position:absolute; left:18px; right:18px; bottom:16px; color:#fff; font:700 16px var(--f-b); text-align:left}
+/* Codes-barres, QR, étiquettes, terminal de caisse */
+.codes{display:flex; gap:14px; align-items:center; flex-wrap:wrap; padding:12px; border-radius:14px; background:#fff; color:#14110D}
+.codes .bc svg{display:block}.codes .qr svg{display:block}
+.codes small{display:block; font:700 11px var(--f-b); letter-spacing:.08em; text-transform:uppercase; color:#6E6556; margin-top:4px; text-align:center}
+.mini-codes{display:flex; gap:10px; align-items:center; margin-top:14px; padding:10px 12px; border-radius:12px; background:#fff; color:#14110D; width:max-content; max-width:100%}
+.mini-codes span{font:700 11px var(--f-b); color:#6E6556; line-height:1.3}
+.term{background:#0B0A08; border:2px solid color-mix(in srgb,var(--indigo) 55%,var(--line)); border-radius:20px; padding:16px; margin-bottom:16px}
+.lcd{background:linear-gradient(180deg,#1F2A1E,#152014); border-radius:12px; padding:14px 16px; font-family:ui-monospace,Menlo,Consolas,monospace; color:#B9F5A8; text-shadow:0 0 6px rgba(150,255,130,.35); display:grid; grid-template-columns:1fr auto; gap:6px 14px; align-items:end}
+.lcd .l1{font-size:15px; opacity:.85; white-space:nowrap; overflow:hidden; text-overflow:ellipsis}.lcd .tot{font-size:34px; font-weight:800; letter-spacing:.02em; text-align:right}
+.lcd .l2{font-size:12px; opacity:.6; letter-spacing:.12em}
+.term-row{display:flex; gap:10px; margin-top:12px; flex-wrap:wrap}.term-row .input{flex:1 1 220px; font-family:ui-monospace,Menlo,monospace; font-size:17px; letter-spacing:.08em}
+.term-row .btn{white-space:nowrap}
+.scan-box{position:relative; width:100%; max-width:520px; margin:0 auto; aspect-ratio:4/3; background:#000; border-radius:16px; overflow:hidden}
+.scan-box video,.scan-box #qr-reader{width:100%; height:100%; object-fit:cover}
+.scan-box .aim{position:absolute; left:12%; right:12%; top:38%; height:24%; border:3px solid var(--indigo); border-radius:12px; box-shadow:0 0 0 999px rgba(0,0,0,.35)}
+.scan-box .laser{position:absolute; left:14%; right:14%; top:50%; height:2px; background:#ff4d4d; box-shadow:0 0 10px #ff4d4d; animation:laser 1.6s ease-in-out infinite}
+@keyframes laser{0%,100%{transform:translateY(-36px)}50%{transform:translateY(36px)}}
+#print-area{display:none}
+@media print{ body>*:not(#print-area){display:none!important} #print-area{display:block!important; background:#fff} @page{margin:6mm} }
+.lab-grid{display:flex; flex-wrap:wrap; gap:3mm}
+.lab{border:0.3mm dashed #bbb; padding:1.5mm 2mm; display:grid; grid-template-columns:1fr auto; grid-template-rows:auto 1fr auto auto; gap:.6mm 2mm; align-items:center; break-inside:avoid; font-family:Arial,sans-serif; color:#000; background:#fff; overflow:hidden; box-sizing:border-box}
+.lab .n{font-size:8pt; font-weight:700; line-height:1.1; grid-column:1/-1; white-space:nowrap; overflow:hidden; text-overflow:ellipsis}.lab .pr{font-size:11pt; font-weight:800; line-height:1}.lab .sh{font-size:5.5pt; color:#444; grid-column:1/-1; white-space:nowrap; overflow:hidden; text-overflow:ellipsis}
+.lab .bc svg{width:100%; height:auto; display:block}
+@media (prefers-reduced-motion:reduce){ .scan-box .laser{animation:none} }
 .empty{border:2px dashed var(--line); border-radius:var(--r-m); padding:48px 20px; text-align:center; color:var(--muted)}
 .empty h3{color:var(--ink); margin-bottom:8px; font-size:20px}
 
@@ -659,6 +683,14 @@ function render(){
   if(S.view==='admin' && S.tab==='studio') setTimeout(studioRender, 0);
   if(!S._deep && S.ready && S.products.length && window.__ffmCat){ const c = window.__ffmCat; if(['Tout','Soldes','Nouveautés','Occasion','Lots'].includes(c) || S.products.some(p=>p.category===c)){ S.cat = c; setTimeout(()=>$('#catalogue')?.scrollIntoView({behavior:'smooth'}), 400); } window.__ffmCat = null; }
   if(S.view==='landing') setTimeout(lpAfterRender, 0);
+  if(S.view==='pos' && S.posTab==='vente'){ const sc = $('#pos-scan'); if(sc && !sc.dataset.on){ sc.dataset.on='1'; sc.onkeydown = e=>{ if(e.key==='Enter'){ e.preventDefault(); const v = sc.value.trim(); sc.value=''; if(v) posScan(v); } }; } }
+  if(!S._payDeep && S.ready && S.products.length){ let q=null; try{ q = new URLSearchParams(location.search); }catch(e){}
+    const pid = q && q.get('pay'), ord = q && q.get('payer');
+    if(pid){ S._payDeep = true; const p = S.products.find(x=>x.id===pid && x.active!==false);
+      if(p){ const vv = q.get('v')||''; try{ history.replaceState(null,'',location.pathname); }catch(e){}
+        if(hasVar(p) && !varOf(p,vv)){ setTimeout(()=>{ openLanding(p.id); toast('Choisissez la couleur et la taille, puis « Commander maintenant ».'); }, 50); }
+        else setTimeout(()=>{ addToCart(p.id, 1, 'cart', varOf(p,vv)?vv:''); if(enabledProcs().length) openCheckout(); else openCart(); }, 80); } }
+    else if(ord){ S._payDeep = true; const tk = q.get('t')||''; setTimeout(()=>openPayOrder(ord, tk), 80); } }
   if(!S._deep && S.ready && S.products.length){ let lid=''; try{ lid = new URLSearchParams(location.search).get('lp')||''; }catch(e){}
     if(lid && S.products.some(x=>x.id===lid && x.active!==false) && S.view==='shop'){ S._deep = true; S.view='landing'; S.pid=lid; S.pqty=1; schedule(); } }
   if(!S._deep && S.ready && S.products.length){ S._deep = true; let pid=''; try{ pid = new URLSearchParams(location.search).get('p')||''; }catch(e){}
@@ -719,7 +751,7 @@ const condLabel = p => CONDITIONS[condKey(p)].l;
 function shopBase(){
   const q = S.q.trim().toLowerCase();
   return S.products.filter(p=>p.active!==false && (S.cat==='Tout'||(S.cat==='Soldes'&&onSale(p))||(S.cat==='Nouveautés'&&isNew(p))||(S.cat==='Occasion'&&isUsed(p))||p.category===S.cat) &&
-    (!q || (p.name+' '+p.category+' '+(p.sku||'')+' '+(p.variants||[]).map(v=>v.key).join(' ')).toLowerCase().includes(q)));
+    (!q || (p.name+' '+p.category+' '+(p.sku||'')+' '+pCode(p)+' '+(p.variants||[]).map(v=>v.key+' '+vCode(p,v)).join(' ')).toLowerCase().includes(q)));
 }
 function matchFacets(p){
   const sel = Object.entries(S.facets).filter(([,vals])=>vals.length);
@@ -875,6 +907,154 @@ function paneReviews(){
   :'<div class="empty"><h3>Aucun avis pour l’instant</h3><p>Après une livraison, vos clients peuvent noter les produits et ajouter leurs photos depuis « Mes commandes ».</p></div>'}</div>`;
 }
 
+/* --- Codes-barres EAN-13, QR code de paiement, recherche par code --- */
+const EAN_L=['0001101','0011001','0010011','0111101','0100011','0110001','0101111','0111011','0110111','0001011'];
+const EAN_G=['0100111','0110011','0011011','0100001','0011101','0111001','0000101','0010001','0001001','0010111'];
+const EAN_R=['1110010','1100110','1101100','1000010','1011100','1001110','1010000','1000100','1001000','1110100'];
+const EAN_P=['LLLLLL','LLGLGG','LLGGLG','LLGGGL','LGLLGG','LGGLLG','LGGGLL','LGLGLG','LGLGGL','LGGLGL'];
+const eanCheck = d12 => { let t=0; for(let i=0;i<12;i++) t += Number(d12[i])*(i%2?3:1); return String((10-t%10)%10); };
+const validEan = c => /^\d{13}$/.test(c) && eanCheck(c.slice(0,12))===c[12];
+/* Code interne de la boutique : préfixe 2 (réservé à l'usage en magasin), unique et stable pour chaque produit / variante */
+function makeEan(seed){ let h1=2166136261>>>0, h2=5381; for(const ch of String(seed)){ h1 = Math.imul(h1 ^ ch.charCodeAt(0), 16777619)>>>0; h2 = (h2*33 ^ ch.charCodeAt(0))>>>0; }
+  const base = '2' + String(h1%100000).padStart(5,'0') + String(h2%1000000).padStart(6,'0'); return base + eanCheck(base); }
+const pCode = p => p.barcode || makeEan(p.id);
+const vCode = (p, v) => v.barcode || makeEan(p.id+'|'+v.key);
+function eanSVG(code, w=230, h=86, color='#000'){
+  if(!validEan(code)){ // code non EAN (ex. Code fournisseur) : affiché en texte
+    return `<svg viewBox="0 0 ${w} ${h}" width="${w}" height="${h}" xmlns="http://www.w3.org/2000/svg"><rect width="100%" height="100%" fill="#fff"/><text x="50%" y="55%" text-anchor="middle" font-family="monospace" font-size="16" fill="${color}">${esc(code)}</text></svg>`; }
+  const d = code.split('').map(Number), par = EAN_P[d[0]];
+  let bits = '101'; for(let i=1;i<=6;i++) bits += (par[i-1]==='L'?EAN_L:EAN_G)[d[i]]; bits += '01010'; for(let i=7;i<=12;i++) bits += EAN_R[d[i]]; bits += '101';
+  const q = 9, mw = (w - 2*q - 4) / 95, bh = h - 18; let r = '';
+  for(let i=0;i<95;i++) if(bits[i]==='1'){ const guard = i<3 || (i>=45&&i<50) || i>=92; r += `<rect x="${(q+4+i*mw).toFixed(2)}" y="2" width="${(mw+0.05).toFixed(2)}" height="${guard?bh+8:bh}" fill="${color}"/>`; }
+  const fs = Math.max(10, mw*7.6), ty = h - 2;
+  const txt = `<text x="${q-1}" y="${ty}" font-family="monospace" font-size="${fs}" fill="${color}">${d[0]}</text><text x="${(q+4+mw*24).toFixed(1)}" y="${ty}" text-anchor="middle" font-family="monospace" font-size="${fs}" letter-spacing="${mw*1.6}" fill="${color}">${code.slice(1,7)}</text><text x="${(q+4+mw*71).toFixed(1)}" y="${ty}" text-anchor="middle" font-family="monospace" font-size="${fs}" letter-spacing="${mw*1.6}" fill="${color}">${code.slice(7)}</text>`;
+  return `<svg viewBox="0 0 ${w} ${h}" width="${w}" height="${h}" xmlns="http://www.w3.org/2000/svg" role="img" aria-label="Code-barres ${code}"><rect width="100%" height="100%" fill="#fff"/>${r}${txt}</svg>`;
+}
+let qrLib = null;
+function ensureQR(){ if(window.qrcode) return Promise.resolve(); if(qrLib) return qrLib;
+  qrLib = new Promise((ok,ko)=>{ const sc=document.createElement('script'); sc.src='https://cdnjs.cloudflare.com/ajax/libs/qrcode-generator/1.4.4/qrcode.min.js'; sc.onload=()=>{ ok(); schedule(); }; sc.onerror=()=>{ qrLib=null; ko(); }; document.head.appendChild(sc); }); return qrLib; }
+function qrSVG(text, size=120){
+  if(!window.qrcode){ ensureQR().catch(()=>{}); return `<svg viewBox="0 0 ${size} ${size}" width="${size}" height="${size}"><rect width="100%" height="100%" fill="#fff" stroke="#ddd"/><text x="50%" y="52%" text-anchor="middle" font-size="11" font-family="sans-serif" fill="#999">QR…</text></svg>`; }
+  const q = window.qrcode(0,'M'); q.addData(text); q.make(); const n = q.getModuleCount(), m = size/(n+4); let r='';
+  for(let y=0;y<n;y++) for(let x=0;x<n;x++) if(q.isDark(y,x)) r += `<rect x="${((x+2)*m).toFixed(2)}" y="${((y+2)*m).toFixed(2)}" width="${(m+0.04).toFixed(2)}" height="${(m+0.04).toFixed(2)}"/>`;
+  return `<svg viewBox="0 0 ${size} ${size}" width="${size}" height="${size}" xmlns="http://www.w3.org/2000/svg" role="img" aria-label="QR code"><rect width="100%" height="100%" fill="#fff"/><g fill="#000">${r}</g></svg>`;
+}
+const payLink = (p, v) => shopUrl() + '?pay=' + encodeURIComponent(p.id) + (v ? '&v=' + encodeURIComponent(v.key) : '') + '&src=qr';
+function findByCode(raw){
+  const c = String(raw||'').trim(); if(!c) return null; const lc = c.toLowerCase();
+  let m;
+  try{ const u = new URL(c); const id = u.searchParams.get('pay') || u.searchParams.get('lp') || u.searchParams.get('p'); if(id){ const p = S.products.find(x=>x.id===id); if(p) return {p, v: varOf(p, u.searchParams.get('v')||'')}; } }catch(e){}
+  for(const p of S.products){
+    if(pCode(p)===c || (p.sku && p.sku.toLowerCase()===lc) || p.id===c) return {p, v:null};
+    if(hasVar(p)) for(const v of p.variants) if(vCode(p,v)===c || (v.sku && v.sku.toLowerCase()===lc)) return {p, v};
+  }
+  return null;
+}
+/* Sons du terminal */
+let audioCtx = null;
+function beep(ok=true){ try{ audioCtx = audioCtx || new (window.AudioContext||window.webkitAudioContext)(); const o = audioCtx.createOscillator(), g = audioCtx.createGain();
+  o.type = ok ? 'square' : 'sawtooth'; o.frequency.value = ok ? 1950 : 220; g.gain.setValueAtTime(0.06, audioCtx.currentTime); g.gain.exponentialRampToValueAtTime(0.0001, audioCtx.currentTime + (ok?0.09:0.35));
+  o.connect(g); g.connect(audioCtx.destination); o.start(); o.stop(audioCtx.currentTime + (ok?0.1:0.36)); }catch(e){} if(navigator.vibrate) navigator.vibrate(ok?30:[60,40,60]); }
+/* Scanner par la caméra : BarcodeDetector si disponible, sinon bibliothèque html5-qrcode */
+let scanStop = null;
+async function openScanner(onCode, title){
+  closeScanner();
+  $('#overlay').innerHTML = `<div class="scrim"><div class="modal" role="dialog" aria-modal="true" aria-label="Scanner"><div class="m-h"><h2>${esc(title||'Scanner un code')}</h2><button class="x" data-a="scanClose" aria-label="Fermer">×</button></div>
+    <div class="m-b"><div class="scan-box" id="scan-box"><video id="scan-video" playsinline muted></video><div class="aim"></div><div class="laser"></div></div>
+    <p class="muted small" style="text-align:center;margin:10px 0 0" id="scan-msg">Visez le code-barres ou le QR code.</p><div id="scan-last" style="text-align:center;font-weight:700;margin-top:6px"></div></div></div></div>`;
+  let last = '', lastAt = 0;
+  const hit = code => { if(code===last && Date.now()-lastAt < 1800) return; last = code; lastAt = Date.now(); const keep = onCode(code); if(keep===false) closeScanner(); };
+  try{
+    if('BarcodeDetector' in window){
+      const det = new window.BarcodeDetector({formats:['ean_13','ean_8','upc_a','upc_e','code_128','code_39','qr_code']});
+      const st = await navigator.mediaDevices.getUserMedia({video:{facingMode:'environment'}}); const vd = $('#scan-video'); vd.srcObject = st; await vd.play();
+      let run = true; scanStop = ()=>{ run = false; st.getTracks().forEach(t=>t.stop()); };
+      const loop = async ()=>{ if(!run) return; try{ const r = await det.detect(vd); if(r[0]) hit(r[0].rawValue); }catch(e){} setTimeout(loop, 160); }; loop();
+    } else {
+      await new Promise((ok,ko)=>{ if(window.Html5Qrcode) return ok(); const sc=document.createElement('script'); sc.src='https://cdnjs.cloudflare.com/ajax/libs/html5-qrcode/2.3.8/html5-qrcode.min.js'; sc.onload=ok; sc.onerror=ko; document.head.appendChild(sc); });
+      $('#scan-box').innerHTML = '<div id="qr-reader"></div><div class="laser"></div>';
+      const r = new window.Html5Qrcode('qr-reader'); await r.start({facingMode:'environment'}, {fps:10, qrbox:{width:260, height:160}}, txt=>hit(txt));
+      scanStop = ()=>{ r.stop().catch(()=>{}); };
+    }
+  }catch(e){ $('#scan-msg').textContent = 'Caméra indisponible : autorisez l’accès à la caméra, ou tapez le code à la main.'; }
+}
+function restoreForm(){ closeScanner(); const k = window.__keepForm; if(!k) return false; window.__keepForm = null; $('#overlay').innerHTML=''; $('#overlay').append(...k.childNodes); return true; }
+function closeScanner(){ if(scanStop){ try{ scanStop(); }catch(e){} scanStop = null; } }
+/* Étiquettes à imprimer */
+function printLabels(list, fmtKey){
+  ensureQR().then(()=>{
+    const F = fmtKey==='a4' ? {w:'63mm', h:'34mm', bc:150} : fmtKey==='big' ? {w:'100mm', h:'50mm', bc:250} : {w:'50mm', h:'30mm', bc:120};
+    const labs = []; list.forEach(({p, v, qty})=>{ for(let i=0;i<Math.max(1,qty|0);i++) labs.push({p, v}); });
+    const area = document.getElementById('print-area') || Object.assign(document.createElement('div'), {id:'print-area'}); document.body.appendChild(area);
+    area.innerHTML = `<div class="lab-grid">${labs.map(({p,v})=>{ const code = v ? vCode(p,v) : pCode(p), price = v ? vPrice(p, v.key) : p.price;
+      return `<div class="lab" style="width:${F.w};height:${F.h}"><div class="n">${esc(p.name)}${v?' — '+esc(v.key):''}</div><div class="bc">${eanSVG(code, F.bc*2, F.bc*0.62)}</div><div style="width:${fmtKey==='big'?'22mm':'14mm'}">${qrSVG(payLink(p,v), 120).replace('width="120" height="120"','width="100%" height="100%"')}</div><div class="pr">${fmt(price)}</div><div class="sh">${esc(S.settings.shopName)}${p.sku?' · '+esc(p.sku):''} · Scannez pour payer</div></div>`; }).join('')}</div>`;
+    setTimeout(()=>window.print(), 300);
+  }).catch(()=>toast('Impossible de préparer les QR codes : vérifiez votre connexion.'));
+}
+function labelsDialog(ids){
+  const items = (ids||S.products.map(p=>p.id)).map(id=>S.products.find(p=>p.id===id)).filter(Boolean).flatMap(p=>hasVar(p)?p.variants.map(v=>({p,v})):[{p,v:null}]);
+  $('#overlay').innerHTML = `<div class="scrim" data-a="closeAll"><div class="modal wide" role="dialog" aria-modal="true" aria-label="Étiquettes"><div class="m-h"><h2>🏷️ Imprimer des étiquettes</h2><button class="x" data-a="closeAll" aria-label="Fermer">×</button></div>
+    <div class="m-b"><div class="cats" role="group" aria-label="Format" id="lb-fmt"><button aria-pressed="true" data-f="therm">Thermique 50 × 30 mm</button><button aria-pressed="false" data-f="a4">Feuille A4 (63 × 34 mm)</button><button aria-pressed="false" data-f="big">Colis 100 × 50 mm</button></div>
+    <div class="row" style="gap:8px;margin:6px 0 10px"><button class="btn ghost sm" id="lb-stock" style="flex:0;white-space:nowrap">Quantité = stock</button><button class="btn ghost sm" id="lb-one" style="flex:0;white-space:nowrap">1 de chaque</button><button class="btn ghost sm" id="lb-zero" style="flex:0;white-space:nowrap">Tout à 0</button></div>
+    <div class="tbl-wrap" style="max-height:48vh;overflow:auto"><table><thead><tr><th>Produit</th><th>Code-barres</th><th style="width:90px">Nombre</th></tr></thead><tbody>
+    ${items.map(({p,v},i)=>`<tr><td><b>${esc(p.name)}</b>${v?`<div class="muted small">${esc(v.key)}</div>`:''}</td><td class="small" style="font-family:monospace">${esc(v?vCode(p,v):pCode(p))}</td><td><input class="input" data-lq="${i}" inputmode="numeric" value="1" style="padding:6px 8px"></td></tr>`).join('')}</tbody></table></div>
+    <p class="muted small" style="margin:10px 0 0">Chaque étiquette porte le nom, le prix, le code-barres (pour la caisse) et un QR code « Scannez pour payer ». Sur imprimante thermique, réglez la taille du papier sur l’étiquette choisie.</p></div>
+    <div class="m-f"><button class="btn primary" id="lb-go">🖨 Imprimer</button></div></div></div>`;
+  let f = 'therm'; const set = fn => document.querySelectorAll('[data-lq]').forEach(x=>{ const it = items[Number(x.dataset.lq)]; x.value = fn(it); });
+  $('#lb-fmt').querySelectorAll('[data-f]').forEach(b=>b.onclick=e=>{ e.stopPropagation(); f = b.dataset.f; $('#lb-fmt').querySelectorAll('[data-f]').forEach(x=>x.setAttribute('aria-pressed', x===b)); });
+  $('#lb-stock').onclick = e=>{ e.stopPropagation(); set(it=>Math.max(0, it.v ? (it.v.stock||0) : it.p.stock)); };
+  $('#lb-one').onclick = e=>{ e.stopPropagation(); set(()=>1); }; $('#lb-zero').onclick = e=>{ e.stopPropagation(); set(()=>0); };
+  $('#lb-go').onclick = e=>{ e.stopPropagation(); const list = []; document.querySelectorAll('[data-lq]').forEach(x=>{ const q = parseInt(x.value)||0; if(q>0) list.push({...items[Number(x.dataset.lq)], qty:Math.min(q,500)}); });
+    if(!list.length) return toast('Indiquez au moins une étiquette.'); closeAll(); printLabels(list, f); };
+}
+/* Lecture d'un code à la caisse (douchette USB / Bluetooth, caméra, ou saisie) */
+function posScan(code){
+  const r = findByCode(code);
+  if(!r){ beep(false); S.posLcd = {l1:'CODE INCONNU', l2:String(code).slice(0,24)}; schedule();
+    toast(S.isAdmin ? 'Code inconnu : vous pouvez l’ajouter à un produit dans sa fiche.' : 'Code inconnu.'); return true; }
+  const {p, v} = r;
+  if(hasVar(p) && !v){ beep(true); pickVariant(p); return false; }
+  const before = S.pos.reduce((t,l)=>t+l.qty,0);
+  addToCart(p.id, 1, 'pos', v ? v.key : '');
+  const added = S.pos.reduce((t,l)=>t+l.qty,0) > before;
+  beep(added); S.posLcd = {l1:(added?'':'STOCK ÉPUISÉ · ')+p.name+(v?' '+v.key:''), l2:fmt(v?vPrice(p,v.key):p.price)}; schedule(); return true;
+}
+/* Douchette : saisie très rapide terminée par Entrée, n'importe où sur la page de caisse */
+(function(){ let buf = '', t0 = 0;
+  document.addEventListener('keydown', e=>{
+    if(S.view!=='pos' || S.posTab!=='vente') return;
+    const el = document.activeElement, typing = el && /INPUT|TEXTAREA|SELECT/.test(el.tagName) && el.id!=='pos-scan';
+    if(typing) return;
+    const now = Date.now(); if(now - t0 > 60) buf = ''; t0 = now;
+    if(e.key==='Enter'){ if(buf.length>=6 && el?.id!=='pos-scan'){ e.preventDefault(); posScan(buf); } buf=''; return; }
+    if(e.key.length===1) buf += e.key;
+  }, true);
+})();
+/* Paiement par QR à la caisse : le client scanne l'écran et paie sur son téléphone */
+async function posQrPay(){
+  const t = computeTotals(S.pos, S.posPromo, 'retrait'); if(!t.lines.length) return;
+  const issue = stockIssue(S.pos); if(issue) return toast(issue);
+  let res;
+  try{ res = window.posQrOrder ? await window.posQrOrder(S.pos, S.posPromo) : await (async()=>{ const id = newId('o'), token = (newId('t')+rnd(16)).toLowerCase(), number = 'FM-'+new Date().toISOString().slice(2,10).replace(/-/g,'')+'-'+rnd(4);
+      await put('orders', id, {number, items:orderItems(t.lines), subtotal:t.subtotal, discount:t.discount, shipping:0, total:t.total, promoCode:S.posPromo?S.posPromo.code:'', customer:{name:'Client comptoir'}, delivery:'retrait', payment:{method:'qr', status:'en attente'}, status:'en_attente', channel:'caisse', token, stockApplied:false, createdAt:Date.now(), createdBy:S.uid||'local'});
+      return {id, token, number, total:t.total}; })(); }
+  catch(e){ return toast(e.message || 'Impossible de créer le paiement.'); }
+  await ensureQR().catch(()=>{});
+  const link = shopUrl()+'?payer='+encodeURIComponent(res.id)+'&t='+encodeURIComponent(res.token);
+  $('#overlay').innerHTML = `<div class="scrim"><div class="modal" role="dialog" aria-modal="true" aria-label="Paiement par QR"><div class="m-h"><h2>Scannez pour payer</h2><button class="x" data-a="qrCancel" data-id="${esc(res.id)}" aria-label="Annuler">×</button></div>
+    <div class="m-b" style="text-align:center"><div class="lcd" style="grid-template-columns:1fr;text-align:center;margin-bottom:14px"><div class="l2">${esc(res.number)}</div><div class="tot" style="text-align:center">${fmt(res.total)}</div></div>
+    <div style="display:inline-block;padding:12px;background:#fff;border-radius:14px">${qrSVG(link, 260)}</div>
+    <p style="margin:12px 0 4px"><b>Le client scanne avec son téléphone</b> et paie par ${esc(enabledProcs().filter(([k])=>k!=='cod').map(([k])=>PROCESSORS[k].name).join(' ou ')||'mobile money')}.</p>
+    <p class="muted small" id="qr-state" style="margin:0">⏳ En attente du paiement…</p></div>
+    <div class="m-f">${isServer()?'':`<button class="btn ghost" data-a="qrSim" data-id="${esc(res.id)}">Simuler le paiement (démo)</button>`}<button class="btn ghost" data-a="qrCancel" data-id="${esc(res.id)}">Annuler</button></div></div></div>`;
+  clearInterval(S._qrPoll);
+  S._qrPoll = setInterval(async ()=>{ let o = null;
+    try{ o = window.orderStatus ? await window.orderStatus(res.id, res.token) : S.orders.find(x=>x.id===res.id); }catch(e){}
+    if(o && (o.status==='payee' || (o.payment && /réussi|reussi|payé|paye/i.test(o.payment.status||'')))){ clearInterval(S._qrPoll); beep(true);
+      const box = $('#qr-state'); if(box){ box.innerHTML = '<b style="color:var(--kola);font-size:18px">✓ Paiement reçu</b>'; }
+      S.pos = []; S.posPromo = null; S.posLcd = {l1:'PAIEMENT REÇU ✓', l2:res.number}; setTimeout(()=>{ closeAll(); schedule(); }, 1600); } }, 3000);
+}
+
 /* --- Partage et visuels --- */
 const productLink = p => shopUrl() + '?p=' + encodeURIComponent(p.id);
 const landingLink = (p, src) => shopUrl() + '?lp=' + encodeURIComponent(p.id) + (src ? '&src='+src : '');
@@ -922,6 +1102,18 @@ function videoBlock(p){
     : `<button class="face" data-a="lpPlay" data-v="${esc(v.embed)}" style="background-image:url('${esc(poster)}')" aria-label="Lire la vidéo"><span class="play">▶</span><span class="vt">${esc(p.lpVideoTitle||'Voir '+p.name+' en vidéo')}</span></button>`;
   const fallback = v.link || v.file ? '' : `<p class="small muted" style="text-align:center;margin:10px 0 0">La vidéo ne s’affiche pas ? <a href="${esc(p.lpVideo)}" target="_blank" rel="noopener" style="color:var(--indigo);font-weight:700">L’ouvrir sur ${esc(v.kind)} ↗</a></p>`;
   return `<section class="lp-sec" id="lp-video"><h2>${esc(p.lpVideoTitle||'Découvrez-le en vidéo')}</h2><div class="vid${v.tall?' tall':''}">${inner}</div>${fallback}</section>`;
+}
+/* Page de paiement d'une commande créée à la caisse (QR affiché par le terminal) */
+async function openPayOrder(id, token){
+  let o = null; try{ o = window.orderStatus ? await window.orderStatus(id, token) : S.orders.find(x=>x.id===id && x.token===token); }catch(e){}
+  try{ history.replaceState(null,'',location.pathname); }catch(e){}
+  if(!o) return toast('Paiement introuvable : demandez un nouveau QR au vendeur.');
+  const paid = o.status==='payee' || /réussi|payé/i.test(o.payment&&o.payment.status||'');
+  const procs = enabledProcs().filter(([k])=>k!=='cod');
+  $('#overlay').innerHTML = `<div class="scrim" data-a="closeAll"><div class="modal" role="dialog" aria-modal="true" aria-label="Paiement"><div class="m-h"><h2>Paiement ${esc(o.number||'')}</h2><button class="x" data-a="closeAll" aria-label="Fermer">×</button></div>
+    <div class="m-b"><div class="lcd" style="grid-template-columns:1fr;text-align:center;margin-bottom:14px"><div class="l2">${esc(S.settings.shopName.toUpperCase())}</div><div class="tot" style="text-align:center">${fmt(o.total)}</div></div>
+    <div class="small" style="margin-bottom:12px">${(o.items||[]).map(i=>`${i.qty} × ${esc(i.name)}`).join('<br>')}</div>
+    ${paid ? '<p style="text-align:center;font-weight:800;color:var(--kola);font-size:18px">✓ Déjà payé, merci !</p>' : `<div class="pay-opts">${procs.map(([k])=>`<button class="pay-opt" data-a="payOrder" data-id="${esc(id)}" data-v="${k}" data-t="${esc(token)}"><span class="pay-logo" style="background:${PROCESSORS[k].color||'var(--indigo)'}">${esc(PROCESSORS[k].short||PROCESSORS[k].name.slice(0,2))}</span><span><b>${esc(PROCESSORS[k].name)}</b><br><span class="muted small">Confirmation sur votre téléphone</span></span></button>`).join('') || '<p class="muted">Aucun paiement mobile n’est activé : payez au comptoir.</p>'}</div>`}</div></div></div>`;
 }
 function viewLanding(){
   const p = S.products.find(x=>x.id===S.pid && x.active!==false); if(!p){ S.view='shop'; return viewShop(); }
@@ -1289,6 +1481,7 @@ function viewProduct(){
         <div><span>💳</span><span><b>Paiement sécurisé</b>${esc(pays.join(', ')||'À la livraison')}</span></div>
         ${p.warranty?`<div><span>🛡️</span><span><b>Garantie et retour</b>${esc(p.warranty)}</span></div>`:''}
         ${st.phone?`<div><span>📞</span><span><b>Une question ?</b><a href="tel:${esc(st.phone.replace(/\s/g,''))}" style="color:var(--indigo)">${esc(st.phone)}</a></span></div>`:''}</div>
+      <div class="mini-codes">${qrSVG(payLink(p, hasVar(p)?selVariant(p):null), 64)}<div>${eanSVG(hasVar(p)&&selVariant(p)?vCode(p,selVariant(p)):pCode(p), 150, 50)}<span>Scannez le QR pour payer sur votre téléphone · code produit ${esc(hasVar(p)&&selVariant(p)?vCode(p,selVariant(p)):pCode(p))}</span></div></div>
       <div class="row" style="gap:8px;margin-top:14px;flex-wrap:wrap"><button class="btn ghost sm" data-a="openLanding" data-id="${p.id}" style="flex:0;white-space:nowrap">✨ Page de vente</button><button class="btn ghost sm" data-a="shareProduct" data-id="${p.id}" style="flex:0">↗ Partager</button>${S.isAdmin?`<button class="btn ghost sm" data-a="visual" data-id="${p.id}" style="flex:0">🖼 Visuel</button><button class="btn ghost sm" data-a="editProduct" data-id="${p.id}" style="flex:0">✏️ Modifier</button>`:''}</div>
       ${inBundles.length?`<div style="margin-top:14px">${inBundles.map(b=>`<button class="btn ghost block" style="margin-top:8px" data-a="addBundle" data-id="${b.id}">Aussi en lot : ${esc(b.name)} · ${fmt(b.price)}</button>`).join('')}</div>`:''}
     </div></div>
@@ -1623,7 +1816,12 @@ function viewSale(){
   const q = S.aq.trim().toLowerCase();
   const list = S.products.filter(p=>p.active!==false && (!q || (p.name+' '+(p.sku||'')+' '+p.category).toLowerCase().includes(q)));
   const t = computeTotals(S.pos, S.posPromo, 'retrait');
+  const lcd = S.posLcd || {l1:'PRÊT · SCANNEZ UN ARTICLE', l2:S.settings.shopName.toUpperCase()};
   return `<div class="sec-h"><h2>Caisse</h2><span class="muted small">Vente au comptoir · le stock est mis à jour à l’encaissement</span></div>
+  <div class="term" aria-label="Terminal de caisse"><div class="lcd" aria-live="polite"><div class="l1">${esc(lcd.l1)}</div><div class="tot">${fmt(t.total)}</div><div class="l2">${esc(lcd.l2)}</div><div class="l2" style="text-align:right">${t.lines.reduce((n,l)=>n+l.qty,0)} ARTICLE(S)</div></div>
+    <div class="term-row"><label class="sr" for="pos-scan">Code-barres</label><input class="input" id="pos-scan" inputmode="numeric" autocomplete="off" placeholder="Scannez ou tapez un code puis Entrée">
+      <button class="btn ghost" data-a="posCam">📷 Caméra</button><button class="btn primary" data-a="posQr" ${t.lines.length?'':'disabled'}>▦ QR de paiement</button></div>
+    <p class="muted small" style="margin:8px 0 0">Douchette USB ou Bluetooth : branchez-la, scannez, l’article s’ajoute tout seul au ticket.</p></div>
   <div class="pos"><div>
     <div class="toolbar"><label class="sr" for="aq">Recherche ou code SKU</label><input class="input" id="aq" data-in="aq" value="${esc(S.aq)}" placeholder="Nom ou SKU puis Entrée" style="max-width:none; flex:1"></div>
     <div class="pos-grid">${!q?S.bundles.filter(b=>b.active!==false&&bundleInfo(b).ok).map(b=>`<button class="pos-item" data-a="posBundle" data-id="${b.id}" ${bundleInfo(b).max<=0?'disabled style="opacity:.45"':''}><span class="e" style="width:44px;overflow:hidden;border-radius:8px">${bundleVisual(b)}</span><b>Lot · ${esc(b.name)}</b><span class="price" style="font-size:14px">${fmt(b.price)}</span><span class="muted small">Disponible ${bundleInfo(b).max}</span></button>`).join(''):''}${list.map(p=>`<button class="pos-item" data-a="posAdd" data-id="${p.id}" ${p.stock<=0?'disabled style="opacity:.45"':''}><span class="e">${p.image?`<img src="${esc(p.image)}" alt="">`:esc(p.emoji||'📦')}</span><b>${esc(p.name)}</b><span class="price" style="font-size:14px">${fmt(p.price)}</span><span class="muted small">Stock ${p.stock}</span></button>`).join('') || '<div class="empty">Aucun produit.</div>'}</div>
@@ -2246,7 +2444,7 @@ function paneProducts(){
   const list = S.products.filter(p=>!q || (p.name+' '+p.sku+' '+p.category).toLowerCase().includes(q));
   return `<div class="toolbar"><h2 style="font-size:24px;flex:1">Produits <span class="muted small">(${S.products.length})</span></h2>
     <label class="sr" for="aq">Rechercher</label><input class="input" id="aq" data-in="aq" value="${esc(S.aq)}" placeholder="Rechercher…">
-    ${isServer()?'<button class="btn ghost" data-a="fbCatalog">Catalogue Facebook</button>':''}${dl?'<button class="btn ghost" data-a="exportProducts">Exporter CSV</button>':''}<button class="btn primary" data-a="newProduct">Ajouter un produit</button></div>
+    <button class="btn ghost" data-a="labelsAll">🏷️ Étiquettes</button>${isServer()?'<button class="btn ghost" data-a="fbCatalog">Catalogue Facebook</button>':''}${dl?'<button class="btn ghost" data-a="exportProducts">Exporter CSV</button>':''}<button class="btn primary" data-a="newProduct">Ajouter un produit</button></div>
     <div class="panel tbl-wrap">${list.length?`<table><thead><tr><th></th><th>Produit</th><th>Catégorie</th><th>Prix</th><th>Achat</th><th>Marge</th><th>Stock</th><th>En vente</th></tr></thead><tbody>
     ${list.map(p=>`<tr class="click" data-a="editProduct" data-id="${p.id}"><td><div class="li-img" style="width:40px;height:40px;font-size:20px">${pImg(p)}</div></td><td><b>${esc(p.name)}</b><div class="muted small">${esc(p.sku)}</div></td><td>${esc(p.category)}</td><td>${fmt(p.price)}</td><td class="small">${costOf(p.id)?fmt(costOf(p.id)):'<span class="muted">—</span>'}</td><td class="small">${costOf(p.id)?`<span class="${p.price-costOf(p.id)>=0?'amt-in':'amt-out'}">${pct(p.price-costOf(p.id),p.price)} %</span>`:'—'}</td>
     <td><span class="pill ${p.stock<=0?'bad':p.stock<=(p.lowStock||5)?'warn':'ok'}">${p.stock}</span></td><td><span class="pill ${p.active!==false?'ok':''}">${p.active!==false?'Oui':'Masqué'}</span></td></tr>`).join('')}</tbody></table>`
@@ -2317,7 +2515,13 @@ function productForm(p){
       <div style="flex:1 1 320px">
         <div class="field"><label for="pf-name">Nom du produit</label><input class="input" id="pf-name" value="${esc(p.name)}"></div>
         <div class="row"><div class="field"><label for="pf-cat">Catégorie</label><input class="input" id="pf-cat" list="pf-cats" value="${esc(p.category)}"><datalist id="pf-cats">${cats.map(c=>`<option value="${esc(c)}">`).join('')}</datalist></div>
-        <div class="field"><label for="pf-sku">SKU / code-barres</label><input class="input" id="pf-sku" value="${esc(p.sku)}"></div></div>
+        <div class="field"><label for="pf-sku">SKU (référence interne)</label><input class="input" id="pf-sku" value="${esc(p.sku)}"></div></div>
+        <div class="panel" style="padding:14px;margin-bottom:14px"><h3 style="font-size:19px;margin-bottom:6px">Code-barres et QR code</h3>
+          <div class="row" style="align-items:flex-end"><div class="field" style="flex:2 1 220px"><label for="pf-bc">Code-barres (EAN-13 ou code du fabricant)</label><input class="input" id="pf-bc" inputmode="numeric" value="${esc(p.barcode||'')}" placeholder="${p.id?esc(makeEan(p.id)):'Créé automatiquement'}" style="font-family:monospace;letter-spacing:.06em"></div>
+            <div class="field" style="flex:0 0 auto;display:flex;gap:6px"><button type="button" class="btn ghost sm" id="pf-bcscan">📷 Scanner</button><button type="button" class="btn ghost sm" id="pf-bcgen">Générer</button></div></div>
+          <div class="codes" id="pf-codes"></div><div class="small" id="pf-bcmsg" style="margin-top:6px"></div>
+          <p class="muted small" style="margin:8px 0 0">Le code-barres sert à retrouver le produit à la caisse et dans le stock. Le QR code ouvre directement le paiement du produit sur le téléphone du client. Chaque variante (couleur, taille) reçoit aussi son propre code.</p>
+          ${p.id?`<button type="button" class="btn ghost sm" data-a="labelsOne" data-id="${p.id}" style="margin-top:10px">🏷️ Imprimer les étiquettes</button>`:''}</div>
         <div class="row"><div class="field"><label for="pf-cond">État</label><select class="input" id="pf-cond">${Object.entries(CONDITIONS).map(([k,c])=>`<option value="${k}" ${condKey(p)===k?'selected':''}>${c.l}</option>`).join('')}</select></div>
         <div class="field" style="flex:2 1 260px"><label for="pf-cnote">Détails sur l’état (occasion)</label><input class="input" id="pf-cnote" value="${esc(p.conditionNote||'')}" placeholder="ex. Petite rayure au dos, acheté en 2024, chargeur fourni"></div></div>
         <div class="row"><div class="field"><label for="pf-cost">Prix d’achat unitaire (${esc(S.settings.currency)})</label><input class="input" id="pf-cost" inputmode="numeric" value="${esc(p.id&&costOf(p.id)?costOf(p.id):'')}" placeholder="Visible uniquement par l’équipe"></div><div class="field"><label>Marge par unité</label><div id="pf-mg" class="price" style="font-size:20px;padding:8px 0">—</div></div></div>
@@ -2376,6 +2580,15 @@ function productForm(p){
       try{ const full = await window.resolveLink(val); if(full && full !== val){ $('#lp-vid').value = full; chk(); if(parseVideo(full) && !parseVideo(full).short) ok.textContent = '✓ Lien court développé automatiquement · ' + ok.textContent.replace(/^✓ /,''); } else chk(); }
       catch(e){ chk(); } };
     $('#lp-vid').oninput = ()=>{ chk(); clearTimeout(tmr); tmr = setTimeout(expand, 500); }; chk(); expand(); }
+  { const draw = ()=>{ const raw = $('#pf-bc').value.trim(), code = raw || (p.id ? makeEan(p.id) : ''), msg = $('#pf-bcmsg');
+      $('#pf-codes').innerHTML = code ? `<div class="bc">${eanSVG(code, 220, 82)}<small>Code-barres · caisse</small></div>${p.id?`<div class="qr">${qrSVG(payLink(p), 96)}<small>Scanner pour payer</small></div>`:''}` : '<span class="muted small">Le code sera créé à l’enregistrement.</span>';
+      const dup = raw && S.products.some(x=>x.id!==p.id && (pCode(x)===raw || (x.variants||[]).some(v=>vCode(x,v)===raw)));
+      msg.textContent = dup ? '⚠️ Ce code est déjà utilisé par un autre produit.' : raw && /^\d{13}$/.test(raw) && !validEan(raw) ? '⚠️ Ce code EAN-13 n’est pas valide (dernier chiffre incorrect).' : '';
+      msg.style.color = 'var(--danger)'; };
+    $('#pf-bc').oninput = draw; draw(); ensureQR().then(draw).catch(()=>{});
+    $('#pf-bcgen').onclick = e=>{ e.preventDefault(); $('#pf-bc').value = makeEan((p.id||'')+Date.now()); draw(); };
+    $('#pf-bcscan').onclick = e=>{ e.preventDefault(); const keep = document.createElement('div'); keep.append(...$('#overlay').childNodes); window.__keepForm = keep;
+      openScanner(code=>{ restoreForm(); $('#pf-bc').value = code.replace(/\s/g,''); draw(); beep(true); return false; }, 'Scanner le code du fabricant'); }; }
   // vue 360°
   let spinItems = (p.spin||[]).map(id=>({kind:'old', id})), spinRemoved = [];
   const drawSpin = ()=>{ const b = $('#pf-spin'); if(b) b.textContent = spinItems.length ? `${spinItems.length} photo${spinItems.length>1?'s':''} pour la vue 360°${spinItems.length<4?' (4 minimum pour l’afficher)':''}` : 'Aucune vue 360° pour l’instant.'; };
@@ -2411,8 +2624,8 @@ function productForm(p){
   const asData = src => /^data:/.test(src) ? Promise.resolve(src) : fetch(src).then(r=>r.blob()).then(b=>new Promise(ok=>{ const fr=new FileReader(); fr.onload=()=>ok(fr.result); fr.readAsDataURL(b); }));
   $('#pf-save').onclick = async ()=>{
     const v = id=>$(id).value.trim();
-    const data = {name:v('#pf-name'), category:v('#pf-cat')||'Divers', sku:v('#pf-sku'), price:Number(v('#pf-price').replace(/\s/g,'')), comparePrice:Number(v('#pf-cmp').replace(/\s/g,''))||0,
-      stock:Math.max(0,parseInt(v('#pf-stock'))||0), ...(()=>{ readVars(); const opts = readOpts(); const keys = new Set(); return vars.length && opts.length ? {options:opts, variants:vars.filter(x=>!keys.has(x.key) && keys.add(x.key)).map(x=>({key:x.key, vals:x.vals, stock:Math.max(0,Number(x.stock)||0), price:Number(x.price)>0?Number(x.price):'', sku:x.sku||''}))} : {options:[], variants:[]}; })(), lowStock:Math.max(0,parseInt(v('#pf-low'))||0), emoji:v('#pf-emoji')||'📦', description:v('#pf-desc'),
+    const data = {name:v('#pf-name'), category:v('#pf-cat')||'Divers', sku:v('#pf-sku'), barcode:(v('#pf-bc').replace(/\s/g,'')||pCode({id:pid})), price:Number(v('#pf-price').replace(/\s/g,'')), comparePrice:Number(v('#pf-cmp').replace(/\s/g,''))||0,
+      stock:Math.max(0,parseInt(v('#pf-stock'))||0), ...(()=>{ readVars(); const opts = readOpts(); const keys = new Set(); return vars.length && opts.length ? {options:opts, variants:vars.filter(x=>!keys.has(x.key) && keys.add(x.key)).map(x=>({key:x.key, vals:x.vals, stock:Math.max(0,Number(x.stock)||0), price:Number(x.price)>0?Number(x.price):'', sku:x.sku||'', barcode:x.barcode||makeEan(pid+'|'+x.key)}))} : {options:[], variants:[]}; })(), lowStock:Math.max(0,parseInt(v('#pf-low'))||0), emoji:v('#pf-emoji')||'📦', description:v('#pf-desc'),
       condition:$('#pf-cond').value, conditionNote:$('#pf-cond').value==='neuf'?'':v('#pf-cnote'),
       lpHook:v('#lp-hook'), lpSub:v('#lp-sub'), lpProblem:$('#lp-pb').value.trim(), lpSolution:$('#lp-so').value.trim(), lpUsages:$('#lp-us').value.trim(), lpFaq:$('#lp-faq').value.trim(), lpOffer:v('#lp-off'), lpUntil:$('#lp-until').value, lpVideo:(pv=>pv&&!pv.short)(parseVideo(v('#lp-vid')))?v('#lp-vid'):'', lpVideoTitle:v('#lp-vidt'),
       highlights:$('#pf-hl').value.trim(), details:$('#pf-details').value.trim(), specs:$('#pf-specs').value.trim(), warranty:v('#pf-war'), active:$('#pf-active').checked,
@@ -2637,7 +2850,7 @@ function standalone(title, inner){
 function doPrint(inner){ $('#print-area').innerHTML = inner; try{ window.print(); }catch(e){ toast('Impression non disponible ici : utilisez Télécharger.'); } }
 
 /* ============ événements ============ */
-function closeAll(){ $('#overlay').innerHTML=''; CO=null; }
+function closeAll(){ closeScanner(); $('#overlay').innerHTML=''; CO=null; }
 let tt;
 function toast(m){ clearTimeout(tt); document.querySelector('.toast')?.remove(); const d=document.createElement('div'); d.className='toast'; d.setAttribute('role','status'); d.textContent=m; document.body.appendChild(d); tt=setTimeout(()=>d.remove(),2600); }
 
@@ -2695,6 +2908,14 @@ document.addEventListener('click', async e=>{
     case 'newAff': affForm(null); break;
     case 'shareProduct': shareProduct(id); break;
     case 'openLanding': openLanding(id); break;
+    case 'labelsAll': labelsDialog(); break;
+    case 'labelsOne': labelsDialog([id]); break;
+    case 'posCam': openScanner(code=>{ posScan(code); const l = $('#scan-last'); if(l) l.textContent = (S.posLcd&&S.posLcd.l1)||code; return true; }, 'Scanner les articles'); break;
+    case 'posQr': posQrPay(); break;
+    case 'scanClose': if(!restoreForm()) closeAll(); break;
+    case 'qrCancel': clearInterval(S._qrPoll); closeAll(); try{ if(window.cancelQrOrder) await window.cancelQrOrder(id); else await patch('orders', id, {status:'annulee'}); }catch(err){} toast('Paiement par QR annulé'); break;
+    case 'qrSim': { const o = S.orders.find(x=>x.id===id); if(o){ await setOrderStatus(o, 'payee'); } break; }
+    case 'payOrder': { el.disabled = true; try{ if(window.payExistingOrder){ const r = await window.payExistingOrder(id, el.dataset.t, el.dataset.v); if(r && r.redirect) location.href = r.redirect; } else { const o = S.orders.find(x=>x.id===id); if(o) await setOrderStatus(o,'payee'); closeAll(); toast('Paiement simulé (mode démo) ✓'); } }catch(err){ toast(err.message||'Paiement impossible'); el.disabled = false; } break; }
     case 'lpPlay': { const box = el.closest('.vid'); if(box) box.innerHTML = `<iframe src="${esc(el.dataset.v)}" title="Vidéo du produit" allow="autoplay; encrypted-media; picture-in-picture; fullscreen; clipboard-write" allowfullscreen referrerpolicy="strict-origin-when-cross-origin"></iframe>`; break; }
     case 'lpVideoGo': $('#lp-video')?.scrollIntoView({behavior:'smooth', block:'center'}); break;
     case 'lpZoom': { const p = S.products.find(x=>x.id===S.pid); const src = p && galleryFor(p)[Number(el.dataset.v)]; if(src) zoomBox(src); break; }
