@@ -722,6 +722,27 @@ app.get('/api/admin/carts', requireStaff, (req, res) => {
   res.json({ ai: !!env.ANTHROPIC_API_KEY, carts: allDocs('carts').filter(c => !c.converted && c.value && t - c.updatedAt >= 5 * 60e3).sort((a, b) => b.updatedAt - a.updatedAt).slice(0, 200)
     .map(c => ({ id: c.id, lines: c.lines, value: c.value, count: c.count, contact: c.contact, updatedAt: c.updatedAt, pushed: !!c.pushed, relaunchedAt: c.relaunchedAt || 0, device: !!c.pushId })) });
 });
+/* Audience : paniers avec contact (120 derniers jours) pour les segments de retargeting */
+app.get('/api/admin/audience-carts', requireStaff, (req, res) => {
+  const since = Date.now() - 120 * 864e5;
+  res.json({ carts: allDocs('carts').filter(c => c.contact && c.contact.phone && (c.updatedAt || 0) >= since && c.value)
+    .map(c => ({ lines: c.lines, value: c.value, contact: { name: c.contact.name || '', phone: c.contact.phone }, updatedAt: c.updatedAt, converted: !!c.converted })) });
+});
+/* Notification d'une campagne aux appareils abonnés des contacts choisis */
+app.post('/api/admin/push/contacts', requireStaff, h(async (req, res) => {
+  const keys = new Set((Array.isArray(req.body?.keys) ? req.body.keys : []).map(k => String(k).replace(/\D/g, '').slice(-8)).filter(k => k.length === 8));
+  if (!keys.size) return res.json({ sent: 0 });
+  if (limited('pushc', 10, 3600e3)) throw httpErr(429, 'Trop d’envois en une heure.');
+  const kOf = ph => String(ph || '').replace(/\D/g, '').slice(-8);
+  const orderIds = new Set(allDocs('orders').filter(o => keys.has(kOf(o.customer && o.customer.phone))).map(o => o.id));
+  const pushIds = new Set(allDocs('carts').filter(c => c.pushId && keys.has(kOf(c.contact && c.contact.phone))).map(c => c.pushId));
+  const subs = allDocs('push-subs').filter(x => pushIds.has(x.id) || (x.orders || []).some(id => orderIds.has(id)));
+  const pid = String(req.body?.productId || ''), p = validId(pid) ? getDoc('products', pid) : null, s = settings();
+  const url = String(req.body?.url || BASE_URL + '/').slice(0, 400);
+  const r = await pushTo(subs, { title: String(req.body?.title || (p ? `${p.name} — ${money(p.price)}` : s.shopName)).slice(0, 80), body: String(req.body?.body || `Une sélection rien que pour vous chez ${s.shopName}. Touchez pour découvrir.`).slice(0, 200),
+    url: url.startsWith(BASE_URL) ? url : BASE_URL + '/', image: p ? productImage(pid, p) : undefined, tag: 'campagne-' + Date.now(), icon: '/icon-192.png', badge: '/badge-96.png' });
+  res.json({ ...r, devices: subs.length });
+}));
 app.post('/api/admin/carts/:id/relance', requireStaff, h(async (req, res) => {
   const c = validId(req.params.id) && getDoc('carts', req.params.id);
   if (!c) throw httpErr(404, 'Panier introuvable.');
@@ -762,7 +783,7 @@ app.post('/api/orders', h(async (req, res) => {
   const order = {
     number: 'FM-' + new Date().toISOString().slice(2, 10).replace(/-/g, '') + '-' + rnd(4),
     items: t.lines, subtotal: t.subtotal, discount: t.discount, shipping: t.shipping, total: t.total, promoCode: t.promoCode, affiliate: t.affiliate,
-    source: String(b.source || '').toLowerCase().replace(/[^a-z0-9_-]/g, '').slice(0, 20),
+    source: String(b.source || '').toLowerCase().replace(/[^a-z0-9_-]/g, '').slice(0, 20), campaign: String(b.campaign || '').replace(/[^A-Za-z0-9_-]/g, '').slice(0, 30),
     customer, delivery, payment: { method, status: method === 'cod' ? 'à encaisser' : 'en attente', ref: '' },
     status: 'en_attente', channel: 'en ligne', stockApplied: false, createdAt: Date.now(), createdBy: 'web', token: randomToken()
   };
@@ -892,6 +913,7 @@ app.get('/api/admin/state', requireStaff, (req, res) => {
     affiliates: allDocs('affiliates').sort((a, b) => a.name.localeCompare(b.name)), affPayouts: allDocs('aff-payouts').sort((a, b) => b.createdAt - a.createdAt),
     costs: allDocs('costs'), stockMoves: allDocs('stock-moves').sort((a, b) => b.createdAt - a.createdAt).slice(0, 1000),
     ai: !!env.ANTHROPIC_API_KEY,
+    campaigns: allDocs('campaigns').sort((a, b) => b.createdAt - a.createdAt).slice(0, 200), contactFlags: allDocs('contact-flags'),
     visits: allDocs('visits').map(v => ({ id: v.id, count: v.count || 0, count30: Object.entries(v.days || {}).filter(([k]) => k >= addDays(today(), -30)).reduce((t, [, n]) => t + n, 0) })),
     reviews: allDocs('reviews').sort((a, b) => b.createdAt - a.createdAt),
     bundles: allDocs('bundles').sort((a, b) => (b.createdAt || 0) - (a.createdAt || 0)),
@@ -904,7 +926,7 @@ app.get('/api/admin/state', requireStaff, (req, res) => {
     settings: s, users: store.users.list(), providers: providers(), configured: CONFIGURED, me: req.user
   });
 });
-const ADMIN_COLS = new Set(['products', 'product-images', 'costs', 'stock-moves', 'reviews', 'review-images', 'bundles', 'promos', 'orders', 'settings', 'affiliates', 'aff-payouts', 'aff-lookup', 'clients', 'suppliers', 'fin-moves', 'fin-ledger', 'fin-config']);
+const ADMIN_COLS = new Set(['products', 'product-images', 'costs', 'stock-moves', 'campaigns', 'contact-flags', 'reviews', 'review-images', 'bundles', 'promos', 'orders', 'settings', 'affiliates', 'aff-payouts', 'aff-lookup', 'clients', 'suppliers', 'fin-moves', 'fin-ledger', 'fin-config']);
 function adminTarget(req) {
   const { col, id } = req.params;
   if (!ADMIN_COLS.has(col) || !validId(id)) throw httpErr(400, 'Requête invalide.');

@@ -517,7 +517,7 @@ const ROLES = ['Gérant','Vendeur','Caissier','Livreur','Gestionnaire de stock']
 /* ============ état ============ */
 const S = {
   ready:false, live:false, isAdmin:false, uid:null, myName:'',
-  products:[], bundles:[], clients:[], suppliers:[], reviews:[], costs:{}, stockMoves:[], inv:{}, topDays:30, topSort:'revenue', stFilter:'all', stCat:'', affiliates:[], affPayouts:[], moves:[], ledger:[], finConfig:{}, posTab:'vente', trAcc:'all', trType:'all', pq:'', promos:[], orders:[], settings:structuredClone(DEFAULT_SETTINGS), team:{members:[]},
+  products:[], bundles:[], clients:[], suppliers:[], reviews:[], campaigns:[], contactFlags:{}, audCarts:null, audSeg:'abandon_new', audSel:{}, costs:{}, stockMoves:[], inv:{}, topDays:30, topSort:'revenue', stFilter:'all', stCat:'', affiliates:[], affPayouts:[], moves:[], ledger:[], finConfig:{}, posTab:'vente', trAcc:'all', trType:'all', pq:'', promos:[], orders:[], settings:structuredClone(DEFAULT_SETTINGS), team:{members:[]},
   cart:[], pos:[], posPromo:null, appliedPromo:null,
   view:'shop', tab:'dash', cat:'Tout', q:'', aq:'', orderFilter:'all', selPromos:new Set(), names:{}
 };
@@ -567,6 +567,8 @@ function syncLocal(){
   S.bundles = arr('bundles').sort((a,b)=>(b.createdAt||0)-(a.createdAt||0));
   S.costs = Object.fromEntries(arr('costs').map(c=>[c.id, Number(c.cost)||0]));
   S.stockMoves = arr('stock-moves').sort((a,b)=>b.createdAt-a.createdAt);
+  S.campaigns = arr('campaigns').sort((a,b)=>b.createdAt-a.createdAt);
+  S.contactFlags = Object.fromEntries(arr('contact-flags').map(f=>[f.id, f]));
   S.reviews = arr('reviews').sort((a,b)=>b.createdAt-a.createdAt);
   S.affiliates = arr('affiliates').sort((a,b)=>a.name.localeCompare(b.name));
   S.affPayouts = arr('aff-payouts').sort((a,b)=>b.createdAt-a.createdAt);
@@ -645,6 +647,8 @@ async function boot(){
       sub('clients','clients',(a,b)=>a.name.localeCompare(b.name));
       db.collection('costs').onSnapshot(s=>{ S.costs = Object.fromEntries(s.docs.map(d=>[d.id, Number(d.data().cost)||0])); schedule(); }, dbErr);
       sub('stock-moves','stockMoves',(a,b)=>b.createdAt-a.createdAt);
+      sub('campaigns','campaigns',(a,b)=>b.createdAt-a.createdAt);
+      db.collection('contact-flags').onSnapshot(s=>{ S.contactFlags = Object.fromEntries(s.docs.map(d=>[d.id,{id:d.id,...d.data()}])); schedule(); }, dbErr);
       sub('affiliates','affiliates',(a,b)=>a.name.localeCompare(b.name));
       sub('aff-payouts','affPayouts',(a,b)=>b.createdAt-a.createdAt);
       sub('suppliers','suppliers',(a,b)=>a.name.localeCompare(b.name));
@@ -1106,6 +1110,107 @@ async function recvValidate(){
       const cur = vk ? ((varOf(p,vk)||{}).stock||0) : p.stock; await recordMove(p, cur+q, 'entree', 'Réception par scan', null, vk||undefined); }
     S.recv = {}; toast('Réception enregistrée : stock mis à jour'); schedule(); }
   catch(e){ dbErr(e); toast('Une partie de la réception n’a pas pu être enregistrée.'); }
+}
+
+/* --- Clients & retargeting : contacts, segments, campagnes --- */
+const phoneKey = ph => { const d = String(ph||'').replace(/\D/g,''); return d.length>=8 ? d.slice(-8) : ''; };
+const intlPhone = ph => { let d = String(ph||'').replace(/\D/g,''); if(d.startsWith('00')) d = d.slice(2); if(d.length===8) d = '223'+d; return d ? '+'+d : ''; };
+const firstName = n => String(n||'').trim().split(/\s+/)[0] || '';
+const PAID = ['payee','preparation','expediee','livree'];
+function buildContacts(){
+  const m = {}, get = (ph, name)=>{ const k = phoneKey(ph); if(!k) return null; const c = m[k] || (m[k] = {key:k, phone:ph, name:'', orders:0, spent:0, lastOrder:0, firstOrder:0, cats:new Set(), prods:new Set(), carts:[], sources:new Set()}); if(name && name!=='Client comptoir') c.name = c.name || name; if(ph && String(ph).length>String(c.phone).length) c.phone = ph; return c; };
+  for(const o of S.orders){ const cu = o.customer||{}; const c = get(cu.phone, cu.name); if(!c) continue;
+    if(o.status==='annulee') continue;
+    if(PAID.includes(o.status) || o.channel==='caisse'){ c.orders++; c.spent += o.total||0; c.lastOrder = Math.max(c.lastOrder, o.createdAt||0); c.firstOrder = c.firstOrder ? Math.min(c.firstOrder, o.createdAt||0) : (o.createdAt||0); c.sources.add(o.channel==='caisse'?'Caisse':'En ligne');
+      (o.items||[]).forEach(i=>{ const p = S.products.find(x=>x.id===i.id); if(p){ c.prods.add(p.id); if(p.category) c.cats.add(p.category); } (i.components||[]).forEach(cc=>{ const pp = S.products.find(x=>x.id===cc.id); if(pp && pp.category) c.cats.add(pp.category); }); }); }
+    else if(o.status==='en_attente') c.sources.add('Commande non payée'); }
+  for(const cl of S.clients||[]){ const c = get(cl.phone, cl.name); if(c) c.sources.add('Fiche client'); }
+  for(const ct of (S.audCarts||[])){ const c = get(ct.contact&&ct.contact.phone, ct.contact&&ct.contact.name); if(!c) continue; if(!ct.converted){ c.carts.push(ct); c.sources.add('Panier'); } }
+  return Object.values(m).map(c=>{ const lastCart = c.carts.reduce((t,x)=>Math.max(t,x.updatedAt||0),0);
+    return {...c, lastCart, abandoned: lastCart && lastCart > c.lastOrder ? c.carts.filter(x=>(x.updatedAt||0) > c.lastOrder) : [], optOut: !!(S.contactFlags[c.key]&&S.contactFlags[c.key].optOut)}; });
+}
+const DAYms = 864e5;
+function segments(contacts){
+  const vipMin = Math.max(100000, (()=>{ const v = contacts.filter(c=>c.orders).map(c=>c.spent).sort((a,b)=>b-a); return v.length>=10 ? v[Math.floor(v.length*0.1)] : Infinity; })());
+  const seg = [
+    ['abandon_new', '🛒 Paniers abandonnés · jamais acheté', c=>c.abandoned.length && !c.orders, 'Ont rempli un panier sans commander : à convaincre.'],
+    ['abandon_client', '🛒 Paniers abandonnés · déjà clients', c=>c.abandoned.length && c.orders, 'Clients qui ont laissé un nouveau panier : à relancer en douceur.'],
+    ['buyers', '✅ Tous les acheteurs', c=>c.orders>0, 'Toutes les personnes qui ont déjà acheté.'],
+    ['new', '🌱 Nouveaux clients (1 achat)', c=>c.orders===1, 'À fidéliser : remerciez et proposez un complément.'],
+    ['loyal', '⭐ Clients fidèles (3 achats et plus)', c=>c.orders>=3, 'Vos meilleurs ambassadeurs : avant-premières et remerciements.'],
+    ['vip', '💎 Gros clients', c=>c.orders>0 && c.spent>=vipMin, `Dépense totale d’au moins ${fmt(vipMin===Infinity?100000:vipMin)}.`],
+    ['inactive', '💤 Inactifs (plus de 60 jours)', c=>c.orders>0 && Date.now()-c.lastOrder > 60*DAYms, 'Clients à réveiller avec une offre.'],
+  ];
+  const cats = [...new Set(contacts.flatMap(c=>[...c.cats]))].sort();
+  cats.forEach(ct=>seg.push(['cat:'+ct, '🏷️ Ont acheté : '+ct, c=>c.cats.has(ct), `Clients ayant déjà acheté en « ${ct} ».`]));
+  return seg.map(([k,l,f,d])=>({key:k, label:l, desc:d, list:contacts.filter(c=>!c.optOut && f(c))}));
+}
+const TPL = {
+  abandon_new: 'Bonjour {prenom} 😊 Vous avez regardé nos articles sans finaliser votre commande. Découvrez {produit} à {prix} : {lien}{code}\nLivraison à Bamako, paiement Orange Money, Wave ou à la livraison.',
+  abandon_client: 'Bonjour {prenom}, merci d’être client chez {boutique} ! Votre panier vous attend, et nous pensons que {produit} ({prix}) va vous plaire : {lien}{code}',
+  buyers: 'Bonjour {prenom} 👋 Merci pour votre confiance ! Nouveauté chez {boutique} : {produit} à {prix}. Commandez ici : {lien}{code}',
+  new: 'Bonjour {prenom}, merci pour votre premier achat chez {boutique} 🙏 Pour compléter, découvrez {produit} à {prix} : {lien}{code}',
+  loyal: 'Bonjour {prenom} ⭐ Vous faites partie de nos meilleurs clients : en avant-première, {produit} à {prix}. {lien}{code}',
+  vip: 'Bonjour {prenom} 💎 Pour vous remercier de votre fidélité, nous vous réservons {produit} à {prix} : {lien}{code}',
+  inactive: 'Bonjour {prenom}, cela fait longtemps ! 😊 {boutique} a des nouveautés pour vous, comme {produit} à {prix} : {lien}{code}',
+  cat: 'Bonjour {prenom} ! Vous aimez nos articles de {categorie} : découvrez {produit} à {prix}. {lien}{code}'
+};
+const tplFor = k => TPL[k] || (k.startsWith('cat:') ? TPL.cat : TPL.buyers);
+function fillMsg(tpl, c, ctx){
+  return tpl.replace(/\{prenom\}/g, firstName(c.name) || 'cher client').replace(/\{produit\}/g, ctx.p ? ctx.p.name : 'nos nouveautés').replace(/\{prix\}/g, ctx.p ? fmt(ctx.p.price).replace(/[\u202f\u00a0]/g,' ') : 'des prix doux')
+    .replace(/\{lien\}/g, ctx.link).replace(/\{boutique\}/g, S.settings.shopName).replace(/\{categorie\}/g, ctx.cat||'').replace(/\{code\}/g, ctx.code ? `\nAvec le code ${ctx.code} : profitez de votre remise.` : '')
+    .replace(/\{panier\}/g, (c.abandoned[0]&&c.abandoned[0].lines||[]).map(l=>l.name).slice(0,2).join(', ')) + '\n\nRépondez STOP pour ne plus recevoir nos messages.';
+}
+function paneAudience(){
+  if(isServer() && S.audCarts===null && window.loadAudienceCarts){ window.loadAudienceCarts(); }
+  const contacts = buildContacts(), segs = segments(contacts), optOut = contacts.filter(c=>c.optOut).length;
+  const cur = segs.find(x=>x.key===S.audSeg) || segs[0]; S.audSeg = cur.key;
+  const sel = Object.keys(S.audSel).filter(k=>S.audSel[k] && segs.some(x=>x.key===k));
+  const live = S.products.filter(p=>p.active!==false);
+  return `<div class="toolbar"><h2 style="font-size:24px;flex:1">Clients & retargeting</h2></div>
+  <div class="kpis"><div class="kpi"><span>Contacts avec téléphone</span><b>${contacts.length}</b></div><div class="kpi"><span>Acheteurs</span><b>${contacts.filter(c=>c.orders).length}</b></div><div class="kpi"><span>Paniers abandonnés</span><b>${contacts.filter(c=>c.abandoned.length).length}</b></div><div class="kpi"><span>Ne plus contacter</span><b>${optOut}</b></div></div>
+  ${!isServer()?'<p class="muted small">Les paniers abandonnés sont suivis sur la version Render. Ici, les segments se basent sur les commandes et les fiches clients.</p>':''}
+  <div class="row" style="align-items:flex-start;gap:16px">
+   <div class="panel" style="flex:1 1 300px;padding:12px"><h3 style="font-size:18px;margin:4px 6px 8px">Segments</h3>
+    ${segs.map(g=>`<div style="display:flex;align-items:center;gap:8px;padding:8px 6px;border-radius:10px;${g.key===cur.key?'background:var(--indigo-soft)':''}"><input type="checkbox" data-audsel="${esc(g.key)}" ${S.audSel[g.key]?'checked':''} aria-label="Inclure dans la campagne"><button data-a="audSeg" data-v="${esc(g.key)}" style="flex:1;text-align:left;border:0;background:none;color:inherit;padding:0;font:inherit"><b style="font-size:14px">${esc(g.label)}</b><div class="muted small">${g.list.length} contact${g.list.length>1?'s':''}</div></button></div>`).join('')}
+    <p class="muted small" style="margin:8px 6px 0">Cochez un ou plusieurs segments pour leur envoyer le même produit, chacun avec son message.</p></div>
+   <div class="panel tbl-wrap" style="flex:2 1 480px"><h3 style="font-size:18px">${esc(cur.label)}</h3><p class="muted small" style="margin:-4px 0 10px">${esc(cur.desc)}</p>
+    ${cur.list.length?`<table><thead><tr><th>Client</th><th>Achats</th><th>Dépensé</th><th>Dernière activité</th><th></th></tr></thead><tbody>${cur.list.slice(0,300).map(c=>`<tr><td><b>${esc(c.name||'—')}</b><div class="muted small">${esc(intlPhone(c.phone))} · ${esc([...c.sources].join(', '))}</div>${c.abandoned.length?`<div class="small" style="color:var(--indigo)">Panier : ${esc((c.abandoned[0].lines||[]).map(l=>l.name).slice(0,2).join(', '))} · ${fmt(c.abandoned[0].value||0)}</div>`:''}</td><td>${c.orders}</td><td>${fmt(c.spent)}</td><td class="small">${dateFr(Math.max(c.lastOrder,c.lastCart))}</td><td><button class="btn ghost sm" data-a="audOpt" data-id="${esc(c.key)}" title="Ne plus contacter">🚫</button></td></tr>`).join('')}</tbody></table>`:'<p class="muted">Aucun contact dans ce segment pour l’instant.</p>'}</div></div>
+  <div class="panel"><h3 style="font-size:19px">📣 Nouvelle campagne</h3>
+   <div class="row"><div class="field" style="flex:2 1 260px"><label for="cp-prod">Produit à envoyer</label><select class="input" id="cp-prod"><option value="">— Toute la boutique —</option>${live.map(p=>`<option value="${p.id}" ${(S.audForm||{}).prod===p.id?'selected':''}>${esc(p.name)} · ${fmt(p.price)}</option>`).join('')}</select></div>
+   <div class="field"><label for="cp-code">Code promo (facultatif)</label><select class="input" id="cp-code"><option value="">— Aucun —</option>${S.promos.filter(x=>x.active).map(x=>`<option ${(S.audForm||{}).code===x.code?'selected':''}>${esc(x.code)}</option>`).join('')}</select></div>
+   <div class="field"><label for="cp-name">Nom de la campagne</label><input class="input" id="cp-name" placeholder="ex. Tabaski boubous" maxlength="60" value="${esc((S.audForm||{}).name||'')}"></div></div>
+   <p class="muted small" style="margin:0 0 6px">Segments choisis : <b>${sel.length?sel.map(k=>esc(segs.find(x=>x.key===k).label)).join(', '):'aucun (cochez à gauche)'}</b> · ${sel.reduce((t,k)=>t+segs.find(x=>x.key===k).list.length,0)} contacts (un contact présent dans deux segments ne reçoit qu’un message).</p>
+   ${sel.map(k=>`<div class="field"><label>Message pour « ${esc(segs.find(x=>x.key===k).label)} »</label><textarea class="input" data-cptpl="${esc(k)}" style="min-height:80px">${esc(S.audTpl&&S.audTpl[k]||tplFor(k))}</textarea></div>`).join('')}
+   <p class="muted small" style="margin:0 0 10px">Variables : {prenom} {produit} {prix} {lien} {code} {boutique} {categorie} {panier}. Le lien mène à la page de vente du produit et permet de compter les ventes de la campagne.</p>
+   <div class="fin-actions"><button class="btn primary" data-a="cpWa" ${sel.length?'':'disabled'}>📲 Envoyer sur WhatsApp</button><button class="btn ghost" data-a="cpCsv" ${sel.length?'':'disabled'}>⬇️ Liste d’envoi (CSV)</button><button class="btn ghost" data-a="cpMeta" ${sel.length?'':'disabled'}>⬇️ Audience Facebook / Instagram</button>${isServer()?`<button class="btn ghost" data-a="cpPush" ${sel.length?'':'disabled'}>🔔 Notification aux abonnés</button>`:''}</div></div>
+  ${S.campaigns.length?`<div class="panel tbl-wrap"><h3 style="font-size:19px">Campagnes envoyées</h3><table><thead><tr><th>Campagne</th><th>Segments</th><th>Envoyés</th><th>Commandes</th><th>Chiffre d’affaires</th></tr></thead><tbody>${S.campaigns.map(cp=>{ const os = S.orders.filter(o=>o.campaign===cp.id && o.status!=='annulee'); return `<tr><td><b>${esc(cp.name)}</b><div class="muted small">${dateFr(cp.createdAt)}${cp.product?' · '+esc(cp.product):''}</div></td><td class="small">${esc((cp.segments||[]).join(', '))}</td><td>${cp.sent||0} / ${cp.total||0}</td><td>${os.length}</td><td>${fmt(os.reduce((t,o)=>t+o.total,0))}</td></tr>`; }).join('')}</tbody></table></div>`:''}`;
+}
+function campaignDraft(){
+  const contacts = buildContacts(), segs = segments(contacts), sel = Object.keys(S.audSel).filter(k=>S.audSel[k]), seen = new Set(), recips = [];
+  const p = S.products.find(x=>x.id===$('#cp-prod').value), code = $('#cp-code').value, cid = S.audCid || (S.audCid = 'c'+Date.now().toString(36));
+  const name = $('#cp-name').value.trim() || (p ? p.name : 'Campagne') + ' · ' + new Date().toLocaleDateString('fr-FR');
+  sel.forEach(k=>{ const g = segs.find(x=>x.key===k); if(!g) return; const tpl = (document.querySelector(`[data-cptpl="${k}"]`)||{}).value || tplFor(k);
+    const link = (p ? landingLink(p, 'whatsapp') : shopUrl()+'?src=whatsapp') + '&cmp=' + cid + (code ? '&promo='+encodeURIComponent(code) : '');
+    g.list.forEach(c=>{ if(seen.has(c.key)) return; seen.add(c.key); recips.push({c, seg:g.label, msg:fillMsg(tpl, c, {p, link, code, cat:k.startsWith('cat:')?k.slice(4):''})}); }); });
+  return {cid, name, p, code, sel:sel.map(k=>(segs.find(x=>x.key===k)||{}).label), recips};
+}
+async function saveCampaign(d, extra){ const old = S.campaigns.find(x=>x.id===d.cid); try{ await put('campaigns', d.cid, {...(old||{}), name:d.name, product:d.p?d.p.name:'', productId:d.p?d.p.id:'', code:d.code, segments:d.sel, total:d.recips.length, sent:old?old.sent||0:0, createdAt:old?old.createdAt:Date.now(), ...(extra||{})}); }catch(e){ dbErr(e); } }
+function waSender(d){
+  let i = 0; const sent = new Set();
+  const draw = ()=>{ const r = d.recips[i];
+    $('#overlay').innerHTML = `<div class="scrim"><div class="modal" role="dialog" aria-modal="true" aria-label="Envoi WhatsApp"><div class="m-h"><h2>📲 ${esc(d.name)}</h2><button class="x" data-a="closeAll" aria-label="Fermer">×</button></div>
+      <div class="m-b"><div class="lcd" style="grid-template-columns:1fr auto;margin-bottom:12px"><div class="l1">${i+1} / ${d.recips.length} · ${esc(r.seg)}</div><div class="tot" style="font-size:22px">${sent.size} envoyés</div></div>
+      <p style="margin:0 0 6px"><b>${esc(r.c.name||'Client')}</b> · ${esc(intlPhone(r.c.phone))}</p><textarea class="input" id="ws-msg" style="min-height:150px">${esc(r.msg)}</textarea>
+      <p class="muted small" style="margin:8px 0 0">Touchez « Ouvrir WhatsApp », envoyez le message, puis revenez ici pour le contact suivant.</p></div>
+      <div class="m-f"><button class="btn ghost" id="ws-prev" ${i?'':'disabled'}>‹ Précédent</button><a class="btn primary" id="ws-open" target="_blank" rel="noopener" href="https://wa.me/${intlPhone(r.c.phone).replace('+','')}?text=${encodeURIComponent(r.msg)}">Ouvrir WhatsApp</a><button class="btn ghost" id="ws-next">${i<d.recips.length-1?'Suivant ›':'Terminer'}</button></div></div></div>`;
+    $('#ws-msg').oninput = ()=>{ r.msg = $('#ws-msg').value; $('#ws-open').href = `https://wa.me/${intlPhone(r.c.phone).replace('+','')}?text=${encodeURIComponent(r.msg)}`; };
+    $('#ws-open').onclick = ()=>{ sent.add(i); patch('campaigns', d.cid, {sent:sent.size}).catch(()=>{}); setTimeout(()=>{ if(i<d.recips.length-1){ i++; draw(); } }, 400); };
+    $('#ws-prev').onclick = ()=>{ if(i>0){ i--; draw(); } };
+    $('#ws-next').onclick = ()=>{ if(i<d.recips.length-1){ i++; draw(); } else { closeAll(); toast(`Campagne terminée : ${sent.size} message${sent.size>1?'s':''} envoyé${sent.size>1?'s':''}`); } };
+  };
+  if(!d.recips.length) return toast('Aucun contact dans les segments choisis.');
+  draw();
 }
 
 /* --- Partage et visuels --- */
@@ -1789,7 +1894,7 @@ async function coNext(){
       items:orderItems(t.lines),
       subtotal:t.subtotal, discount:t.discount, shipping:t.shipping, total:t.total,
       promoCode:S.appliedPromo?S.appliedPromo.code:'',
-      source:srcCode(),
+      source:srcCode(), campaign:cmpCode(),
       affiliate:S.appliedPromo&&S.appliedPromo.affiliate?{id:S.appliedPromo.affiliate.id, code:S.appliedPromo.code, discountPct:S.appliedPromo.value, commission:affCommission(t.lines, S.appliedPromo.value)}:null,
       customer:{name:CO.name, phone:CO.phone, address:CO.address, city:CO.city, note:CO.note},
       delivery:CO.delivery, payment:{method:CO.method, ref, status:CO.method==='cod'?'à encaisser':'réussi'+(S.settings.testMode?' (test)':'')},
@@ -2459,10 +2564,10 @@ function billForm(type, x){
 }
 
 /* --- Gestion --- */
-const TABS = [['dash','Tableau de bord'],['products','Produits'],['stock','Stock & inventaire'],['bundles','Lots'],['orders','Commandes'],['promos','Codes promo'],['affiliates','Ambassadeurs'],['reviews','Avis clients'],['studio','Studio réseaux'],['alerts','Alertes clients'],['carts','Assistant & paniers'],['payments','Paiements'],['team','Équipe']];
+const TABS = [['dash','Tableau de bord'],['products','Produits'],['stock','Stock & inventaire'],['bundles','Lots'],['orders','Commandes'],['promos','Codes promo'],['affiliates','Ambassadeurs'],['reviews','Avis clients'],['studio','Studio réseaux'],['audience','Clients & retargeting'],['alerts','Alertes clients'],['carts','Assistant & paniers'],['payments','Paiements'],['team','Équipe']];
 function viewAdmin(){
   const pending = S.orders.filter(o=>o.status==='en_attente'||(o.status==='payee'&&!o.stockApplied)).length;
-  const panes = {dash:paneDash, products:paneProducts, stock:paneStock, bundles:paneBundles, orders:paneOrders, promos:panePromos, affiliates:paneAffiliates, reviews:paneReviews, studio:paneStudio, alerts:()=>window.paneAlerts?window.paneAlerts():'', carts:()=>window.paneCarts?window.paneCarts():'', payments:panePayments, team:paneTeam};
+  const panes = {dash:paneDash, products:paneProducts, stock:paneStock, bundles:paneBundles, orders:paneOrders, promos:panePromos, affiliates:paneAffiliates, reviews:paneReviews, studio:paneStudio, audience:paneAudience, alerts:()=>window.paneAlerts?window.paneAlerts():'', carts:()=>window.paneCarts?window.paneCarts():'', payments:panePayments, team:paneTeam};
   return `<div class="admin"><nav class="side" aria-label="Gestion">${TABS.filter(([k])=>!['alerts','carts'].includes(k)||isServer()).map(([k,l])=>`<button data-a="tab" data-v="${k}" ${S.tab===k?'aria-current="page"':''}>${l}${k==='orders'&&pending?`<span class="pill warn">${pending}</span>`:''}</button>`).join('')}</nav>
     <section>${panes[S.tab]()}</section></div>`;
 }
@@ -2933,6 +3038,8 @@ document.addEventListener('change', async e=>{
   if(a==='togglePromo'){ const p=S.promos.find(x=>x.code===t.dataset.id); try{ await patch('promos',p.code,{active:t.checked}); await patch('promo-lookup',await hashCode(p.code),{active:t.checked}); }catch(err){ dbErr(err); } }
   if(a==='selPromo'){ t.checked?S.selPromos.add(t.dataset.id):S.selPromos.delete(t.dataset.id); schedule(); }
   if(a==='selAll'){ S.selPromos = t.checked ? new Set(S.promos.map(p=>p.code)) : new Set(); schedule(); }
+  if(t.dataset.audsel || t.id==='cp-prod' || t.id==='cp-code'){ S.audCid = null; }
+  if(t.dataset.audsel){ S.audForm = {prod:$('#cp-prod')?.value||'', code:$('#cp-code')?.value||'', name:$('#cp-name')?.value||''}; S.audSel[t.dataset.audsel] = t.checked; S.audTpl = S.audTpl || {}; document.querySelectorAll('[data-cptpl]').forEach(x=>S.audTpl[x.dataset.cptpl]=x.value); schedule(); }
   if(t.dataset.top==='sort'){ S.topSort=t.value; schedule(); }
   if(t.dataset.studio==='subject'){ S.studio.subject=t.value; schedule(); }
   if(t.dataset.stk==='cat'){ S.stCat=t.value; schedule(); }
@@ -2965,6 +3072,13 @@ document.addEventListener('click', async e=>{
     case 'newAff': affForm(null); break;
     case 'shareProduct': shareProduct(id); break;
     case 'openLanding': openLanding(id); break;
+    case 'audSeg': S.audSeg = el.dataset.v; schedule(); break;
+    case 'audOpt': { const k = id; if(!confirmTwice(el)) break; try{ await put('contact-flags', k, {optOut:true, at:Date.now()}); toast('Ce contact ne recevra plus vos campagnes'); }catch(err){ dbErr(err); } break; }
+    case 'cpWa': { const d = campaignDraft(); if(!d.recips.length){ toast('Aucun contact dans les segments choisis.'); break; } await saveCampaign(d); waSender(d); S.audCid = null; break; }
+    case 'cpCsv': { const d = campaignDraft(); if(!d.recips.length){ toast('Aucun contact.'); break; } await saveCampaign(d); save(`campagne-${d.cid}.csv`, csv([['Nom','Téléphone','Segment','Message'], ...d.recips.map(r=>[r.c.name, intlPhone(r.c.phone), r.seg, r.msg])])); break; }
+    case 'cpMeta': { const d = campaignDraft(); if(!d.recips.length){ toast('Aucun contact.'); break; } { const q = v => /[",\n]/.test(v) ? '"'+String(v).replace(/"/g,'""')+'"' : String(v); const rows = [['phone','fn','ln','ct','country'], ...d.recips.map(r=>{ const w = String(r.c.name||'').trim().split(/\s+/); return [intlPhone(r.c.phone).replace('+',''), (w[0]||'').toLowerCase(), (w.slice(1).join(' ')||'').toLowerCase(), (S.settings.city||'').toLowerCase(), 'ml']; })];
+        save(`audience-meta-${d.cid}.csv`, rows.map(r=>r.map(q).join(',')).join('\n')); } toast('Importez ce fichier dans Meta : Audiences › Créer une audience personnalisée › Liste de clients'); break; }
+    case 'cpPush': { const d = campaignDraft(); if(!d.recips.length){ toast('Aucun contact.'); break; } if(!window.pushToContacts) break; try{ const r = await window.pushToContacts(d); await saveCampaign(d, {sent:r.sent, channel:'notification'}); toast(`Notification envoyée à ${r.sent} appareil${r.sent>1?'s':''}`); }catch(err){ toast(err.message||'Envoi impossible'); } break; }
     case 'labelsAll': labelsDialog(); break;
     case 'scanImport': scanImportDialog(); break;
     case 'recvCam': openScanner(code=>{ const known = findByCode(code); if(!known){ closeScanner(); recvScan(code); return false; } recvScan(code); const l=$('#scan-last'); if(l) l.textContent = '+1 · '+known.p.name; return true; }, 'Réception : scannez les articles'); break;
@@ -3082,8 +3196,10 @@ function captureSrc(){
   try{ const q = new URLSearchParams(location.search), src = (q.get('src')||'').toLowerCase().replace(/[^a-z0-9_-]/g,'').slice(0,20);
     if(src){ localStorage.setItem('ffm-src', JSON.stringify({src, at:Date.now()})); window.__ffmNewSrc = src; }
     const pc = (q.get('promo')||'').trim().toUpperCase().replace(/[^A-Z0-9_-]/g,'').slice(0,30); if(pc) localStorage.setItem('ffm-promo', pc);
-    const cat = q.get('cat'); if(cat) window.__ffmCat = cat; }catch(e){}
+    const cat = q.get('cat'); if(cat) window.__ffmCat = cat;
+    const cm = (q.get('cmp')||'').replace(/[^A-Za-z0-9_-]/g,'').slice(0,30); if(cm) localStorage.setItem('ffm-cmp', JSON.stringify({c:cm, at:Date.now()})); }catch(e){}
 }
+function cmpCode(){ try{ const r = JSON.parse(localStorage.getItem('ffm-cmp')||'null'); if(r && Date.now()-r.at < 30*864e5) return r.c; }catch(e){} return ''; }
 function srcCode(){ try{ const r = JSON.parse(localStorage.getItem('ffm-src')||'null'); if(r && Date.now()-r.at < 30*864e5) return r.src; }catch(e){} return ''; }
 captureSrc();
 captureRef();
