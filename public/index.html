@@ -683,6 +683,7 @@ function render(){
   if(S.view==='admin' && S.tab==='studio') setTimeout(studioRender, 0);
   if(!S._deep && S.ready && S.products.length && window.__ffmCat){ const c = window.__ffmCat; if(['Tout','Soldes','Nouveautés','Occasion','Lots'].includes(c) || S.products.some(p=>p.category===c)){ S.cat = c; setTimeout(()=>$('#catalogue')?.scrollIntoView({behavior:'smooth'}), 400); } window.__ffmCat = null; }
   if(S.view==='landing') setTimeout(lpAfterRender, 0);
+  { const rs = $('#recv-scan'); if(rs && !rs.dataset.on){ rs.dataset.on='1'; rs.onkeydown = e=>{ if(e.key==='Enter'){ e.preventDefault(); const v = rs.value.trim(); rs.value=''; if(v) recvScan(v); setTimeout(()=>$('#recv-scan')?.focus(), 30); } }; } }
   if(S.view==='pos' && S.posTab==='vente'){ const sc = $('#pos-scan'); if(sc && !sc.dataset.on){ sc.dataset.on='1'; sc.onkeydown = e=>{ if(e.key==='Enter'){ e.preventDefault(); const v = sc.value.trim(); sc.value=''; if(v) posScan(v); } }; } }
   if(!S._payDeep && S.ready && S.products.length){ let q=null; try{ q = new URLSearchParams(location.search); }catch(e){}
     const pid = q && q.get('pay'), ord = q && q.get('payer');
@@ -1011,7 +1012,7 @@ function labelsDialog(ids){
 function posScan(code){
   const r = findByCode(code);
   if(!r){ beep(false); S.posLcd = {l1:'CODE INCONNU', l2:String(code).slice(0,24)}; schedule();
-    toast(S.isAdmin ? 'Code inconnu : vous pouvez l’ajouter à un produit dans sa fiche.' : 'Code inconnu.'); return true; }
+    if(S.isAdmin){ closeScanner(); importByCode(code, {qty:0}); return false; } toast('Code inconnu.'); return true; }
   const {p, v} = r;
   if(hasVar(p) && !v){ beep(true); pickVariant(p); return false; }
   const before = S.pos.reduce((t,l)=>t+l.qty,0);
@@ -1053,6 +1054,58 @@ async function posQrPay(){
     if(o && (o.status==='payee' || (o.payment && /réussi|reussi|payé|paye/i.test(o.payment.status||'')))){ clearInterval(S._qrPoll); beep(true);
       const box = $('#qr-state'); if(box){ box.innerHTML = '<b style="color:var(--kola);font-size:18px">✓ Paiement reçu</b>'; }
       S.pos = []; S.posPromo = null; S.posLcd = {l1:'PAIEMENT REÇU ✓', l2:res.number}; setTimeout(()=>{ closeAll(); schedule(); }, 1600); } }, 3000);
+}
+
+/* --- Import par scan : retrouver, créer ou modifier un article --- */
+const dataToFile = d => fetch(d).then(r=>r.blob()).then(b=>new File([b], 'photo.jpg', {type:b.type||'image/jpeg'}));
+async function importByCode(raw, opt){
+  opt = opt || {}; const code = String(raw||'').trim().replace(/\s/g,''); if(!code) return;
+  const hit = findByCode(code);
+  if(hit){ beep(true); if(opt.onKnown) return opt.onKnown(hit); return productForm(hit.p); }
+  $('#overlay').innerHTML = `<div class="scrim"><div class="modal" role="dialog" aria-modal="true" aria-label="Nouveau produit"><div class="m-h"><h2>Nouveau produit détecté</h2><button class="x" data-a="closeAll" aria-label="Fermer">×</button></div><div class="m-b" style="text-align:center"><div class="spinner"></div><p class="muted">Recherche du code <b style="font-family:monospace">${esc(code)}</b> dans les bases de produits…</p></div></div></div>`;
+  let info = null; try{ if(window.lookupBarcode) info = await window.lookupBarcode(code); }catch(e){}
+  const found = info && info.found;
+  $('#overlay').innerHTML = `<div class="scrim" data-a="closeAll"><div class="modal" role="dialog" aria-modal="true" aria-label="Nouveau produit"><div class="m-h"><h2>${found?'Produit trouvé':'Nouveau produit'}</h2><button class="x" data-a="closeAll" aria-label="Fermer">×</button></div>
+    <div class="m-b"><p style="margin-top:0">Le code <b style="font-family:monospace">${esc(code)}</b> n’est pas encore dans votre stock.</p>
+    ${found?`<div class="row" style="align-items:center;gap:16px;padding:14px;border-radius:14px;background:var(--surface);border:1px solid var(--line)">${info.image?`<img src="${esc(info.image)}" alt="" style="width:96px;height:96px;object-fit:contain;background:#fff;border-radius:10px;flex:none">`:''}<div style="flex:1"><b style="font-size:17px">${esc(info.name)}</b><div class="muted small">${esc([info.brand, info.quantity].filter(Boolean).join(' · '))}</div><div class="muted small">Catégorie proposée : ${esc(info.category||'—')} · source : ${esc(info.source)}</div></div></div>
+      <p class="muted small" style="margin:10px 0 0">Les informations viennent d’une base publique : vérifiez-les, puis indiquez votre prix et votre stock.</p>`
+    : `<p class="muted">${window.lookupBarcode?'Ce produit n’a pas été trouvé dans les bases publiques (fréquent pour les produits locaux) :':'Créez la fiche :'} le code-barres est déjà rempli, ajoutez le nom, la photo et le prix.</p>`}
+    <div class="row" style="margin-top:12px"><div class="field"><label for="im-qty">Quantité reçue (stock de départ)</label><input class="input" id="im-qty" inputmode="numeric" value="${Math.max(0, opt.qty||0)}"></div><div class="field"><label for="im-cost">Prix d’achat unitaire (facultatif)</label><input class="input" id="im-cost" inputmode="numeric"></div></div></div>
+    <div class="m-f"><button class="btn ghost" data-a="closeAll">Ignorer</button><button class="btn primary" id="im-go">Créer l’article</button></div></div></div>`;
+  $('#im-go').onclick = async e=>{ e.stopPropagation(); const b = e.currentTarget; b.disabled = true; b.textContent = 'Préparation…';
+    let image = ''; if(found && info.image){ try{ image = await compress(await dataToFile(info.image)); }catch(err){} }
+    const qty = Math.max(0, parseInt($('#im-qty').value)||0), cost = Number(($('#im-cost').value||'').replace(/\s/g,''))||0;
+    const specs = found ? [info.brand?'Marque : '+info.brand:'', info.quantity?'Contenance : '+info.quantity:''].filter(Boolean).join('\n') : '';
+    window.__importCost = cost;
+    productForm({name: found ? info.name : '', description: found ? (info.description||'') : '', category: found ? (info.category||'') : '', barcode: code, image, stock: qty, specs, emoji: found && /Beauté/.test(info.category||'') ? '🧴' : '📦'});
+    if(cost && $('#pf-cost')){ $('#pf-cost').value = cost; $('#pf-cost').dispatchEvent(new Event('input')); }
+    setTimeout(()=>{ const f = found ? $('#pf-price') : $('#pf-name'); if(f) f.focus(); }, 60);
+    toast(found ? 'Fiche pré-remplie : ajoutez votre prix de vente, puis Enregistrer' : 'Code-barres rempli : complétez la fiche'); };
+}
+function scanImportDialog(){
+  $('#overlay').innerHTML = `<div class="scrim" data-a="closeAll"><div class="modal" role="dialog" aria-modal="true" aria-label="Scanner un produit"><div class="m-h"><h2>📷 Scanner un produit</h2><button class="x" data-a="closeAll" aria-label="Fermer">×</button></div>
+    <div class="m-b"><p style="margin-top:0">Scannez le code-barres de l’emballage avec une <b>douchette</b> (le curseur est dans la case) ou avec la <b>caméra</b>.</p>
+    <ul class="muted small" style="padding-left:18px"><li>Produit <b>déjà en stock</b> : sa fiche s’ouvre pour le modifier.</li><li>Produit <b>nouveau</b> : ses informations sont recherchées et l’article est créé.</li></ul>
+    <div class="term-row"><input class="input" id="si-code" inputmode="numeric" autocomplete="off" placeholder="Code-barres puis Entrée"><button class="btn ghost" id="si-cam">📷 Caméra</button></div></div></div></div>`;
+  const go = ()=>{ const v = $('#si-code').value.trim(); if(v) importByCode(v); };
+  $('#si-code').focus(); $('#si-code').onkeydown = e=>{ if(e.key==='Enter'){ e.preventDefault(); go(); } };
+  $('#si-cam').onclick = e=>{ e.stopPropagation(); openScanner(code=>{ closeScanner(); importByCode(code); return false; }, 'Scanner l’emballage'); };
+}
+/* Réception de marchandise par scan (Stock & inventaire) */
+S.recv = {};
+function recvScan(raw){
+  const code = String(raw||'').trim().replace(/\s/g,''); if(!code) return;
+  const hit = findByCode(code);
+  if(!hit){ beep(false); return importByCode(code, {qty:1}); }
+  const {p, v} = hit; if(hasVar(p) && !v){ beep(false); return toast('Scannez le code d’une variante (couleur, taille) : '+p.name); }
+  const k = p.id + (v ? '|'+v.key : ''); S.recv[k] = (S.recv[k]||0) + 1; beep(true); schedule();
+}
+async function recvValidate(){
+  const entries = Object.entries(S.recv).filter(([,q])=>q>0); if(!entries.length) return;
+  try{ for(const [k,q] of entries){ const [id, vk] = k.split('|'); const p = S.products.find(x=>x.id===id); if(!p) continue;
+      const cur = vk ? ((varOf(p,vk)||{}).stock||0) : p.stock; await recordMove(p, cur+q, 'entree', 'Réception par scan', null, vk||undefined); }
+    S.recv = {}; toast('Réception enregistrée : stock mis à jour'); schedule(); }
+  catch(e){ dbErr(e); toast('Une partie de la réception n’a pas pu être enregistrée.'); }
 }
 
 /* --- Partage et visuels --- */
@@ -1985,6 +2038,10 @@ function paneStock(){
   <div class="toolbar"><label class="sr" for="aq">Rechercher</label><input class="input" id="aq" data-in="aq" value="${esc(S.aq)}" placeholder="Nom ou SKU…">
     <label class="sr" for="st-cat">Catégorie</label><select class="input" id="st-cat" data-stk="cat" style="max-width:190px"><option value="">Toutes les catégories</option>${cats.map(c=>`<option ${c===S.stCat?'selected':''}>${esc(c)}</option>`).join('')}</select>
     <div class="cats" style="margin:0">${[['all','Tous'],['low','Stock bas'],['out','Ruptures'],['diff','Écarts']].map(([k,l])=>`<button aria-pressed="${S.stFilter===k}" data-a="stFilter" data-v="${k}">${l}</button>`).join('')}</div></div>
+  <div class="panel" style="padding:14px"><h3 style="font-size:19px;margin-bottom:6px">📦 Réception par scan</h3><p class="muted small" style="margin:0 0 8px">Scannez chaque article reçu (douchette ou caméra) : la quantité s’ajoute ici. Un code inconnu ouvre la création de l’article. Validez pour mettre le stock à jour.</p>
+    <div class="term-row" style="margin-top:0"><input class="input" id="recv-scan" inputmode="numeric" autocomplete="off" placeholder="Scannez un article reçu"><button class="btn ghost" data-a="recvCam">📷 Caméra</button></div>
+    ${Object.keys(S.recv).length?`<div class="tbl-wrap" style="margin-top:10px"><table><tbody>${Object.entries(S.recv).map(([k,q])=>{ const [id,vk]=k.split('|'); const p=S.products.find(x=>x.id===id); return p?`<tr><td><b>${esc(p.name)}</b>${vk?` <span class="muted small">${esc(vk)}</span>`:''}</td><td style="width:110px"><div class="qty"><button data-a="recvQty" data-id="${esc(k)}" data-d="-1" aria-label="Moins">−</button><span>${q}</span><button data-a="recvQty" data-id="${esc(k)}" data-d="1" aria-label="Plus">+</button></div></td></tr>`:''; }).join('')}</tbody></table></div>
+    <div class="row" style="gap:8px;margin-top:10px"><button class="btn primary" data-a="recvOk" style="flex:0;white-space:nowrap">Valider la réception (+${Object.values(S.recv).reduce((a,b)=>a+b,0)})</button><button class="btn ghost" data-a="recvClear" style="flex:0">Vider</button></div>`:''}</div>
   <p class="muted small" style="margin:0 0 10px">Inventaire : saisissez le stock réellement compté dans la colonne « Compté », vérifiez les écarts, puis touchez « Valider l’inventaire ». Pour une réception, une perte ou une casse, utilisez « Ajuster ».</p>
   <div class="panel tbl-wrap">${list.length?`<table><thead><tr><th>Produit</th><th style="text-align:right">Prix d’achat</th><th style="text-align:right">Stock</th><th style="width:110px">Compté</th><th style="text-align:right">Écart</th><th style="text-align:right">Valeur</th><th></th></tr></thead><tbody>
   ${list.map(p=>hasVar(p) ? `<tr><td><b>${esc(p.name)}</b><div class="muted small">${esc(p.sku||'')} · ${esc(p.category||'')} · ${p.variants.length} variantes</div></td><td style="text-align:right">${costOf(p.id)?fmt(costOf(p.id)):'<span class="muted">—</span>'}</td><td style="text-align:right"><span class="pill ${p.stock<=0?'bad':p.stock<=(p.lowStock||5)?'warn':'ok'}">${p.stock}</span></td><td></td><td></td><td style="text-align:right">${costOf(p.id)?fmt(costOf(p.id)*Math.max(0,p.stock)):'—'}</td><td><button class="btn ghost sm" data-a="stockAdj" data-id="${p.id}">Ajuster</button></td></tr>`
@@ -2444,7 +2501,7 @@ function paneProducts(){
   const list = S.products.filter(p=>!q || (p.name+' '+p.sku+' '+p.category).toLowerCase().includes(q));
   return `<div class="toolbar"><h2 style="font-size:24px;flex:1">Produits <span class="muted small">(${S.products.length})</span></h2>
     <label class="sr" for="aq">Rechercher</label><input class="input" id="aq" data-in="aq" value="${esc(S.aq)}" placeholder="Rechercher…">
-    <button class="btn ghost" data-a="labelsAll">🏷️ Étiquettes</button>${isServer()?'<button class="btn ghost" data-a="fbCatalog">Catalogue Facebook</button>':''}${dl?'<button class="btn ghost" data-a="exportProducts">Exporter CSV</button>':''}<button class="btn primary" data-a="newProduct">Ajouter un produit</button></div>
+    <button class="btn ghost" data-a="scanImport">📷 Scanner un produit</button><button class="btn ghost" data-a="labelsAll">🏷️ Étiquettes</button>${isServer()?'<button class="btn ghost" data-a="fbCatalog">Catalogue Facebook</button>':''}${dl?'<button class="btn ghost" data-a="exportProducts">Exporter CSV</button>':''}<button class="btn primary" data-a="newProduct">Ajouter un produit</button></div>
     <div class="panel tbl-wrap">${list.length?`<table><thead><tr><th></th><th>Produit</th><th>Catégorie</th><th>Prix</th><th>Achat</th><th>Marge</th><th>Stock</th><th>En vente</th></tr></thead><tbody>
     ${list.map(p=>`<tr class="click" data-a="editProduct" data-id="${p.id}"><td><div class="li-img" style="width:40px;height:40px;font-size:20px">${pImg(p)}</div></td><td><b>${esc(p.name)}</b><div class="muted small">${esc(p.sku)}</div></td><td>${esc(p.category)}</td><td>${fmt(p.price)}</td><td class="small">${costOf(p.id)?fmt(costOf(p.id)):'<span class="muted">—</span>'}</td><td class="small">${costOf(p.id)?`<span class="${p.price-costOf(p.id)>=0?'amt-in':'amt-out'}">${pct(p.price-costOf(p.id),p.price)} %</span>`:'—'}</td>
     <td><span class="pill ${p.stock<=0?'bad':p.stock<=(p.lowStock||5)?'warn':'ok'}">${p.stock}</span></td><td><span class="pill ${p.active!==false?'ok':''}">${p.active!==false?'Oui':'Masqué'}</span></td></tr>`).join('')}</tbody></table>`
@@ -2503,7 +2560,7 @@ function bundleForm(b){
   draw();
 }
 function productForm(p){
-  const isNew0 = !p, isNewP = !p; p = p || {name:'',sku:'FM-'+rnd(5),category:'',price:'',comparePrice:'',stock:0,lowStock:5,emoji:'📦',image:'',description:'',active:true};
+  const isNew0 = !p || !p.id, isNewP = isNew0; p = isNew0 ? Object.assign({name:'',sku:'FM-'+rnd(5),category:'',price:'',comparePrice:'',stock:0,lowStock:5,emoji:'📦',image:'',description:'',active:true}, p||{}) : p;
   const cats = [...new Set(S.products.map(x=>x.category).filter(Boolean))];
   $('#overlay').innerHTML = `<div class="scrim" data-a="closeAll"><div class="modal wide" role="dialog" aria-modal="true" aria-label="${isNew0?'Nouveau produit':'Modifier le produit'}">
     <div class="m-h"><h2>${isNew0?'Nouveau produit':'Modifier le produit'}</h2><button class="x" data-a="closeAll" aria-label="Fermer">×</button></div>
@@ -2909,6 +2966,11 @@ document.addEventListener('click', async e=>{
     case 'shareProduct': shareProduct(id); break;
     case 'openLanding': openLanding(id); break;
     case 'labelsAll': labelsDialog(); break;
+    case 'scanImport': scanImportDialog(); break;
+    case 'recvCam': openScanner(code=>{ const known = findByCode(code); if(!known){ closeScanner(); recvScan(code); return false; } recvScan(code); const l=$('#scan-last'); if(l) l.textContent = '+1 · '+known.p.name; return true; }, 'Réception : scannez les articles'); break;
+    case 'recvQty': { const k = el.dataset.id; S.recv[k] = Math.max(0,(S.recv[k]||0)+Number(el.dataset.d)); if(!S.recv[k]) delete S.recv[k]; schedule(); break; }
+    case 'recvOk': recvValidate(); break;
+    case 'recvClear': S.recv = {}; schedule(); break;
     case 'labelsOne': labelsDialog([id]); break;
     case 'posCam': openScanner(code=>{ posScan(code); const l = $('#scan-last'); if(l) l.textContent = (S.posLcd&&S.posLcd.l1)||code; return true; }, 'Scanner les articles'); break;
     case 'posQr': posQrPay(); break;

@@ -194,3 +194,11 @@ Sans photo propre, un lot affiche automatiquement un **montage des photos de ses
 - **Étiquettes** : Gestion › Produits › 🏷️ Étiquettes (ou depuis une fiche). Formats thermique 50 × 30 mm, feuille A4 63 × 34 mm, colis 100 × 50 mm. Chaque étiquette porte le nom, le prix, le code-barres et le QR code.
 - **Caisse façon terminal** : écran d'affichage, champ de scan, **douchette USB ou Bluetooth** (aucun réglage : elle tape le code et Entrée), **caméra** du téléphone ou de la tablette, bip de confirmation. Un code inconnu est signalé.
 - **QR de paiement** à la caisse : le terminal affiche un QR code avec le montant, le client le scanne et paie par Wave ou Orange Money sur son téléphone (`/api/admin/pos/qr-order`, `/api/orders/:id/pay`). L'écran passe à « Paiement reçu ✓ » dès la confirmation.
+
+
+## Import par scan : créer, modifier, réceptionner
+
+- **Gestion › Produits › 📷 Scanner un produit** (douchette ou caméra) : un code déjà en stock ouvre la fiche pour la modifier ; un code nouveau est recherché dans **Open Food Facts, Open Beauty Facts, Open Products Facts** puis **UPCitemdb** (`/api/admin/lookup-barcode`). Nom, marque, contenance, photo et catégorie pré-remplissent la fiche ; il reste à saisir le prix, la quantité et le prix d'achat.
+- **Caisse** : un code inconnu scanné par l'équipe propose de créer l'article.
+- **Stock & inventaire › Réception par scan** : chaque scan ajoute +1 à la réception (un code inconnu ouvre la création), puis « Valider la réception » met le stock à jour avec un mouvement « Réception par scan ».
+- Les bases publiques couvrent surtout les produits de marque internationaux ; les produits locaux sans code connu se créent à la main, code-barres déjà rempli. UPCitemdb (version gratuite) limite à environ 100 recherches par jour.

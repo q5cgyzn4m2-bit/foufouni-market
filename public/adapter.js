@@ -264,6 +264,7 @@
     reload();
   };
   window.lpAI = productId => api('POST', '/api/admin/ai/landing', { productId });
+  window.lookupBarcode = code => api('GET', '/api/admin/lookup-barcode?code=' + encodeURIComponent(code));
   window.posQrOrder = (items, promo) => api('POST', '/api/admin/pos/qr-order', { items: items.map(l => l.b ? { bundle: l.b, qty: l.qty } : (l.v ? { id: l.id, qty: l.qty, v: l.v } : { id: l.id, qty: l.qty })), promoCode: promo ? promo.code : '' });
   window.orderStatus = (id, t) => api('GET', `/api/orders/${encodeURIComponent(id)}?t=${encodeURIComponent(t)}`);
   window.payExistingOrder = (id, t, method) => api('POST', `/api/orders/${encodeURIComponent(id)}/pay`, { t, method });

@@ -798,6 +798,53 @@ app.get('/api/orders/:id', h(async (req, res) => {
   res.json(publicOrder(o, id));
 }));
 
+/* Recherche d'un code-barres dans les bases publiques de produits (équipe) */
+const LOOKUP_UA = { 'user-agent': 'foufouni-market/1.0 (boutique en ligne, Bamako)', accept: 'application/json' };
+const lookupUrl = (host, path) => (env.LOOKUP_TEST_URL ? `${env.LOOKUP_TEST_URL}/${host}` : `https://${host}`) + path;
+function guessCategory(info) {
+  const t = ((info.categories || []).join(' ') + ' ' + info.name + ' ' + (info.source || '')).toLowerCase();
+  const rules = [[/beaut|cosm|soin|shampo|parfum|cr[eè]me|maquill|savon|lotion|hair|skin/, 'Beauté'], [/b[ée]b[ée]|baby|infant|couche/, 'Bébé'],
+    [/boisson|beverage|drink|jus|juice|water|eau|soda|th[ée]\b|tea|caf[ée]|coffee/, 'Boissons'], [/phone|t[ée]l[ée]phone|electron|charger|chargeur|cable|câble|usb|audio|headphone|écouteur|batter|computer|ordinateur|tv\b|t[ée]l[ée]vis/, 'Électronique'],
+    [/tool|outil|hardware|quincaill|drill|perceuse|screw|vis\b|plumb|plomberie|paint|peinture|electrical|[ée]lectrique/, 'Quincaillerie'],
+    [/kitchen|cuisine|home|maison|furniture|meuble|d[ée]cor|cleaning|nettoy/, 'Maison'], [/cloth|v[eê]tement|shoe|chaussure|fashion|mode|bag|sac/, 'Mode'],
+    [/food|aliment|snack|biscuit|riz|rice|huile|oil|sugar|sucre|lait|milk|conserve|sauce|cereal|c[ée]r[ée]ale|p[aâ]te|pasta|épicerie|open food facts/, 'Épicerie']];
+  for (const [re, c] of rules) if (re.test(t)) return c;
+  return '';
+}
+app.get('/api/admin/lookup-barcode', requireStaff, h(async (req, res) => {
+  const code = String(req.query.code || '').replace(/\D/g, '');
+  if (code.length < 8 || code.length > 14) return res.json({ found: false });
+  if (limited('lookup:' + req.user.id, 120, 3600e3)) throw httpErr(429, 'Trop de recherches en une heure.');
+  const off = async (host, source) => {
+    try {
+      const r = await fetch(lookupUrl(host, `/api/v2/product/${code}.json?fields=product_name,product_name_fr,generic_name_fr,generic_name,brands,quantity,categories_tags,image_front_url,image_url`), { headers: LOOKUP_UA, signal: AbortSignal.timeout(7000) });
+      const j = await r.json(); const p = j && j.status === 1 && j.product; if (!p) return null;
+      const name = (p.product_name_fr || p.product_name || '').trim(); if (!name) return null;
+      return { source, name, brand: String(p.brands || '').split(',')[0].trim(), quantity: p.quantity || '', description: p.generic_name_fr || p.generic_name || '', categories: p.categories_tags || [], imageUrl: p.image_front_url || p.image_url || '' };
+    } catch (e) { return null; }
+  };
+  let info = await off('world.openfoodfacts.org', 'Open Food Facts') || await off('world.openbeautyfacts.org', 'Open Beauty Facts') || await off('world.openproductsfacts.org', 'Open Products Facts');
+  if (!info) {
+    try {
+      const r = await fetch(lookupUrl('api.upcitemdb.com', `/prod/trial/lookup?upc=${code}`), { headers: LOOKUP_UA, signal: AbortSignal.timeout(7000) });
+      const j = await r.json(), it = j && j.items && j.items[0];
+      if (it && it.title) info = { source: 'UPCitemdb', name: it.title, brand: it.brand || '', quantity: it.size || '', description: String(it.description || '').slice(0, 400), categories: [it.category || ''], imageUrl: (it.images || [])[0] || '' };
+    } catch (e) {}
+  }
+  if (!info) return res.json({ found: false });
+  let image = '';
+  try {
+    const u = new URL(info.imageUrl);
+    const safeHost = /^https:$/.test(u.protocol) && /\./.test(u.hostname) && !/^\d+\.\d+\.\d+\.\d+$/.test(u.hostname) && !/localhost|\.local$|\.internal$/.test(u.hostname);
+    if (safeHost || env.LOOKUP_TEST_URL) {
+      const r = await fetch(info.imageUrl, { headers: { 'user-agent': LOOKUP_UA['user-agent'] }, signal: AbortSignal.timeout(8000) });
+      const ct = (r.headers.get('content-type') || '').split(';')[0];
+      if (r.ok && /^image\/(jpeg|png|webp)$/.test(ct)) { const buf = Buffer.from(await r.arrayBuffer()); if (buf.length < 2.5e6) image = `data:${ct};base64,${buf.toString('base64')}`; }
+    }
+  } catch (e) {}
+  res.json({ found: true, source: info.source, name: info.name.slice(0, 120), brand: info.brand.slice(0, 60), quantity: String(info.quantity).slice(0, 40), description: info.description.slice(0, 300), category: guessCategory(info), image });
+}));
+
 /* Paiement par QR au comptoir : le vendeur crée la commande, le client la paie sur son téléphone */
 app.post('/api/admin/pos/qr-order', requireStaff, h(async (req, res) => {
   const b = req.body || {}, t = computeOrder(b.items, b.promoCode, 'retrait');
