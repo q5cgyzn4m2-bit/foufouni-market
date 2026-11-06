@@ -202,3 +202,12 @@ Sans photo propre, un lot affiche automatiquement un **montage des photos de ses
 - **Caisse** : un code inconnu scanné par l'équipe propose de créer l'article.
 - **Stock & inventaire › Réception par scan** : chaque scan ajoute +1 à la réception (un code inconnu ouvre la création), puis « Valider la réception » met le stock à jour avec un mouvement « Réception par scan ».
 - Les bases publiques couvrent surtout les produits de marque internationaux ; les produits locaux sans code connu se créent à la main, code-barres déjà rempli. UPCitemdb (version gratuite) limite à environ 100 recherches par jour.
+
+
+## Livreurs et photo du colis livré
+
+- **Gestion › Commandes › 🛵 Livreurs** : ajoutez vos livreurs (nom, téléphone) et envoyez à chacun son **espace livreur** (lien secret `/?livreur=…`).
+- Dans chaque commande à livrer : choisissez le livreur, appelez-le ou **envoyez-lui la course sur WhatsApp** (client, adresse, articles, montant à encaisser, lien de son espace).
+- **Espace livreur** (téléphone) : ses livraisons du moment, boutons Appeler, WhatsApp et Itinéraire, puis **📷 Colis livré : prendre la photo**. La commande passe en « Livrée », le stock est déduit, le montant encaissé est noté, et vous recevez une notification.
+- Dans la commande : la photo s'affiche, et **📤 Envoyer la photo au client** partage l'image sur WhatsApp (ou envoie un lien vers la photo). Le client voit aussi la photo dans « Mes commandes ».
+- La boutique peut aussi ajouter la photo elle-même depuis la commande. Les photos ne sont visibles que par l'équipe et par le client concerné.

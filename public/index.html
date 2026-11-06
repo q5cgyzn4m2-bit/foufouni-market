@@ -517,7 +517,7 @@ const ROLES = ['Gérant','Vendeur','Caissier','Livreur','Gestionnaire de stock']
 /* ============ état ============ */
 const S = {
   ready:false, live:false, isAdmin:false, uid:null, myName:'',
-  products:[], bundles:[], clients:[], suppliers:[], reviews:[], campaigns:[], contactFlags:{}, audCarts:null, audSeg:'abandon_new', audSel:{}, costs:{}, stockMoves:[], inv:{}, topDays:30, topSort:'revenue', stFilter:'all', stCat:'', affiliates:[], affPayouts:[], moves:[], ledger:[], finConfig:{}, posTab:'vente', trAcc:'all', trType:'all', pq:'', promos:[], orders:[], settings:structuredClone(DEFAULT_SETTINGS), team:{members:[]},
+  products:[], bundles:[], clients:[], suppliers:[], reviews:[], drivers:[], dphoto:{}, campaigns:[], contactFlags:{}, audCarts:null, audSeg:'abandon_new', audSel:{}, costs:{}, stockMoves:[], inv:{}, topDays:30, topSort:'revenue', stFilter:'all', stCat:'', affiliates:[], affPayouts:[], moves:[], ledger:[], finConfig:{}, posTab:'vente', trAcc:'all', trType:'all', pq:'', promos:[], orders:[], settings:structuredClone(DEFAULT_SETTINGS), team:{members:[]},
   cart:[], pos:[], posPromo:null, appliedPromo:null,
   view:'shop', tab:'dash', cat:'Tout', q:'', aq:'', orderFilter:'all', selPromos:new Set(), names:{}
 };
@@ -567,6 +567,7 @@ function syncLocal(){
   S.bundles = arr('bundles').sort((a,b)=>(b.createdAt||0)-(a.createdAt||0));
   S.costs = Object.fromEntries(arr('costs').map(c=>[c.id, Number(c.cost)||0]));
   S.stockMoves = arr('stock-moves').sort((a,b)=>b.createdAt-a.createdAt);
+  S.drivers = arr('drivers').sort((a,b)=>a.name.localeCompare(b.name));
   S.campaigns = arr('campaigns').sort((a,b)=>b.createdAt-a.createdAt);
   S.contactFlags = Object.fromEntries(arr('contact-flags').map(f=>[f.id, f]));
   S.reviews = arr('reviews').sort((a,b)=>b.createdAt-a.createdAt);
@@ -647,6 +648,7 @@ async function boot(){
       sub('clients','clients',(a,b)=>a.name.localeCompare(b.name));
       db.collection('costs').onSnapshot(s=>{ S.costs = Object.fromEntries(s.docs.map(d=>[d.id, Number(d.data().cost)||0])); schedule(); }, dbErr);
       sub('stock-moves','stockMoves',(a,b)=>b.createdAt-a.createdAt);
+      sub('drivers','drivers',(a,b)=>a.name.localeCompare(b.name));
       sub('campaigns','campaigns',(a,b)=>b.createdAt-a.createdAt);
       db.collection('contact-flags').onSnapshot(s=>{ S.contactFlags = Object.fromEntries(s.docs.map(d=>[d.id,{id:d.id,...d.data()}])); schedule(); }, dbErr);
       sub('affiliates','affiliates',(a,b)=>a.name.localeCompare(b.name));
@@ -695,7 +697,9 @@ function render(){
       if(p){ const vv = q.get('v')||''; try{ history.replaceState(null,'',location.pathname); }catch(e){}
         if(hasVar(p) && !varOf(p,vv)){ setTimeout(()=>{ openLanding(p.id); toast('Choisissez la couleur et la taille, puis « Commander maintenant ».'); }, 50); }
         else setTimeout(()=>{ addToCart(p.id, 1, 'cart', varOf(p,vv)?vv:''); if(enabledProcs().length) openCheckout(); else openCart(); }, 80); } }
-    else if(ord){ S._payDeep = true; const tk = q.get('t')||''; setTimeout(()=>openPayOrder(ord, tk), 80); } }
+    else if(ord){ S._payDeep = true; const tk = q.get('t')||''; setTimeout(()=>openPayOrder(ord, tk), 80); }
+    else if(q && q.get('livre')){ S._payDeep = true; const lid = q.get('livre'), tk = q.get('t')||''; try{ history.replaceState(null,'',location.pathname); }catch(e){}
+      setTimeout(async ()=>{ let o = null; try{ o = window.orderStatus ? await window.orderStatus(lid, tk) : S.orders.find(x=>x.id===lid); }catch(e){} if(o){ o.token = o.token || tk; showReceipt(o); } else toast('Commande introuvable.'); }, 80); } }
   if(!S._deep && S.ready && S.products.length){ let lid=''; try{ lid = new URLSearchParams(location.search).get('lp')||''; }catch(e){}
     if(lid && S.products.some(x=>x.id===lid && x.active!==false) && S.view==='shop'){ S._deep = true; S.view='landing'; S.pid=lid; S.pqty=1; schedule(); } }
   if(!S._deep && S.ready && S.products.length){ S._deep = true; let pid=''; try{ pid = new URLSearchParams(location.search).get('p')||''; }catch(e){}
@@ -1211,6 +1215,43 @@ function waSender(d){
   };
   if(!d.recips.length) return toast('Aucun contact dans les segments choisis.');
   draw();
+}
+
+/* --- Livreurs et preuve de livraison --- */
+function proofSrc(o){
+  if(isServer()){ const t = o.token || (window.orderToken && window.orderToken(o.id)) || ''; return '/img/livraison/'+encodeURIComponent(o.id)+'?t='+encodeURIComponent(t)+'&v='+(o.proof&&o.proof.at||''); }
+  if(!(o.id in S.dphoto)){ S.dphoto[o.id] = null; getDoc('delivery-photos', o.id).then(d=>{ S.dphoto[o.id] = d&&d.data||''; schedule(); const im = document.querySelector(`[data-proof="${o.id}"]`); if(im && S.dphoto[o.id]) im.src = S.dphoto[o.id]; }).catch(()=>{}); }
+  return S.dphoto[o.id] || '';
+}
+const deliveredLink = o => shopUrl()+'?livre='+encodeURIComponent(o.id)+'&t='+encodeURIComponent(o.token||'');
+const driverLink = d => shopUrl()+'?livreur='+encodeURIComponent(d.token||'');
+function courseText(o, d){
+  const c = o.customer||{}, cod = /cod|livraison/.test(o.payment&&o.payment.method||'') && !PAID.includes(o.status);
+  return `🛵 Nouvelle livraison ${o.number} · ${S.settings.shopName}\nClient : ${c.name||''} · ${c.phone||''}\nAdresse : ${[c.address, c.city].filter(Boolean).join(', ')}${c.note?'\nNote : '+c.note:''}\nArticles : ${(o.items||[]).map(i=>i.qty+' × '+i.name).join(', ')}\n${cod?'À encaisser : '+fmt(o.total).replace(/[\u202f\u00a0]/g,' '):'Déjà payé'}${isServer()&&d&&d.token?`\n\nAprès la livraison, envoyez la photo ici : ${driverLink(d)}`:'\n\nAprès la livraison, envoyez-moi la photo du colis livré.'}`;
+}
+function clientDeliveredText(o){ const c = o.customer||{};
+  return `Bonjour ${firstName(c.name)||''} 😊 Votre commande ${o.number} a bien été livrée ✅${o.proof?`\nVoici la photo de votre colis : ${deliveredLink(o)}`:''}\nMerci pour votre confiance ! — ${S.settings.shopName}`; }
+async function shareProof(o){
+  const src = proofSrc(o), c = o.customer||{};
+  if(src && navigator.canShare){ try{ const blob = await fetch(src).then(r=>r.blob()); const f = new File([blob], `livraison-${o.number}.jpg`, {type:blob.type||'image/jpeg'});
+      if(navigator.canShare({files:[f]})){ await navigator.share({files:[f], text:clientDeliveredText(o)}); return; } }catch(e){ if(e && e.name==='AbortError') return; } }
+  if(c.phone) window.open(`https://wa.me/${waNumber(c.phone)}?text=${encodeURIComponent(clientDeliveredText(o))}`, '_blank');
+  else toast('Pas de numéro de téléphone pour ce client.');
+}
+function proofBlock(o, admin){
+  if(!o.proof) return '';
+  return `<div class="panel" style="text-align:center"><h3>📦 Photo du colis livré</h3><img data-proof="${esc(o.id)}" src="${esc(proofSrc(o))}" alt="Colis livré" style="max-width:100%;max-height:340px;border-radius:12px;background:#fff;cursor:zoom-in" onclick="this.src&&zoomBox(this.src)">
+    <p class="muted small" style="margin:8px 0 0">Livré le ${dateFr(o.proof.at)}${o.proof.by?' par '+esc(o.proof.by):''}${o.proof.note?' · '+esc(o.proof.note):''}</p></div>`;
+}
+function driversDialog(){
+  const n = d => S.orders.filter(o=>o.driver&&o.driver.id===d.id&&o.status==='livree').length;
+  $('#overlay').innerHTML = `<div class="scrim" data-a="closeAll"><div class="modal" role="dialog" aria-modal="true" aria-label="Livreurs"><div class="m-h"><h2>🛵 Livreurs</h2><button class="x" data-a="closeAll" aria-label="Fermer">×</button></div>
+    <div class="m-b">${S.drivers.length?`<div class="tbl-wrap"><table><tbody>${S.drivers.map(d=>`<tr><td><b>${esc(d.name)}</b>${d.active===false?' <span class="pill">Inactif</span>':''}<div class="muted small">${esc(d.phone)} · ${n(d)} livraison${n(d)>1?'s':''}</div></td><td style="text-align:right;white-space:nowrap">${isServer()?`<a class="btn ghost sm" target="_blank" rel="noopener" href="https://wa.me/${waNumber(d.phone)}?text=${encodeURIComponent(`Bonjour ${d.name}, voici votre espace livreur ${S.settings.shopName} : ${driverLink(d)}\nVous y verrez vos livraisons et pourrez envoyer la photo de chaque colis livré.`)}">Envoyer son espace</a> `:''}<button class="btn ghost sm" data-a="drvToggle" data-id="${d.id}">${d.active===false?'Réactiver':'Désactiver'}</button></td></tr>`).join('')}</tbody></table></div>`:'<p class="muted">Aucun livreur pour l’instant.</p>'}
+    <h3 style="font-size:17px;margin:16px 0 8px">Ajouter un livreur</h3><div class="row"><div class="field"><label for="dv-n">Nom</label><input class="input" id="dv-n"></div><div class="field"><label for="dv-p">Téléphone (WhatsApp)</label><input class="input" id="dv-p" inputmode="tel"></div></div><div class="small" id="dv-err" style="color:var(--danger)"></div></div>
+    <div class="m-f"><button class="btn primary" id="dv-add">Ajouter</button></div></div></div>`;
+  $('#dv-add').onclick = async ()=>{ const name = $('#dv-n').value.trim(), phone = $('#dv-p').value.trim();
+    if(!name || !phoneOk(phone)){ $('#dv-err').textContent = 'Nom et numéro de téléphone valides obligatoires.'; return; }
+    try{ await put('drivers', newId('d'), {name, phone, active:true, token:(newId('t')+rnd(16)).toLowerCase(), createdAt:Date.now()}); toast('Livreur ajouté'); setTimeout(driversDialog, 300); }catch(e){ dbErr(e); } };
 }
 
 /* --- Partage et visuels --- */
@@ -1958,7 +1999,7 @@ function showReceipt(o, fresh){
   $('#overlay').innerHTML = `<div class="scrim" data-a="closeAll"><div class="modal" role="dialog" aria-modal="true" aria-label="Reçu">
     <div class="m-h"><h2>${fresh?'Commande confirmée':'Reçu'}</h2><button class="x" data-a="closeAll" aria-label="Fermer">×</button></div>
     <div class="m-b">${fresh?`<p style="margin-top:0">Merci ! Votre commande <b>${esc(o.number)}</b> est enregistrée. ${o.status==='en_attente'?'Vous paierez à la réception.':'Le paiement est validé.'}</p>`:''}
-    <div class="panel">${receiptHTML(o)}</div></div>
+    <div class="panel">${receiptHTML(o)}</div>${proofBlock(o)}</div>
     <div class="m-f"><button class="btn ghost" data-a="printReceipt" data-id="${o.id}">Imprimer</button>${dl?`<button class="btn ghost" data-a="dlReceipt" data-id="${o.id}">Télécharger</button>`:''}<button class="btn primary" data-a="closeAll">Terminé</button></div></div></div>`;
   window._lastReceipt = o;
 }
@@ -2840,10 +2881,10 @@ function compress(file){
 function paneOrders(){
   const f = S.orderFilter, q = S.aq.trim().toLowerCase();
   const list = S.orders.filter(o=>(f==='all'||o.status===f) && (!q || (o.number+' '+(o.customer?.name||'')+' '+(o.customer?.phone||'')).toLowerCase().includes(q)));
-  return `<div class="toolbar"><h2 style="font-size:24px;flex:1">Commandes</h2><label class="sr" for="aq">Rechercher</label><input class="input" id="aq" data-in="aq" value="${esc(S.aq)}" placeholder="N°, client, téléphone">${dl?'<button class="btn ghost" data-a="exportOrders">Exporter CSV</button>':''}</div>
+  return `<div class="toolbar"><h2 style="font-size:24px;flex:1">Commandes</h2><label class="sr" for="aq">Rechercher</label><input class="input" id="aq" data-in="aq" value="${esc(S.aq)}" placeholder="N°, client, téléphone">${dl?'<button class="btn ghost" data-a="drivers">🛵 Livreurs</button><button class="btn ghost" data-a="exportOrders">Exporter CSV</button>':''}</div>
     <div class="cats">${[['all','Toutes'],...Object.entries(STATUS).map(([k,v])=>[k,v.label])].map(([k,l])=>`<button aria-pressed="${f===k}" data-a="ofilter" data-v="${k}">${l} <span class="muted">${k==='all'?S.orders.length:S.orders.filter(o=>o.status===k).length}</span></button>`).join('')}</div>
     <div class="panel tbl-wrap">${list.length?`<table><thead><tr><th>N°</th><th>Date</th><th>Client</th><th>Canal</th><th>Paiement</th><th>Total</th><th>Statut</th></tr></thead><tbody>
-    ${list.map(o=>`<tr class="click" data-a="orderDetail" data-id="${o.id}"><td><b>${esc(o.number)}</b></td><td class="muted">${dateFr(o.createdAt)}</td><td>${esc(o.customer?.name||'—')}</td><td>${o.channel==='caisse'?'Caisse':'En ligne'}</td><td class="small">${esc(PROCESSORS[o.payment?.method]?.name||(o.payment?.method==='cash'?'Espèces':o.payment?.method==='credit'?'À crédit':''))}</td><td><b>${fmt(o.total)}</b></td><td><span class="pill ${STATUS[o.status]?.cls}">${STATUS[o.status]?.label}</span></td></tr>`).join('')}</tbody></table>`
+    ${list.map(o=>`<tr class="click" data-a="orderDetail" data-id="${o.id}"><td><b>${esc(o.number)}</b>${o.driver?`<div class="muted small">🛵 ${esc(o.driver.name)}${o.proof?' · 📷':''}</div>`:''}</td><td class="muted">${dateFr(o.createdAt)}</td><td>${esc(o.customer?.name||'—')}</td><td>${o.channel==='caisse'?'Caisse':'En ligne'}</td><td class="small">${esc(PROCESSORS[o.payment?.method]?.name||(o.payment?.method==='cash'?'Espèces':o.payment?.method==='credit'?'À crédit':''))}</td><td><b>${fmt(o.total)}</b></td><td><span class="pill ${STATUS[o.status]?.cls}">${STATUS[o.status]?.label}</span></td></tr>`).join('')}</tbody></table>`
     :'<div class="empty"><h3>Aucune commande</h3><p>Les commandes en ligne et les ventes en caisse s’afficheront ici.</p></div>'}</div>`;
 }
 function orderDetail(o){
@@ -2854,12 +2895,25 @@ function orderDetail(o){
     <div class="m-b"><div class="two"><div class="panel">${receiptHTML(o)}</div>
       <div>${o.affiliate?`<div class="panel"><h3>Ambassadeur</h3><p style="margin:0"><b>${esc(o.affiliate.code)}</b> · ${esc((S.affiliates.find(a=>a.id===o.affiliate.id)||{}).name||'')}<br>Commission ${fmt(o.affiliate.commission)} <span class="pill ${AFF_ST[affState(o)].c}">${AFF_ST[affState(o)].l}</span></p></div>`:''}<div class="panel"><h3>Client</h3><p style="margin:0">${esc(c.name||'—')}<br>${esc(c.phone||'')}<br>${o.delivery==='livraison'?esc(c.address+', '+c.city):'Retrait en boutique'}${c.note?`<br><span class="muted">${esc(c.note)}</span>`:''}</p>
       ${c.phone?`<a class="btn ghost sm" style="margin-top:10px" href="tel:${esc(c.phone.replace(/\s/g,''))}">Appeler</a>`:''}</div>
+      ${o.delivery==='livraison'?`<div class="panel"><h3>🛵 Livraison</h3>
+        <div class="row" style="align-items:flex-end;gap:8px"><div class="field" style="margin:0"><label for="od-drv">Livreur</label><select class="input" id="od-drv"><option value="">— Choisir —</option>${S.drivers.filter(d=>d.active!==false||(o.driver&&o.driver.id===d.id)).map(d=>`<option value="${d.id}" ${o.driver&&o.driver.id===d.id?'selected':''}>${esc(d.name)} · ${esc(d.phone)}</option>`).join('')}</select></div><button class="btn ghost sm" data-a="drivers" style="flex:0;white-space:nowrap">＋ Livreurs</button></div>
+        ${o.driver?`<div class="fin-actions" style="margin:10px 0 0"><a class="btn ghost sm" href="tel:${esc(String(o.driver.phone).replace(/\s/g,''))}">📞 Appeler ${esc(o.driver.name)}</a><a class="btn ghost sm" target="_blank" rel="noopener" href="https://wa.me/${waNumber(o.driver.phone)}?text=${encodeURIComponent(courseText(o, S.drivers.find(d=>d.id===o.driver.id)))}">💬 Envoyer la course</a></div>`:''}
+        ${o.proof?`<div style="margin-top:12px;text-align:center"><img data-proof="${esc(o.id)}" src="${esc(proofSrc(o))}" alt="Colis livré" style="max-width:100%;max-height:260px;border-radius:12px;background:#fff;cursor:zoom-in" onclick="this.src&&zoomBox(this.src)"><p class="muted small" style="margin:6px 0">Livré le ${dateFr(o.proof.at)}${o.proof.by?' par '+esc(o.proof.by):''}${o.proof.note?' · '+esc(o.proof.note):''}</p>
+          <button class="btn primary sm" data-a="proofSend" data-id="${o.id}">📤 Envoyer la photo au client</button></div>`:''}
+        <label class="btn ghost sm" style="margin-top:10px">📷 ${o.proof?'Remplacer la photo':'Ajouter la photo de livraison'}<input type="file" accept="image/*" capture="environment" class="sr" id="od-proof"></label></div>`:''}
       <div class="panel"><h3>Statut</h3><div class="field"><label for="od-status">Changer le statut</label><select class="input" id="od-status">${Object.entries(STATUS).map(([k,v])=>`<option value="${k}" ${k===o.status?'selected':''}>${v.label}</option>`).join('')}</select></div>
       <p class="muted small" style="margin:0">${o.stockApplied?'Le stock a été déduit pour cette commande.':'Le stock sera déduit dès que la commande passe en « Payée » ou au-delà.'}</p></div></div></div></div>
     <div class="m-f"><button class="btn ghost" data-a="printReceipt" data-id="${o.id}">Imprimer</button>${next?`<button class="btn ghost" id="od-next">Passer à « ${STATUS[next].label} »</button>`:''}<button class="btn primary" id="od-save">Enregistrer</button></div></div></div>`;
   window._lastReceipt = o;
   const go = async st=>{ try{ await setOrderStatus(o, st); closeAll(); toast('Statut mis à jour : '+STATUS[st].label); }catch(e){ dbErr(e); toast('Mise à jour impossible.'); } };
   $('#od-save').onclick = ()=>go($('#od-status').value);
+  if($('#od-drv')) $('#od-drv').onchange = async ()=>{ const d = S.drivers.find(x=>x.id===$('#od-drv').value);
+    try{ await patch('orders', o.id, {driver: d ? {id:d.id, name:d.name, phone:d.phone, assignedAt:Date.now()} : null}); o.driver = d ? {id:d.id, name:d.name, phone:d.phone} : null; toast(d ? 'Livreur affecté : '+d.name : 'Livreur retiré'); orderDetail(S.orders.find(x=>x.id===o.id) || o); }catch(e){ dbErr(e); } };
+  if($('#od-proof')) $('#od-proof').onchange = async e=>{ const f = e.target.files[0]; if(!f) return; try{ const data = await compress(f);
+      await put('delivery-photos', o.id, {data, at:Date.now(), by:S.myName||'Boutique'}); delete S.dphoto[o.id];
+      const proof = {at:Date.now(), by:S.myName||'Boutique', note:''}; await patch('orders', o.id, {proof}); o.proof = proof;
+      if(o.status!=='livree' && o.status!=='annulee'){ await setOrderStatus(o, 'livree'); }
+      toast('Photo enregistrée · commande livrée'); orderDetail(S.orders.find(x=>x.id===o.id) || o); }catch(err){ dbErr(err); toast('Envoi de la photo impossible.'); } };
   if($('#od-next')) $('#od-next').onclick = ()=>go(next);
 }
 async function setOrderStatus(o, st){
@@ -3072,6 +3126,9 @@ document.addEventListener('click', async e=>{
     case 'newAff': affForm(null); break;
     case 'shareProduct': shareProduct(id); break;
     case 'openLanding': openLanding(id); break;
+    case 'drivers': driversDialog(); break;
+    case 'drvToggle': { const d = S.drivers.find(x=>x.id===id); if(d){ try{ await patch('drivers', id, {active:d.active===false}); setTimeout(driversDialog, 300); }catch(err){ dbErr(err); } } break; }
+    case 'proofSend': { const o = S.orders.find(x=>x.id===id); if(o) shareProof(o); break; }
     case 'audSeg': S.audSeg = el.dataset.v; schedule(); break;
     case 'audOpt': { const k = id; if(!confirmTwice(el)) break; try{ await put('contact-flags', k, {optOut:true, at:Date.now()}); toast('Ce contact ne recevra plus vos campagnes'); }catch(err){ dbErr(err); } break; }
     case 'cpWa': { const d = campaignDraft(); if(!d.recips.length){ toast('Aucun contact dans les segments choisis.'); break; } await saveCampaign(d); waSender(d); S.audCid = null; break; }

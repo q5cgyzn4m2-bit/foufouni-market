@@ -761,7 +761,7 @@ app.post('/api/admin/carts/:id/relance', requireStaff, h(async (req, res) => {
 }));
 
 const publicOrder = (o, id) => {
-  const { token, createdBy, ...rest } = o;
+  const { token, createdBy, driver, ...rest } = o;
   const { sessionId, payToken, notifToken, ...pay } = rest.payment || {};
   return { ...rest, id, payment: pay };
 };
@@ -817,6 +817,43 @@ app.get('/api/orders/:id', h(async (req, res) => {
   await refreshPayment(o, id, false);
   o = getDoc('orders', id);
   res.json(publicOrder(o, id));
+}));
+
+/* Preuve de livraison : photo du colis livré (client avec son jeton, ou équipe connectée) */
+app.get('/img/livraison/:id', (req, res) => {
+  const id = req.params.id, o = validId(id) && getDoc('orders', id);
+  const okToken = o && req.query.t && safeEq(o.token, String(req.query.t));
+  if (!o || !(okToken || currentUser(req))) return res.status(404).end();
+  const d = getDoc('delivery-photos', id), m = d && /^data:(image\/[a-z+.-]+);base64,(.+)$/i.exec(d.data || '');
+  if (!m) return res.status(404).end();
+  res.set({ 'Content-Type': m[1], 'Cache-Control': 'private, max-age=3600' }).send(Buffer.from(m[2], 'base64'));
+});
+/* Espace livreur : accès par lien secret, ses livraisons et l'envoi de la photo */
+const driverByToken = t => { t = String(t || ''); return t.length >= 16 ? allDocs('drivers').find(d => d.active !== false && d.token && safeEq(d.token, t)) : null; };
+app.get('/api/driver/me', h((req, res) => {
+  if (limited('drv:' + req.ip, 120, 600e3)) throw httpErr(429, 'Trop de requêtes.');
+  const d = driverByToken(req.query.t); if (!d) throw httpErr(404, 'Espace livreur introuvable. Demandez votre lien à la boutique.');
+  const since = Date.now() - 30 * 864e5;
+  const orders = allDocs('orders').filter(o => o.driver && o.driver.id === d.id && o.status !== 'annulee' && (o.createdAt || 0) >= since).sort((a, b) => (a.status === 'livree') - (b.status === 'livree') || b.createdAt - a.createdAt)
+    .map(o => ({ id: o.id, number: o.number, status: o.status, createdAt: o.createdAt, customer: { name: o.customer?.name || '', phone: o.customer?.phone || '', address: o.customer?.address || '', city: o.customer?.city || '', note: o.customer?.note || '' },
+      items: (o.items || []).map(i => ({ name: i.name, qty: i.qty })), total: o.total, toCollect: (o.payment?.method === 'cod' && !['payee'].includes(o.status) && !/encaissé|réussi/.test(o.payment?.status || '')) ? o.total : 0, proof: o.proof ? { at: o.proof.at } : null }));
+  res.json({ driver: { name: d.name }, shop: settings().shopName, orders });
+}));
+app.post('/api/driver/deliver', h(async (req, res) => {
+  if (limited('drvp:' + req.ip, 40, 600e3)) throw httpErr(429, 'Trop d’envois.');
+  const d = driverByToken(req.body?.t); if (!d) throw httpErr(403, 'Espace livreur introuvable.');
+  const id = String(req.body?.orderId || ''), o = validId(id) && getDoc('orders', id);
+  if (!o || !o.driver || o.driver.id !== d.id) throw httpErr(404, 'Commande introuvable.');
+  const photo = String(req.body?.photo || '');
+  if (!/^data:image\/(jpeg|png|webp);base64,[A-Za-z0-9+/=]+$/.test(photo) || photo.length > 400000) throw httpErr(400, 'Photo invalide ou trop lourde.');
+  putDoc('delivery-photos', id, { data: photo, at: Date.now(), by: d.name });
+  const upd = { proof: { at: Date.now(), by: d.name, note: String(req.body?.note || '').slice(0, 200) }, status: 'livree', updatedAt: Date.now() };
+  if (!o.stockApplied) { applyStock(expandItems(o.items), 1); upd.stockApplied = true; }
+  if (o.payment && o.payment.method === 'cod' && req.body?.collected) upd.payment = { ...o.payment, status: 'encaissé par le livreur' };
+  patchDoc('orders', id, upd);
+  res.json({ ok: true });
+  notify({ title: `Livrée par ${d.name} : ${o.number}`, message: `${o.customer?.name || ''} · ${money(o.total)}${req.body?.collected ? ' · encaissé par le livreur' : ''}\nPhoto du colis reçue.`, tags: ['package', 'white_check_mark'], click: `${BASE_URL}/` });
+  pushOrder(id, { ...o, ...upd });
 }));
 
 /* Recherche d'un code-barres dans les bases publiques de produits (équipe) */
@@ -913,6 +950,7 @@ app.get('/api/admin/state', requireStaff, (req, res) => {
     affiliates: allDocs('affiliates').sort((a, b) => a.name.localeCompare(b.name)), affPayouts: allDocs('aff-payouts').sort((a, b) => b.createdAt - a.createdAt),
     costs: allDocs('costs'), stockMoves: allDocs('stock-moves').sort((a, b) => b.createdAt - a.createdAt).slice(0, 1000),
     ai: !!env.ANTHROPIC_API_KEY,
+    drivers: allDocs('drivers').sort((a, b) => a.name.localeCompare(b.name)),
     campaigns: allDocs('campaigns').sort((a, b) => b.createdAt - a.createdAt).slice(0, 200), contactFlags: allDocs('contact-flags'),
     visits: allDocs('visits').map(v => ({ id: v.id, count: v.count || 0, count30: Object.entries(v.days || {}).filter(([k]) => k >= addDays(today(), -30)).reduce((t, [, n]) => t + n, 0) })),
     reviews: allDocs('reviews').sort((a, b) => b.createdAt - a.createdAt),
@@ -926,7 +964,7 @@ app.get('/api/admin/state', requireStaff, (req, res) => {
     settings: s, users: store.users.list(), providers: providers(), configured: CONFIGURED, me: req.user
   });
 });
-const ADMIN_COLS = new Set(['products', 'product-images', 'costs', 'stock-moves', 'campaigns', 'contact-flags', 'reviews', 'review-images', 'bundles', 'promos', 'orders', 'settings', 'affiliates', 'aff-payouts', 'aff-lookup', 'clients', 'suppliers', 'fin-moves', 'fin-ledger', 'fin-config']);
+const ADMIN_COLS = new Set(['products', 'product-images', 'costs', 'stock-moves', 'campaigns', 'contact-flags', 'drivers', 'delivery-photos', 'reviews', 'review-images', 'bundles', 'promos', 'orders', 'settings', 'affiliates', 'aff-payouts', 'aff-lookup', 'clients', 'suppliers', 'fin-moves', 'fin-ledger', 'fin-config']);
 function adminTarget(req) {
   const { col, id } = req.params;
   if (!ADMIN_COLS.has(col) || !validId(id)) throw httpErr(400, 'Requête invalide.');
@@ -938,6 +976,7 @@ app.put('/api/admin/:col/:id', requireStaff, h((req, res) => {
   const { col, id } = adminTarget(req); const body = { ...req.body };
   if (col === 'orders') { const prev = getDoc('orders', id); body.token = prev ? prev.token : randomToken(); body.createdBy = prev ? prev.createdBy : req.user.id; if (prev?.payment) body.payment = { ...prev.payment, ...body.payment }; }
   if (col === 'promos') body.code = id;
+  if (col === 'drivers') { const prev = getDoc('drivers', id); body.token = (prev && prev.token) || body.token || randomToken(); }
   if (col === 'affiliates') { const prev = getDoc('affiliates', id); body.token = (prev && prev.token) || body.token || randomToken(); body.code = String(body.code || '').toUpperCase(); }
   const prevDoc = getDoc(col, id), isNew = !prevDoc;
   putDoc(col, id, body); res.json({ ok: true });
