@@ -134,6 +134,7 @@ function publicSettings() {
   const s = settings();
   const procs = {}; for (const [k, v] of Object.entries(s.processors || {})) procs[k] = { enabled: !!v.enabled }; // jamais d'identifiants côté public
   return { shopName: s.shopName, tagline: s.tagline, intro: s.intro, currency: s.currency, deliveryFee: s.deliveryFee, freeFrom: s.freeFrom, city: s.city, phone: s.phone, processors: procs,
+    headerSub: s.headerSub || '', legalName: s.legalName || '', legalForm: s.legalForm || '', capital: s.capital || '', rccm: s.rccm || '', nif: s.nif || '', address: s.address || '', country: s.country || '', whatsapp: s.whatsapp || '', phone2: s.phone2 || '', email: s.email || '', hours: s.hours || '', receiptNote: s.receiptNote || '',
     affDays: s.affDays || 30, siteUrl: s.siteUrl || '',
     assistant: !!env.ANTHROPIC_API_KEY && s.assistantOn !== false, assistantName: s.assistantName || 'Fanta',
     featuredPromo: s.featuredPromo && s.featuredPromo.code ? { code: s.featuredPromo.code, type: s.featuredPromo.type, value: s.featuredPromo.value, minOrder: s.featuredPromo.minOrder || 0, expiresAt: s.featuredPromo.expiresAt || '' } : null };
@@ -170,7 +171,7 @@ function shopBrief() {
   return `BOUTIQUE : ${s.shopName}, ${s.city}. ${s.intro || ''}
 LIVRAISON : à ${s.city}, ${money(s.deliveryFee)}, offerte dès ${money(s.freeFrom)} d’achat. Retrait en boutique gratuit.
 PAIEMENT : ${pays || 'à la livraison'}.
-CONTACT : ${s.phone || 'via le formulaire et WhatsApp de la boutique'}.
+CONTACT : ${[s.phone, s.phone2, s.whatsapp ? 'WhatsApp ' + s.whatsapp : '', s.email].filter(Boolean).join(' · ') || 'via le formulaire et WhatsApp de la boutique'}.${s.address ? '\nADRESSE : ' + s.address + (s.city ? ', ' + s.city : '') : ''}${s.hours ? '\nHORAIRES : ' + s.hours : ''}${s.legalName ? '\nSOCIÉTÉ : ' + s.legalName + (s.legalForm ? ' (' + s.legalForm + ')' : '') : ''}
 ${fp}
 ${s.assistantInfo ? 'INFORMATIONS DU GÉRANT : ' + String(s.assistantInfo).slice(0, 1500) : ''}
 CATALOGUE (identifiant entre doubles crochets) :

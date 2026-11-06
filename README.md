@@ -211,3 +211,8 @@ Sans photo propre, un lot affiche automatiquement un **montage des photos de ses
 - **Espace livreur** (téléphone) : ses livraisons du moment, boutons Appeler, WhatsApp et Itinéraire, puis **📷 Colis livré : prendre la photo**. La commande passe en « Livrée », le stock est déduit, le montant encaissé est noté, et vous recevez une notification.
 - Dans la commande : la photo s'affiche, et **📤 Envoyer la photo au client** partage l'image sur WhatsApp (ou envoie un lien vers la photo). Le client voit aussi la photo dans « Mes commandes ».
 - La boutique peut aussi ajouter la photo elle-même depuis la commande. Les photos ne sont visibles que par l'équipe et par le client concerné.
+
+
+## Informations de la société (Gestion › Société)
+
+Nom commercial, sous-titre de l'en-tête, raison sociale, forme juridique, capital, RCCM, NIF, adresse, ville, pays, téléphones, WhatsApp, e-mail, horaires et message en bas des reçus. Elles s'affichent dans l'en-tête, le pied de page, les reçus et tickets de caisse, et sont connues de l'assistante. Un aperçu se met à jour pendant la saisie.

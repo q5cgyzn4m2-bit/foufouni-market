@@ -491,6 +491,7 @@ const DEFAULT_SETTINGS = {
   intro:'Commandez en ligne, payez par mobile money ou à la livraison, et recevez vos articles chez vous.',
   currency:'FCFA', deliveryFee:1500, freeFrom:50000, city:'Bamako', phone:'',
   affDefaultPct:5, affDiscountPct:5, affDays:30, siteUrl:'',
+  headerSub:'', legalName:'', legalForm:'', capital:'', rccm:'', nif:'', address:'', country:'Mali', whatsapp:'', phone2:'', email:'', hours:'', receiptNote:'Merci pour votre confiance !',
   testMode:true,
   processors:{
     orange:{enabled:true, account:''}, moov:{enabled:true, account:''}, wave:{enabled:true, account:''},
@@ -689,6 +690,7 @@ function render(){
   if(S.view==='admin' && S.tab==='studio') setTimeout(studioRender, 0);
   if(!S._deep && S.ready && S.products.length && window.__ffmCat){ const c = window.__ffmCat; if(['Tout','Soldes','Nouveautés','Occasion','Lots'].includes(c) || S.products.some(p=>p.category===c)){ S.cat = c; setTimeout(()=>$('#catalogue')?.scrollIntoView({behavior:'smooth'}), 400); } window.__ffmCat = null; }
   if(S.view==='landing') setTimeout(lpAfterRender, 0);
+  if(S.view==='admin' && S.tab==='company') setTimeout(()=>{ companyPreview(); document.querySelectorAll('[data-co]').forEach(i=>{ if(!i.dataset.on){ i.dataset.on='1'; i.addEventListener('input', companyPreview); } }); }, 0);
   { const rs = $('#recv-scan'); if(rs && !rs.dataset.on){ rs.dataset.on='1'; rs.onkeydown = e=>{ if(e.key==='Enter'){ e.preventDefault(); const v = rs.value.trim(); rs.value=''; if(v) recvScan(v); setTimeout(()=>$('#recv-scan')?.focus(), 30); } }; } }
   if(S.view==='pos' && S.posTab==='vente'){ const sc = $('#pos-scan'); if(sc && !sc.dataset.on){ sc.dataset.on='1'; sc.onkeydown = e=>{ if(e.key==='Enter'){ e.preventDefault(); const v = sc.value.trim(); sc.value=''; if(v) posScan(v); } }; } }
   if(!S._payDeep && S.ready && S.products.length){ let q=null; try{ q = new URLSearchParams(location.search); }catch(e){}
@@ -716,7 +718,7 @@ function renderTop(){
     ? [['shop','Boutique'],['pos','Caisse'],['admin','Gestion']]
     : [['shop','Boutique'],['orders','Mes commandes']];
   $('#topbar').innerHTML = `
-    <button class="brand" data-a="go" data-v="shop" aria-label="Accueil boutique"><span class="mark" aria-hidden="true"></span><span><b>${esc(S.settings.shopName)}</b><small>${S.live?'Boutique en ligne':'Mode démo · données sur cet appareil'}</small></span></button>
+    <button class="brand" data-a="go" data-v="shop" aria-label="Accueil boutique"><span class="mark" aria-hidden="true"></span><span><b>${esc(S.settings.shopName)}</b><small>${S.live||isServer()?esc(S.settings.headerSub||'Boutique en ligne')+(S.settings.phone?' · '+esc(S.settings.phone):''):'Mode démo · données sur cet appareil'}</small></span></button>
     <div class="search">${svgSearch}<label class="sr" for="q">Rechercher un produit</label><input id="q" type="search" placeholder="Rechercher un produit, une catégorie…" value="${esc(S.q)}" data-in="q"></div>
     <div class="spacer"></div>
     <div class="modes" role="group" aria-label="Espace">${modes.map(([v,l])=>`<button aria-pressed="${S.view===v}" data-a="go" data-v="${v}">${l}</button>`).join('')}</div>
@@ -833,8 +835,8 @@ function viewShop(){
     <footer class="shop-foot"><div><span class="fb">${esc(st.shopName)}</span><p style="margin-top:10px">${esc(st.intro)}</p></div>
       <div><h4>Paiement sécurisé</h4><p>Orange Money, Wave ou en espèces à la réception.</p></div>
       <div><h4>Livraison</h4><p>À ${esc(st.city)}, offerte dès ${fmt(st.freeFrom)} d’achat. Retrait en boutique possible.</p></div>
-      <div><h4>Une question ?</h4><p>${st.phone?`Appelez-nous au <a href="tel:${esc(st.phone.replace(/\s/g,''))}" style="color:var(--indigo)">${esc(st.phone)}</a>.`:'Notre équipe vous répond à la livraison et en boutique.'}</p></div></footer>
-    <p class="foot-note">© ${new Date().getFullYear()} ${esc(st.shopName)}</p>`;
+      <div><h4>Nous contacter</h4><p>${st.phone?`📞 <a href="tel:${esc(st.phone.replace(/\s/g,''))}" style="color:var(--indigo)">${esc(st.phone)}</a>${st.phone2?` · <a href="tel:${esc(st.phone2.replace(/\s/g,''))}" style="color:var(--indigo)">${esc(st.phone2)}</a>`:''}<br>`:''}${st.whatsapp?`💬 <a href="https://wa.me/${waNumber(st.whatsapp)}" target="_blank" rel="noopener" style="color:var(--indigo)">WhatsApp ${esc(st.whatsapp)}</a><br>`:''}${st.email?`✉️ <a href="mailto:${esc(st.email)}" style="color:var(--indigo)">${esc(st.email)}</a><br>`:''}${st.address?`📍 ${esc(st.address)}${st.city?', '+esc(st.city):''}<br>`:''}${st.hours?`🕘 ${esc(st.hours)}`:''}${!st.phone&&!st.whatsapp&&!st.email&&!st.address?'Notre équipe vous répond à la livraison et en boutique.':''}</p></div></footer>
+    <p class="foot-note">© ${new Date().getFullYear()} ${esc(st.legalName||st.shopName)}${st.legalForm?' · '+esc(st.legalForm):''}${st.capital?' au capital de '+esc(st.capital):''}${st.rccm?' · RCCM '+esc(st.rccm):''}${st.nif?' · NIF '+esc(st.nif):''}${st.address?' · '+esc(st.address)+(st.city?', '+esc(st.city):''):''}${st.country?' · '+esc(st.country):''}</p>`;
 }
 function viewMyOrders(){
   const mine = S.orders.filter(o=>o.createdBy===S.uid || !S.live);
@@ -1980,7 +1982,7 @@ function payFail(msg){ $('#overlay').innerHTML = `<div class="scrim" data-a="clo
 /* --- Reçu --- */
 function receiptHTML(o){
   const st = S.settings;
-  return `<div class="receipt"><div class="rh"><b style="font:800 20px var(--f-d)">${esc(st.shopName)}</b><div class="muted small">${esc(st.city)}${st.phone?' · '+esc(st.phone):''}</div>
+  return `<div class="receipt"><div class="rh"><b style="font:800 20px var(--f-d)">${esc(st.shopName)}</b>${st.legalName&&st.legalName!==st.shopName?`<div class="small">${esc(st.legalName)}${st.legalForm?' · '+esc(st.legalForm):''}</div>`:''}<div class="muted small">${esc([st.address, st.city].filter(Boolean).join(', '))}${st.phone?' · '+esc(st.phone):''}</div>${st.rccm||st.nif?`<div class="muted small">${st.rccm?'RCCM '+esc(st.rccm):''}${st.rccm&&st.nif?' · ':''}${st.nif?'NIF '+esc(st.nif):''}</div>`:''}
     <div style="margin-top:8px"><b>${esc(o.number)}</b></div><div class="muted small">${dateFr(o.createdAt)} · ${esc(o.channel==='caisse'?'Vente en caisse':'Commande en ligne')}</div></div>
     ${o.items.map(i=>`<div class="rr"><span>${i.qty} × ${esc(i.name)}</span><span>${fmt(i.price*i.qty)}</span></div>`).join('')}
     <div style="border-top:2px dashed var(--line); margin:10px 0"></div>
@@ -1993,7 +1995,7 @@ function receiptHTML(o){
     ${o.payment?.rest>0?`<div class="rr"><span>Payé</span><span>${fmt(o.payment.paid||0)}</span></div><div class="rr" style="font-weight:700"><span>Reste à payer</span><span>${fmt(o.payment.rest)}</span></div>${o.payment.due?`<div class="rr" style="font-weight:700"><span>Échéance de paiement</span><span>${dateOnly(o.payment.due)}</span></div><div style="margin-top:8px;padding:8px;border:1.5px dashed currentColor;border-radius:6px;text-align:center;font-weight:700">À régler au plus tard le ${dateOnly(o.payment.due)}</div>`:''}`:''}
     <div class="rr muted small"><span>Réf.</span><span>${esc(o.payment?.ref||'')}</span></div>
     ${o.customer?.name?`<div class="rr muted small"><span>Client</span><span>${esc(o.customer.name)} ${esc(o.customer.phone||'')}</span></div>`:''}
-    <div class="rh" style="border:0; border-top:2px dashed var(--line); margin-top:10px; padding-top:10px">Merci de votre confiance !</div></div>`;
+    ${st.receiptNote?`<div class="muted small" style="text-align:center;margin-top:10px;border-top:1px dashed var(--line);padding-top:8px">${esc(st.receiptNote)}</div>`:''}</div>`;
 }
 function showReceipt(o, fresh){
   $('#overlay').innerHTML = `<div class="scrim" data-a="closeAll"><div class="modal" role="dialog" aria-modal="true" aria-label="Reçu">
@@ -2605,10 +2607,10 @@ function billForm(type, x){
 }
 
 /* --- Gestion --- */
-const TABS = [['dash','Tableau de bord'],['products','Produits'],['stock','Stock & inventaire'],['bundles','Lots'],['orders','Commandes'],['promos','Codes promo'],['affiliates','Ambassadeurs'],['reviews','Avis clients'],['studio','Studio réseaux'],['audience','Clients & retargeting'],['alerts','Alertes clients'],['carts','Assistant & paniers'],['payments','Paiements'],['team','Équipe']];
+const TABS = [['dash','Tableau de bord'],['products','Produits'],['stock','Stock & inventaire'],['bundles','Lots'],['orders','Commandes'],['promos','Codes promo'],['affiliates','Ambassadeurs'],['reviews','Avis clients'],['studio','Studio réseaux'],['audience','Clients & retargeting'],['alerts','Alertes clients'],['carts','Assistant & paniers'],['company','Société'],['payments','Paiements'],['team','Équipe']];
 function viewAdmin(){
   const pending = S.orders.filter(o=>o.status==='en_attente'||(o.status==='payee'&&!o.stockApplied)).length;
-  const panes = {dash:paneDash, products:paneProducts, stock:paneStock, bundles:paneBundles, orders:paneOrders, promos:panePromos, affiliates:paneAffiliates, reviews:paneReviews, studio:paneStudio, audience:paneAudience, alerts:()=>window.paneAlerts?window.paneAlerts():'', carts:()=>window.paneCarts?window.paneCarts():'', payments:panePayments, team:paneTeam};
+  const panes = {dash:paneDash, products:paneProducts, stock:paneStock, bundles:paneBundles, orders:paneOrders, promos:panePromos, affiliates:paneAffiliates, reviews:paneReviews, studio:paneStudio, audience:paneAudience, company:paneCompany, alerts:()=>window.paneAlerts?window.paneAlerts():'', carts:()=>window.paneCarts?window.paneCarts():'', payments:panePayments, team:paneTeam};
   return `<div class="admin"><nav class="side" aria-label="Gestion">${TABS.filter(([k])=>!['alerts','carts'].includes(k)||isServer()).map(([k,l])=>`<button data-a="tab" data-v="${k}" ${S.tab===k?'aria-current="page"':''}>${l}${k==='orders'&&pending?`<span class="pill warn">${pending}</span>`:''}</button>`).join('')}</nav>
     <section>${panes[S.tab]()}</section></div>`;
 }
@@ -3017,6 +3019,39 @@ function panePayments(){
   </div>
   <div style="margin-top:16px;display:flex;justify-content:flex-end"><button class="btn primary" data-a="saveSettings">Enregistrer les réglages</button></div>`;
 }
+const CO_FIELDS = [
+  ['shopName','Nom commercial (affiché partout)','foûfoûni-Market'],['headerSub','Sous-titre de l’en-tête','ex. Boutique en ligne · Bamako'],
+  ['legalName','Raison sociale','ex. FOUFOUNI MARKET SARL'],['legalForm','Forme juridique','ex. SARL, SUARL, SA, Entreprise individuelle, GIE'],['capital','Capital social','ex. 1 000 000 FCFA'],
+  ['rccm','N° RCCM','ex. MA.BKO.2026.B.1234'],['nif','NIF','ex. 084123456X'],
+  ['address','Adresse','ex. Rue 312, Hamdallaye ACI 2000'],['city','Ville','Bamako'],['country','Pays','Mali'],
+  ['phone','Téléphone principal','ex. +223 70 00 00 00'],['phone2','Second téléphone',''],['whatsapp','WhatsApp','ex. +223 70 00 00 00'],['email','E-mail','ex. contact@foufouni.ml'],
+  ['hours','Horaires','ex. Lun – sam, 8 h – 19 h'],['receiptNote','Message en bas des reçus','ex. Merci pour votre confiance !']];
+function paneCompany(){
+  const st = S.settings, f = k => `<div class="field"><label for="co-${k}">${esc((CO_FIELDS.find(x=>x[0]===k)||[])[1])}</label><input class="input" id="co-${k}" data-co="${k}" value="${esc(st[k]||'')}" placeholder="${esc((CO_FIELDS.find(x=>x[0]===k)||[])[2]||'')}"></div>`;
+  return `<div class="toolbar"><h2 style="font-size:24px;flex:1">Informations de la société</h2><button class="btn primary" data-a="saveCompany">Enregistrer</button></div>
+  <p class="muted" style="margin-top:-6px">Ces informations s’affichent dans l’en-tête, le pied de page de la boutique, les reçus et tickets de caisse, les étiquettes et les messages de l’assistante.</p>
+  <div class="row" style="align-items:flex-start;gap:16px"><div style="flex:3 1 420px">
+   <div class="panel"><h3>Identité</h3><div class="row">${f('shopName')}${f('headerSub')}</div></div>
+   <div class="panel"><h3>Informations légales</h3><div class="row">${f('legalName')}${f('legalForm')}</div><div class="row">${f('capital')}${f('rccm')}${f('nif')}</div></div>
+   <div class="panel"><h3>Coordonnées</h3><div class="row">${f('address')}${f('city')}${f('country')}</div><div class="row">${f('phone')}${f('phone2')}</div><div class="row">${f('whatsapp')}${f('email')}</div>${f('hours')}</div>
+   <div class="panel"><h3>Reçus</h3>${f('receiptNote')}</div></div>
+   <div style="flex:2 1 300px;position:sticky;top:80px"><div class="panel"><h3>Aperçu</h3><div id="co-prev"></div></div></div></div>`;
+}
+function companyPreview(){
+  const box = $('#co-prev'); if(!box) return; const st = {...S.settings}; document.querySelectorAll('[data-co]').forEach(i=>st[i.dataset.co]=i.value.trim());
+  const demo = {number:'FM-EXEMPLE', createdAt:Date.now(), channel:'caisse', items:[{qty:1, name:'Article exemple', price:15000}], subtotal:15000, discount:0, shipping:0, total:15000, payment:{method:'cash', status:'encaissé'}, status:'livree'};
+  const keep = S.settings; S.settings = st; let rec = ''; try{ rec = receiptHTML(demo); }catch(e){} S.settings = keep;
+  box.innerHTML = `<div class="small muted" style="margin-bottom:6px">En-tête</div><div style="display:flex;gap:10px;align-items:center;padding:10px;border:1px solid var(--line);border-radius:12px"><span class="mark" aria-hidden="true"></span><span><b style="font:700 18px var(--f-d)">${esc(st.shopName||'')}</b><br><small class="muted">${esc(st.headerSub||'Boutique en ligne')}${st.phone?' · '+esc(st.phone):''}</small></span></div>
+    <div class="small muted" style="margin:14px 0 6px">Reçu / ticket de caisse</div><div style="border:1px solid var(--line);border-radius:12px;padding:10px">${rec}</div>
+    <div class="small muted" style="margin:14px 0 6px">Bas de page</div><p class="small" style="margin:0;padding:10px;border:1px solid var(--line);border-radius:12px">© ${new Date().getFullYear()} ${esc(st.legalName||st.shopName||'')}${st.legalForm?' · '+esc(st.legalForm):''}${st.capital?' au capital de '+esc(st.capital):''}${st.rccm?' · RCCM '+esc(st.rccm):''}${st.nif?' · NIF '+esc(st.nif):''}${st.address?' · '+esc(st.address)+(st.city?', '+esc(st.city):''):''}${st.country?' · '+esc(st.country):''}</p>`;
+}
+async function saveCompany(){
+  const s2 = structuredClone(S.settings); document.querySelectorAll('[data-co]').forEach(i=>s2[i.dataset.co]=i.value.trim());
+  if(!s2.shopName) return toast('Le nom commercial est obligatoire.');
+  if(s2.email && !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(s2.email)) return toast('L’adresse e-mail ne semble pas valide.');
+  for(const k of ['phone','phone2','whatsapp']) if(s2[k] && !phoneOk(s2[k])) return toast('Numéro de téléphone invalide : '+s2[k]);
+  try{ await put('settings','main',s2); toast('Informations de la société enregistrées'); }catch(e){ dbErr(e); toast('Enregistrement impossible : réservé aux gérants.'); }
+}
 async function saveSettings(){
   const s = structuredClone(S.settings), v = id=>($(id)?.value||'').trim();
   s.shopName=v('#st-name')||'foûfoûni-Market'; s.city=v('#st-city'); s.tagline=v('#st-tag'); s.intro=v('#st-intro'); s.currency=v('#st-cur')||'FCFA'; s.phone=v('#st-phone');
@@ -3126,6 +3161,7 @@ document.addEventListener('click', async e=>{
     case 'newAff': affForm(null); break;
     case 'shareProduct': shareProduct(id); break;
     case 'openLanding': openLanding(id); break;
+    case 'saveCompany': saveCompany(); break;
     case 'drivers': driversDialog(); break;
     case 'drvToggle': { const d = S.drivers.find(x=>x.id===id); if(d){ try{ await patch('drivers', id, {active:d.active===false}); setTimeout(driversDialog, 300); }catch(err){ dbErr(err); } } break; }
     case 'proofSend': { const o = S.orders.find(x=>x.id===id); if(o) shareProof(o); break; }
