@@ -518,7 +518,7 @@ const ROLES = ['Gérant','Vendeur','Caissier','Livreur','Gestionnaire de stock']
 /* ============ état ============ */
 const S = {
   ready:false, live:false, isAdmin:false, uid:null, myName:'',
-  products:[], bundles:[], clients:[], suppliers:[], reviews:[], drivers:[], dphoto:{}, campaigns:[], contactFlags:{}, audCarts:null, audSeg:'abandon_new', audSel:{}, costs:{}, stockMoves:[], inv:{}, topDays:30, topSort:'revenue', stFilter:'all', stCat:'', affiliates:[], affPayouts:[], moves:[], ledger:[], finConfig:{}, posTab:'vente', trAcc:'all', trType:'all', pq:'', promos:[], orders:[], settings:structuredClone(DEFAULT_SETTINGS), team:{members:[]},
+  products:[], bundles:[], clients:[], suppliers:[], reviews:[], drivers:[], purchases:[], dphoto:{}, campaigns:[], contactFlags:{}, audCarts:null, audSeg:'abandon_new', audSel:{}, costs:{}, stockMoves:[], inv:{}, topDays:30, topSort:'revenue', stFilter:'all', stCat:'', affiliates:[], affPayouts:[], moves:[], ledger:[], finConfig:{}, posTab:'vente', trAcc:'all', trType:'all', pq:'', promos:[], orders:[], settings:structuredClone(DEFAULT_SETTINGS), team:{members:[]},
   cart:[], pos:[], posPromo:null, appliedPromo:null,
   view:'shop', tab:'dash', cat:'Tout', q:'', aq:'', orderFilter:'all', selPromos:new Set(), names:{}
 };
@@ -568,6 +568,7 @@ function syncLocal(){
   S.bundles = arr('bundles').sort((a,b)=>(b.createdAt||0)-(a.createdAt||0));
   S.costs = Object.fromEntries(arr('costs').map(c=>[c.id, Number(c.cost)||0]));
   S.stockMoves = arr('stock-moves').sort((a,b)=>b.createdAt-a.createdAt);
+  S.purchases = arr('purchases').sort((a,b)=>b.createdAt-a.createdAt);
   S.drivers = arr('drivers').sort((a,b)=>a.name.localeCompare(b.name));
   S.campaigns = arr('campaigns').sort((a,b)=>b.createdAt-a.createdAt);
   S.contactFlags = Object.fromEntries(arr('contact-flags').map(f=>[f.id, f]));
@@ -649,6 +650,7 @@ async function boot(){
       sub('clients','clients',(a,b)=>a.name.localeCompare(b.name));
       db.collection('costs').onSnapshot(s=>{ S.costs = Object.fromEntries(s.docs.map(d=>[d.id, Number(d.data().cost)||0])); schedule(); }, dbErr);
       sub('stock-moves','stockMoves',(a,b)=>b.createdAt-a.createdAt);
+      sub('purchases','purchases',(a,b)=>b.createdAt-a.createdAt);
       sub('drivers','drivers',(a,b)=>a.name.localeCompare(b.name));
       sub('campaigns','campaigns',(a,b)=>b.createdAt-a.createdAt);
       db.collection('contact-flags').onSnapshot(s=>{ S.contactFlags = Object.fromEntries(s.docs.map(d=>[d.id,{id:d.id,...d.data()}])); schedule(); }, dbErr);
@@ -2563,7 +2565,8 @@ function partyDetail(type, id, fresh){
       <div class="kpi"><span>${isC?'Achats en boutique':'Factures enregistrées'}</span><b>${isC?orders.length:entries.filter(e=>e.kind==='facture').length}</b></div></div>
       <div class="fin-actions">${isC
         ? `<button class="btn primary" data-pd="pay">Encaisser un règlement</button><button class="btn ghost" data-pd="bill">Ajouter une créance</button>`
-        : `<button class="btn primary" data-pd="pay">Régler le fournisseur</button><button class="btn ghost" data-pd="bill">Enregistrer une facture d’achat</button>`}</div>
+        : `<button class="btn primary" data-pd="purchase">📦 Facture avec articles (entrée en stock)</button><button class="btn ghost" data-pd="pay">Régler le fournisseur</button><button class="btn ghost" data-pd="bill">Facture sans articles</button>`}</div>
+      ${!isC&&S.purchases.some(pu=>pu.supplierId===id)?`<div class="panel tbl-wrap"><h3>Factures avec articles</h3><table><tbody>${S.purchases.filter(pu=>pu.supplierId===id).slice(0,30).map(pu=>`<tr><td class="small" style="white-space:nowrap">${dateOnly(pu.date)}</td><td><b>${esc(pu.ref||'Sans numéro')}</b><div class="muted small">${(pu.lines||[]).map(l=>l.qty+' × '+esc(l.name)).slice(0,3).join(' · ')}${(pu.lines||[]).length>3?' …':''}</div></td><td style="text-align:right"><b>${fmt(pu.total)}</b><div class="muted small">${(pu.lines||[]).reduce((t,l)=>t+l.qty,0)} articles</div></td></tr>`).join('')}</tbody></table></div>`:''}
       <div class="panel tbl-wrap"><h3>Historique</h3>${entries.length?`<table><thead><tr><th>Date</th><th>Libellé</th><th style="text-align:right">${isC?'Dû':'Facturé'}</th><th style="text-align:right">Réglé</th><th></th></tr></thead><tbody>
         ${entries.map(e=>`<tr><td class="small" style="white-space:nowrap">${dateOnly(e.date)}</td><td class="small">${esc(e.label)}${e.ref?`<div class="muted">${esc(e.ref)}</div>`:''}${(()=>{ const oi = isC && e.kind==='facture' ? openInvoices(id).find(i=>i.f.id===e.id) : null; const dd = e.due || (isC&&e.kind==='facture'?addDays(e.date,termDays()):''); if(!dd) return ''; if(isC && e.kind==='facture' && !oi) return `<div class="muted">Échéance ${dateOnly(dd)} · soldée</div>`; const late = oi && dd<=today(); return `<div class="muted">Échéance ${dateOnly(dd)}${oi?` · reste ${fmt(oi.rem)}`:''}</div>${late?`<span class="pill bad">En retard de ${daysBetween(dd,today())} j</span>`:''}`; })()}</td>
           <td style="text-align:right">${e.kind==='facture'?fmt(e.amount):''}</td><td style="text-align:right" class="amt-in">${e.kind==='reglement'?fmt(e.amount):''}</td><td><button class="btn sm ghost" data-pd="delEntry" data-id="${e.id}" aria-label="Supprimer">×</button></td></tr>`).join('')}</tbody></table>`
@@ -2576,10 +2579,100 @@ function partyDetail(type, id, fresh){
     if(a==='edit') partyForm(type, x);
     if(a==='pay') finForm(isC?'reg_client':'reg_fournisseur', {partyId:id, amount:due>0?due:''});
     if(a==='bill') billForm(type, x);
+    if(a==='purchase') purchaseForm(x);
     if(a==='delParty'){ if(!confirmTwice(b)) return; try{ await del(isC?'clients':'suppliers', id); closeAll(); toast('Fiche supprimée'); }catch(err){ dbErr(err); } }
     if(a==='delEntry'){ if(!confirmTwice(b)) return; const en = S.ledger.find(l=>l.id===b.dataset.id);
       try{ await del('fin-ledger', en.id); if(en.moveId) await del('fin-moves', en.moveId); toast('Opération supprimée'); setTimeout(()=>partyDetail(type,id),300); }catch(err){ dbErr(err); } }
   });
+}
+/* --- Facture d'achat avec articles : entrée en stock --- */
+const shrinkDoc = f => new Promise((ok,ko)=>{ if(/pdf/.test(f.type)){ if(f.size>8e6) return ko(new Error('PDF trop lourd (8 Mo max.)')); const r = new FileReader(); r.onload = ()=>ok(r.result); r.onerror = ko; return r.readAsDataURL(f); }
+  const r = new FileReader(); r.onload = ()=>{ const im = new Image(); im.onload = ()=>{ const k = Math.min(1, 1800/Math.max(im.width, im.height)), c = document.createElement('canvas'); c.width = Math.round(im.width*k); c.height = Math.round(im.height*k); const x = c.getContext('2d'); x.fillStyle='#fff'; x.fillRect(0,0,c.width,c.height); x.drawImage(im,0,0,c.width,c.height); ok(c.toDataURL('image/jpeg',.86)); }; im.onerror = ko; im.src = r.result; }; r.onerror = ko; r.readAsDataURL(f); });
+function matchProduct(name, code){
+  if(code){ const h = findByCode(code); if(h) return h; }
+  const n = String(name||'').toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g,'').replace(/[^a-z0-9 ]/g,' ').split(/\s+/).filter(w=>w.length>2);
+  if(!n.length) return null; let best = null, score = 0;
+  for(const p of S.products){ const pn = p.name.toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g,''); const sc = n.filter(w=>pn.includes(w)).length / n.length; if(sc>score){ score = sc; best = p; } }
+  return score >= 0.6 ? {p:best, v:null} : null;
+}
+function purchaseForm(sup, preset){
+  const P = preset || {ref:'', date:today(), due:'', fees:0, rate:1, currency:S.settings.currency, method:'cmp', lines:[]};
+  const lineTotal = l => Math.round((Number(l.qty)||0)*(Number(l.cost)||0)*(Number(P.rate)||1));
+  const draw = ()=>{
+    const goods = P.lines.reduce((t,l)=>t+lineTotal(l),0), total = goods + (Number(P.fees)||0);
+    $('#overlay').innerHTML = `<div class="scrim"><div class="modal wide" role="dialog" aria-modal="true" aria-label="Facture d’achat"><div class="m-h"><h2>📦 Facture d’achat · ${esc(sup.name)}</h2><button class="x" data-a="closeAll" aria-label="Fermer">×</button></div>
+    <div class="m-b">
+      <div class="fin-actions" style="margin-top:0">${isServer()?'<label class="btn primary sm">✨ Lire la facture (photo ou PDF)<input type="file" accept="image/*,application/pdf" class="sr" id="pu-file"></label>':''}<button class="btn ghost sm" id="pu-scan">📷 Scanner un article</button><button class="btn ghost sm" id="pu-add">＋ Ajouter une ligne</button></div>
+      <div class="small muted" id="pu-msg" style="margin:0 0 10px">${isServer()?'Photographiez la facture : l’assistante lit les articles, les quantités et les prix. Vérifiez chaque ligne avant de valider.':'Ajoutez les articles de la facture ligne par ligne, ou scannez-les.'}</div>
+      <div class="row"><div class="field"><label for="pu-ref">N° de facture</label><input class="input" id="pu-ref" data-pk="ref" value="${esc(P.ref)}"></div><div class="field"><label for="pu-date">Date</label><input class="input" type="date" id="pu-date" data-pk="date" value="${esc(P.date)}"></div><div class="field"><label for="pu-due">Échéance</label><input class="input" type="date" id="pu-due" data-pk="due" value="${esc(P.due)}"></div></div>
+      <div class="row"><div class="field"><label for="pu-cur">Devise de la facture</label><input class="input" id="pu-cur" data-pk="currency" value="${esc(P.currency)}" placeholder="FCFA, CNY, EUR, USD…"></div><div class="field"><label for="pu-rate">Taux (1 ${esc(P.currency||'?')} = … ${esc(S.settings.currency)})</label><input class="input" id="pu-rate" data-pk="rate" inputmode="decimal" value="${esc(P.rate)}"></div><div class="field"><label for="pu-fees">Frais (transport, douane…) en ${esc(S.settings.currency)}</label><input class="input" id="pu-fees" data-pk="fees" inputmode="numeric" value="${esc(P.fees||'')}"></div></div>
+      <div class="tbl-wrap"><table><thead><tr><th>Article</th><th style="width:70px">Qté</th><th style="width:110px">Prix unit. (${esc(P.currency||'')})</th><th style="width:110px">Prix de vente</th><th style="text-align:right">Total</th><th></th></tr></thead><tbody>
+      ${P.lines.length?P.lines.map((l,i)=>{ const p = S.products.find(x=>x.id===l.productId);
+        return `<tr><td><input class="input" data-pl="name" data-i="${i}" value="${esc(l.name)}" style="padding:6px 8px;margin-bottom:4px" placeholder="Désignation">
+          <select class="input" data-pl="productId" data-i="${i}" style="padding:5px 8px;font-size:13px"><option value="">＋ Nouvel article</option>${S.products.map(x=>`<option value="${x.id}" ${x.id===l.productId?'selected':''}>${esc(x.name)}</option>`).join('')}</select>
+          ${p&&hasVar(p)?`<select class="input" data-pl="v" data-i="${i}" style="padding:5px 8px;font-size:13px;margin-top:4px">${p.variants.map(v=>`<option ${v.key===l.v?'selected':''}>${esc(v.key)}</option>`).join('')}</select>`:''}
+          ${!p?`<input class="input" data-pl="category" data-i="${i}" value="${esc(l.category||'')}" placeholder="Catégorie du nouvel article" style="padding:5px 8px;font-size:13px;margin-top:4px">`:''}
+          <div class="muted small" style="margin-top:3px">${p?`Stock actuel : ${l.v&&hasVar(p)?((varOf(p,l.v)||{}).stock||0):p.stock} · achat ${costOf(p.id)?fmt(costOf(p.id)):'—'}`:'Sera créé à la validation'}${l.barcode?' · code '+esc(l.barcode):''}</div></td>
+          <td><input class="input" data-pl="qty" data-i="${i}" inputmode="numeric" value="${esc(l.qty)}" style="padding:6px 8px"></td>
+          <td><input class="input" data-pl="cost" data-i="${i}" inputmode="decimal" value="${esc(l.cost)}" style="padding:6px 8px"></td>
+          <td><input class="input" data-pl="price" data-i="${i}" inputmode="numeric" value="${esc(l.price||'')}" placeholder="${p?fmt(p.price):'à fixer'}" style="padding:6px 8px"></td>
+          <td style="text-align:right;white-space:nowrap"><b>${fmt(lineTotal(l))}</b></td><td><button class="btn ghost sm" data-pdel="${i}" aria-label="Retirer">×</button></td></tr>`; }).join('')
+      :'<tr><td colspan="6" class="muted" style="text-align:center;padding:20px">Aucun article pour l’instant.</td></tr>'}</tbody></table></div>
+      <div class="row" style="align-items:flex-end;margin-top:12px"><div class="field"><label for="pu-meth">Nouveau prix d’achat des articles existants</label><select class="input" id="pu-meth" data-pk="method"><option value="cmp" ${P.method==='cmp'?'selected':''}>Coût moyen (stock ancien + nouveau)</option><option value="last" ${P.method==='last'?'selected':''}>Prix de cette facture</option></select></div>
+        <div style="flex:1;text-align:right"><div class="muted small">Marchandises ${fmt(goods)}${P.fees?' + frais '+fmt(P.fees):''}</div><div style="font:700 26px var(--f-d)">${fmt(total)}</div></div></div>
+      <p class="muted small" style="margin:6px 0 0">Les frais sont répartis sur le prix d’achat des articles, au prorata de leur valeur. À la validation : le stock augmente, les nouveaux articles sont créés, et la facture est ajoutée au solde du fournisseur.</p>
+      <div class="small" id="pu-err" style="color:var(--danger);margin-top:6px"></div></div>
+    <div class="m-f"><button class="btn ghost" data-a="closeAll">Annuler</button><button class="btn primary" id="pu-ok" ${P.lines.length?'':'disabled'}>Valider : entrer ${P.lines.reduce((t,l)=>t+(Number(l.qty)||0),0)} articles en stock</button></div></div></div>`;
+    document.querySelectorAll('[data-pk]').forEach(x=>x.onchange = ()=>{ P[x.dataset.pk] = ['rate','fees'].includes(x.dataset.pk) ? Number(String(x.value).replace(',','.').replace(/\s/g,''))||0 : x.value; draw(); });
+    document.querySelectorAll('[data-pl]').forEach(x=>x.onchange = ()=>{ const l = P.lines[Number(x.dataset.i)], k = x.dataset.pl;
+      l[k] = ['qty','cost','price'].includes(k) ? Number(String(x.value).replace(',','.').replace(/\s/g,''))||0 : x.value;
+      if(k==='productId'){ const p = S.products.find(y=>y.id===x.value); l.v = p&&hasVar(p) ? p.variants[0].key : ''; }
+      draw(); });
+    document.querySelectorAll('[data-pdel]').forEach(b=>b.onclick = e=>{ e.stopPropagation(); P.lines.splice(Number(b.dataset.pdel),1); draw(); });
+    $('#pu-add').onclick = e=>{ e.stopPropagation(); P.lines.push({name:'', productId:'', v:'', qty:1, cost:0, price:0}); draw(); };
+    $('#pu-scan').onclick = e=>{ e.stopPropagation(); const keep = document.createElement('div'); keep.append(...$('#overlay').childNodes); window.__keepForm = keep;
+      openScanner(code=>{ restoreForm(); addCode(code); return false; }, 'Scanner un article de la facture'); };
+    if($('#pu-file')) $('#pu-file').onchange = async e=>{ const f = e.target.files[0]; if(!f) return; const msg = $('#pu-msg'); msg.textContent = 'Lecture de la facture par l’assistante…'; msg.style.color='var(--muted)';
+      try{ const data = await shrinkDoc(f); const r = await window.readInvoice(data);
+        if(r.ref && !P.ref) P.ref = r.ref; if(r.date && P.date===today()) P.date = r.date; if(r.currency) P.currency = r.currency; if(r.fees && !P.fees && (!r.currency || r.currency===S.settings.currency)) P.fees = r.fees;
+        (r.lines||[]).forEach(x=>{ const m = matchProduct(x.name, x.barcode); P.lines.push({name:x.name, productId:m?m.p.id:'', v:m&&m.v?m.v.key:(m&&hasVar(m.p)?m.p.variants[0].key:''), qty:x.qty||1, cost:x.unitPrice||0, price:0, barcode:x.barcode||'', category:''}); });
+        draw(); const m2 = $('#pu-msg'); m2.textContent = `✓ ${r.lines.length} ligne${r.lines.length>1?'s':''} lue${r.lines.length>1?'s':''}${r.total?' · total de la facture : '+r.total+' '+(r.currency||''):''}. Vérifiez les quantités, les prix et les articles liés.`; m2.style.color = 'var(--kola)';
+        if(r.currency && r.currency!==S.settings.currency && (Number(P.rate)||1)===1) toast(`Facture en ${r.currency} : indiquez le taux de change`); }
+      catch(err){ msg.textContent = err.message || 'Lecture impossible : saisissez les lignes à la main.'; msg.style.color='var(--danger)'; } };
+    $('#pu-ok').onclick = e=>{ e.stopPropagation(); validate(); };
+  };
+  const addCode = code=>{ const h = findByCode(code); if(h){ const k = P.lines.find(l=>l.productId===h.p.id && (l.v||'')===(h.v?h.v.key:(l.v||''))); if(k){ k.qty = (Number(k.qty)||0)+1; } else P.lines.push({name:h.p.name, productId:h.p.id, v:h.v?h.v.key:(hasVar(h.p)?h.p.variants[0].key:''), qty:1, cost:costOf(h.p.id)||0, price:0}); beep(true); draw(); return; }
+    beep(false); P.lines.push({name:'', productId:'', v:'', qty:1, cost:0, price:0, barcode:code.replace(/\s/g,'')}); draw();
+    if(window.lookupBarcode) window.lookupBarcode(code).then(r=>{ const l = P.lines.find(x=>x.barcode===code.replace(/\s/g,'') && !x.name); if(r && r.found && l){ l.name = r.name; l.category = r.category||''; draw(); } }).catch(()=>{}); };
+  const validate = async ()=>{
+    const err = $('#pu-err'), rate = Number(P.rate)||1;
+    if(P.lines.some(l=>!String(l.name||'').trim() && !l.productId)) return err.textContent = 'Chaque ligne doit avoir une désignation ou un article lié.';
+    if(P.lines.some(l=>!(Number(l.qty)>0))) return err.textContent = 'Chaque ligne doit avoir une quantité.';
+    const goods = P.lines.reduce((t,l)=>t+lineTotal(l),0), fees = Number(P.fees)||0, total = goods + fees;
+    $('#pu-ok').disabled = true; $('#pu-ok').textContent = 'Enregistrement…';
+    try{ const done = [];
+      for(const l of P.lines){
+        const unit = (Number(l.cost)||0)*rate, share = goods ? lineTotal(l)/goods : 0, landed = Math.round(unit + (fees*share)/(Number(l.qty)||1));
+        let p = S.products.find(x=>x.id===l.productId);
+        if(!p){ const pid = newId('p'), name = String(l.name).trim().slice(0,120), price = Number(l.price)||0;
+          const np = {name, sku:'FM-'+rnd(5), category:l.category||'', price, comparePrice:'', stock:0, lowStock:5, emoji:'📦', image:'', description:'', active:price>0, barcode:l.barcode||makeEan(pid), createdAt:Date.now(), updatedAt:Date.now()};
+          await put('products', pid, np); p = {id:pid, ...np}; S.products.push(p); }
+        else if(Number(l.price)>0 && Number(l.price)!==p.price && !(l.v&&hasVar(p))) await patch('products', p.id, {price:Number(l.price)});
+        const vk = l.v && hasVar(p) ? l.v : '', cur = vk ? ((varOf(p,vk)||{}).stock||0) : (p.stock||0), qty = Number(l.qty)||0, oldTotal = Math.max(0, p.stock||0);
+        await recordMove(p, cur + qty, 'entree', `Facture ${P.ref||''} · ${sup.name}`.trim(), {supplierId:sup.id}, vk||undefined);
+        if(!vk) p.stock = cur + qty;
+        const old = costOf(p.id), newCost = P.method==='last' || !old ? landed : Math.round((old*oldTotal + landed*qty) / Math.max(1, oldTotal+qty));
+        if(landed>0) await put('costs', p.id, {cost:newCost, updatedAt:Date.now()});
+        done.push({productId:p.id, v:vk, name:p.name+(vk?' — '+vk:''), qty, cost:landed});
+      }
+      const lid = newId('l');
+      await put('fin-ledger', lid, {partyType:'supplier', partyId:sup.id, kind:'facture', amount:total, label:`Facture ${P.ref||''} · ${done.reduce((t,l)=>t+l.qty,0)} articles`.replace('  ',' '), date:P.date||today(), ref:P.ref, due:P.due, createdAt:Date.now(), createdBy:S.uid||'local'});
+      await put('purchases', newId('a'), {supplierId:sup.id, ref:P.ref, date:P.date||today(), due:P.due, currency:P.currency, rate, fees, total, lines:done, ledgerId:lid, createdAt:Date.now(), createdBy:S.myName||''});
+      closeAll(); toast(`✓ ${done.reduce((t,l)=>t+l.qty,0)} articles entrés en stock · facture de ${fmt(total)} ajoutée au fournisseur`);
+      setTimeout(()=>partyDetail('supplier', sup.id), 400);
+    }catch(e2){ dbErr(e2); err.textContent = 'Une partie n’a pas pu être enregistrée : vérifiez le stock et réessayez.'; $('#pu-ok').disabled = false; }
+  };
+  draw();
 }
 function billForm(type, x){
   const isC = type==='client';

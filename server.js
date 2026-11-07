@@ -472,6 +472,25 @@ app.post('/webhooks/orange', express.json({ limit: '50kb' }), h(async (req, res)
   if (o) await refreshPayment(o, o.id, true);
 }));
 
+/* Lecture d'une facture fournisseur (photo ou PDF) par l'assistante : avant le lecteur JSON général, pour accepter un fichier plus lourd */
+app.post('/api/admin/ai/invoice', express.json({ limit: '12mb' }), requireStaff, h(async (req, res) => {
+  if (!env.ANTHROPIC_API_KEY) throw httpErr(503, 'Ajoutez la clé ANTHROPIC_API_KEY sur Render pour lire les factures automatiquement.');
+  if (limited('inv:' + req.user.id, 40, 3600e3)) throw httpErr(429, 'Trop de factures lues en une heure.');
+  const m = /^data:(image\/(jpeg|png|webp)|application\/pdf);base64,([A-Za-z0-9+/=]+)$/.exec(String(req.body?.file || ''));
+  if (!m) throw httpErr(400, 'Envoyez une photo (JPEG, PNG) ou un PDF de la facture.');
+  const block = m[1] === 'application/pdf' ? { type: 'document', source: { type: 'base64', media_type: 'application/pdf', data: m[3] } } : { type: 'image', source: { type: 'base64', media_type: m[1], data: m[3] } };
+  const system = `Tu lis des factures et bons de livraison de fournisseurs (Mali, Afrique de l'Ouest, Chine, Europe), en français, anglais ou chinois.
+Extrais uniquement ce qui est écrit sur le document, sans rien inventer. Réponds UNIQUEMENT avec un objet JSON valide :
+{"supplier":"nom du fournisseur","ref":"numéro de facture","date":"AAAA-MM-JJ","currency":"code devise (FCFA pour XOF/CFA, CNY pour RMB/¥, EUR, USD…)","lines":[{"name":"désignation de l'article en français si possible","qty":nombre,"unitPrice":prix unitaire hors frais (nombre),"total":total de la ligne (nombre),"barcode":"code EAN s'il est écrit, sinon vide"}],"fees":frais de transport ou de livraison facturés (nombre, 0 sinon),"total":total de la facture (nombre)}
+Les nombres sont écrits sans espace ni symbole (12500, pas « 12 500 F »). Si un champ est illisible, mets une chaîne vide ou 0. Ne mets pas les lignes de total, TVA ou remise dans "lines".`;
+  const txt = await askClaude(system, [{ role: 'user', content: [block, { type: 'text', text: 'Voici la facture du fournisseur.' }] }], 2500);
+  let out; try { out = JSON.parse(txt.replace(/^[^{]*/, '').replace(/[^}]*$/, '')); } catch (e) { throw httpErr(502, 'Facture illisible : essayez une photo plus nette, bien à plat et éclairée.'); }
+  const num = v => { const n = Number(String(v ?? '').replace(/[^\d.,-]/g, '').replace(/\s/g, '').replace(',', '.')); return Number.isFinite(n) ? n : 0; };
+  const cur = String(out.currency || '').toUpperCase().replace(/XOF|CFA|F CFA|FCFA/, 'FCFA').slice(0, 6);
+  res.json({ supplier: String(out.supplier || '').slice(0, 80), ref: String(out.ref || '').slice(0, 40), date: /^\d{4}-\d{2}-\d{2}$/.test(out.date || '') ? out.date : '', currency: cur,
+    lines: (Array.isArray(out.lines) ? out.lines : []).slice(0, 80).map(l => ({ name: String(l.name || '').slice(0, 120), qty: Math.max(0, num(l.qty)) || 1, unitPrice: Math.max(0, num(l.unitPrice) || (num(l.total) && num(l.qty) ? num(l.total) / num(l.qty) : 0)), barcode: String(l.barcode || '').replace(/\D/g, '').slice(0, 14) })).filter(l => l.name),
+    fees: Math.max(0, num(out.fees)), total: Math.max(0, num(out.total)) });
+}));
 app.use(express.json({ limit: '3mb' }));
 
 /* Protection CSRF : les requêtes d'écriture doivent venir de la boutique elle-même */
@@ -952,6 +971,7 @@ app.get('/api/admin/state', requireStaff, (req, res) => {
     costs: allDocs('costs'), stockMoves: allDocs('stock-moves').sort((a, b) => b.createdAt - a.createdAt).slice(0, 1000),
     ai: !!env.ANTHROPIC_API_KEY,
     drivers: allDocs('drivers').sort((a, b) => a.name.localeCompare(b.name)),
+    purchases: allDocs('purchases').sort((a, b) => b.createdAt - a.createdAt).slice(0, 500),
     campaigns: allDocs('campaigns').sort((a, b) => b.createdAt - a.createdAt).slice(0, 200), contactFlags: allDocs('contact-flags'),
     visits: allDocs('visits').map(v => ({ id: v.id, count: v.count || 0, count30: Object.entries(v.days || {}).filter(([k]) => k >= addDays(today(), -30)).reduce((t, [, n]) => t + n, 0) })),
     reviews: allDocs('reviews').sort((a, b) => b.createdAt - a.createdAt),
@@ -965,7 +985,7 @@ app.get('/api/admin/state', requireStaff, (req, res) => {
     settings: s, users: store.users.list(), providers: providers(), configured: CONFIGURED, me: req.user
   });
 });
-const ADMIN_COLS = new Set(['products', 'product-images', 'costs', 'stock-moves', 'campaigns', 'contact-flags', 'drivers', 'delivery-photos', 'reviews', 'review-images', 'bundles', 'promos', 'orders', 'settings', 'affiliates', 'aff-payouts', 'aff-lookup', 'clients', 'suppliers', 'fin-moves', 'fin-ledger', 'fin-config']);
+const ADMIN_COLS = new Set(['products', 'product-images', 'costs', 'stock-moves', 'campaigns', 'contact-flags', 'drivers', 'delivery-photos', 'purchases', 'reviews', 'review-images', 'bundles', 'promos', 'orders', 'settings', 'affiliates', 'aff-payouts', 'aff-lookup', 'clients', 'suppliers', 'fin-moves', 'fin-ledger', 'fin-config']);
 function adminTarget(req) {
   const { col, id } = req.params;
   if (!ADMIN_COLS.has(col) || !validId(id)) throw httpErr(400, 'Requête invalide.');

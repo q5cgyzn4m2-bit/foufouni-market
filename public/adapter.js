@@ -18,7 +18,7 @@
     try {
       if (me) {
         const s = await api('GET', '/api/admin/state');
-        S.products = s.products; S.bundles = s.bundles || []; S.promos = s.promos; S.affiliates = s.affiliates || []; S.affPayouts = s.affPayouts || []; S.visits = s.visits || []; S.reviews = s.reviews || []; S.campaigns = s.campaigns || []; S.drivers = s.drivers || []; S.contactFlags = Object.fromEntries((s.contactFlags || []).map(f => [f.id, f])); S.costs = Object.fromEntries((s.costs || []).map(c => [c.id, Number(c.cost) || 0])); S.stockMoves = s.stockMoves || [];
+        S.products = s.products; S.bundles = s.bundles || []; S.promos = s.promos; S.affiliates = s.affiliates || []; S.affPayouts = s.affPayouts || []; S.visits = s.visits || []; S.reviews = s.reviews || []; S.campaigns = s.campaigns || []; S.drivers = s.drivers || []; S.purchases = s.purchases || []; S.contactFlags = Object.fromEntries((s.contactFlags || []).map(f => [f.id, f])); S.costs = Object.fromEntries((s.costs || []).map(c => [c.id, Number(c.cost) || 0])); S.stockMoves = s.stockMoves || [];
         S.clients = (s.clients||[]).sort((a,b)=>a.name.localeCompare(b.name)); S.suppliers = (s.suppliers||[]).sort((a,b)=>a.name.localeCompare(b.name));
         S.moves = s.moves || []; S.ledger = s.ledger || []; S.finConfig = s.finConfig || {}; S.orders = s.orders; S.users = s.users;
         S.settings = mergeSettings(s.settings); providers = s.providers; configured = s.configured || {}; notif = s.notifications || {};
@@ -290,6 +290,7 @@
   let audLoading = false;
   window.loadAudienceCarts = () => { if (audLoading) return; audLoading = true; api('GET', '/api/admin/audience-carts').then(r => { S.audCarts = r.carts || []; schedule(); }).catch(() => { S.audCarts = []; schedule(); }).finally(() => { audLoading = false; }); };
   window.pushToContacts = d => api('POST', '/api/admin/push/contacts', { keys: d.recips.map(r => r.c.key), productId: d.p ? d.p.id : '', url: d.p ? landingLink(d.p, 'notification') + '&cmp=' + d.cid : shopUrl() + '?src=notification&cmp=' + d.cid });
+  window.readInvoice = file => api('POST', '/api/admin/ai/invoice', { file });
   window.orderToken = id => { const m = myOrders().find(x => x.id === id); return m ? m.t : ''; };
   window.lookupBarcode = code => api('GET', '/api/admin/lookup-barcode?code=' + encodeURIComponent(code));
   window.posQrOrder = (items, promo) => api('POST', '/api/admin/pos/qr-order', { items: items.map(l => l.b ? { bundle: l.b, qty: l.qty } : (l.v ? { id: l.id, qty: l.qty, v: l.v } : { id: l.id, qty: l.qty })), promoCode: promo ? promo.code : '' });

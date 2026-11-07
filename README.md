@@ -216,3 +216,11 @@ Sans photo propre, un lot affiche automatiquement un **montage des photos de ses
 ## Informations de la société (Gestion › Société)
 
 Nom commercial, sous-titre de l'en-tête, raison sociale, forme juridique, capital, RCCM, NIF, adresse, ville, pays, téléphones, WhatsApp, e-mail, horaires et message en bas des reçus. Elles s'affichent dans l'en-tête, le pied de page, les reçus et tickets de caisse, et sont connues de l'assistante. Un aperçu se met à jour pendant la saisie.
+
+
+## Factures fournisseur avec articles : entrée en stock
+
+- Fiche fournisseur › **📦 Facture avec articles** : n° de facture, date, échéance, devise et taux de change (factures en CNY, EUR, USD…), frais de transport ou de douane.
+- **✨ Lire la facture** (photo ou PDF, `/api/admin/ai/invoice`, nécessite `ANTHROPIC_API_KEY`) : l'assistante extrait les lignes (désignation, quantité, prix unitaire), le numéro, la date, la devise et les frais. Chaque ligne est reliée automatiquement à un article existant (par code-barres ou par nom), sinon elle crée un nouvel article.
+- **📷 Scanner un article** (douchette ou caméra) et **＋ Ajouter une ligne** pour la saisie manuelle.
+- À la validation : création des nouveaux articles (en vente si un prix de vente est indiqué), entrée en stock avec un mouvement « Facture … · fournisseur », prix d'achat mis à jour (coût moyen pondéré ou prix de la facture, frais répartis au prorata), facture ajoutée au solde dû du fournisseur, et historique des factures dans la fiche du fournisseur.
