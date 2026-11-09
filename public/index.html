@@ -1407,7 +1407,7 @@ async function openPayOrder(id, token){
   $('#overlay').innerHTML = `<div class="scrim" data-a="closeAll"><div class="modal" role="dialog" aria-modal="true" aria-label="Paiement"><div class="m-h"><h2>Paiement ${esc(o.number||'')}</h2><button class="x" data-a="closeAll" aria-label="Fermer">×</button></div>
     <div class="m-b"><div class="lcd" style="grid-template-columns:1fr;text-align:center;margin-bottom:14px"><div class="l2">${esc(S.settings.shopName.toUpperCase())}</div><div class="tot" style="text-align:center">${fmt(o.total)}</div></div>
     <div class="small" style="margin-bottom:12px">${(o.items||[]).map(i=>`${i.qty} × ${esc(i.name)}`).join('<br>')}</div>
-    ${paid ? '<p style="text-align:center;font-weight:800;color:var(--kola);font-size:18px">✓ Déjà payé, merci !</p>' : `<div class="pay-opts">${procs.map(([k])=>`<button class="pay-opt" data-a="payOrder" data-id="${esc(id)}" data-v="${k}" data-t="${esc(token)}"><span class="pay-logo" style="background:${PROCESSORS[k].color||'var(--indigo)'}">${esc(PROCESSORS[k].short||PROCESSORS[k].name.slice(0,2))}</span><span><b>${esc(PROCESSORS[k].name)}</b><br><span class="muted small">Confirmation sur votre téléphone</span></span></button>`).join('') || '<p class="muted">Aucun paiement mobile n’est activé : payez au comptoir.</p>'}</div>`}</div></div></div>`;
+    ${paid ? '<p style="text-align:center;font-weight:800;color:var(--kola);font-size:18px">✓ Déjà payé, merci !</p>' : `<div class="pay-opts">${procs.map(([k])=>`<button class="pay-opt" data-a="payOrder" data-id="${esc(id)}" data-v="${k}" data-t="${esc(token)}">${procLogo(k)}<span><b>${esc(PROCESSORS[k].name)}</b><br><span class="muted small">Confirmation sur votre téléphone</span></span></button>`).join('') || '<p class="muted">Aucun paiement mobile n’est activé : payez au comptoir.</p>'}</div>`}</div></div></div>`;
 }
 function viewLanding(){
   const p = S.products.find(x=>x.id===S.pid && x.active!==false); if(!p){ S.view='shop'; return viewShop(); }
@@ -1984,6 +1984,10 @@ function openCheckout(){
   CO = {step:1, delivery:'livraison', name:S.myName && S.myName!=='Mode démo'?S.myName:'', phone:'', address:'', city:S.settings.city, note:'', method:null};
   drawCheckout();
 }
+function procLogo(k, cls){ const P = PROCESSORS[k], lg = (S.settings.processors[k]||{}).logo;
+  return lg ? `<span class="${cls||'pay-logo'}" style="background:#fff;padding:3px;overflow:hidden"><img src="${esc(lg)}" alt="${esc(P.name)}" style="width:100%;height:100%;object-fit:contain"></span>` : `<span class="${cls||'pay-logo'}" style="background:${P.color}">${P.short}</span>`; }
+const logoFile = f => new Promise((ok,ko)=>{ if(!/image\/(png|jpeg|webp)/.test(f.type)) return ko(new Error('Choisissez une image PNG, JPEG ou WebP.'));
+  const r = new FileReader(); r.onload = ()=>{ const im = new Image(); im.onload = ()=>{ const k = Math.min(1, 240/Math.max(im.width, im.height)), c = document.createElement('canvas'); c.width = Math.round(im.width*k); c.height = Math.round(im.height*k); c.getContext('2d').drawImage(im,0,0,c.width,c.height); ok(c.toDataURL('image/png')); }; im.onerror = ko; im.src = r.result; }; r.onerror = ko; r.readAsDataURL(f); });
 function enabledProcs(){ return Object.entries(S.settings.processors).filter(([k,v])=>v.enabled && PROCESSORS[k]); }
 function drawCheckout(){
   const t = computeTotals(S.cart, S.appliedPromo, CO.delivery);
@@ -2008,7 +2012,7 @@ function drawCheckout(){
       const sub = k => man[k] ? 'Transfert vers notre numéro, puis référence' : PROCESSORS[k].kind==='momo' ? 'Validation sur votre téléphone' : PROCESSORS[k].kind==='card' ? 'Paiement sécurisé' : 'Vous payez à la réception';
       const sel = CO.method && PROCESSORS[CO.method] ? CO.method : '', pc = sel ? PROCESSORS[sel].color : '';
       return `<p style="margin:-6px 0 12px;font-weight:700">${sel?'✓ '+esc(PROCESSORS[sel].name)+' sélectionné':'👇 Choisissez comment vous voulez payer'}</p>
-      <div class="pay-grid ${sel?'':'pay-pick'}" id="pay-grid">${ps.map(([k])=>`<button class="pay-card" data-a="coMethod" data-v="${k}" aria-pressed="${CO.method===k}" style="--pc:${PROCESSORS[k].color}"><span class="lg">${PROCESSORS[k].short}</span><b>${esc(PROCESSORS[k].name)}</b><span class="sub">${sub(k)}</span>${k===firstMomo?'<span class="badge">⚡ Rapide</span>':''}<span class="tick" aria-hidden="true">✓</span></button>`).join('')}</div>
+      <div class="pay-grid ${sel?'':'pay-pick'}" id="pay-grid">${ps.map(([k])=>`<button class="pay-card" data-a="coMethod" data-v="${k}" aria-pressed="${CO.method===k}" style="--pc:${PROCESSORS[k].color}">${(S.settings.processors[k]||{}).logo?`<span class="lg" style="background:#fff;padding:5px;overflow:hidden"><img src="${esc(S.settings.processors[k].logo)}" alt="" style="width:100%;height:100%;object-fit:contain"></span>`:`<span class="lg">${PROCESSORS[k].short}</span>`}<b>${esc(PROCESSORS[k].name)}</b><span class="sub">${sub(k)}</span>${k===firstMomo?'<span class="badge">⚡ Rapide</span>':''}<span class="tick" aria-hidden="true">✓</span></button>`).join('')}</div>
       ${sel && PROCESSORS[sel].kind==='momo' ? `<div class="pay-howto" style="--pc:${pc}">${man[sel] ? `<b>Comment payer par ${esc(PROCESSORS[sel].name)}</b><ol class="small" style="padding-left:18px;margin:8px 0">
           <li>Depuis votre application ou le menu ${esc(PROCESSORS[sel].name)}, envoyez <b>${fmt(t.total)}</b> au numéro <b style="font-size:16px;white-space:nowrap">${esc(man[sel])}</b> <button class="btn ghost sm" data-a="copyPayNum" data-v="${esc(man[sel])}" style="padding:2px 10px">Copier</button></li>
           <li>Notez la <b>référence (ID) de la transaction</b> reçue par SMS.</li><li>Collez-la ci-dessous : nous validons votre commande dès réception.</li></ol>
@@ -3204,8 +3208,10 @@ function panePayments(){
   const st = S.settings;
   return `<h2 style="font-size:24px;margin-bottom:16px">Paiements et boutique</h2>
   <div class="panel"><h3>Moyens de paiement</h3>
-    ${Object.entries(PROCESSORS).map(([k,P])=>{ const v = st.processors[k]||{}; return `<div class="proc"><span class="pay-logo" style="background:${P.color}">${P.short}</span>
+    <p class="muted small" style="margin:0 0 10px">Logos : ajoutez les logos officiels fournis par chaque opérateur (kit marchand) pour qu’ils s’affichent au moment du paiement. Format PNG de préférence, fond transparent.</p>
+    ${Object.entries(PROCESSORS).map(([k,P])=>{ const v = st.processors[k]||{}; return `<div class="proc">${procLogo(k)}
       <div><b>${P.name}</b>${P.field?`<div style="margin-top:6px"><label class="sr" for="acc-${k}">${P.field}</label><input class="input" id="acc-${k}" data-proc="${k}" placeholder="${P.field}" value="${esc(v.account||'')}"></div>`:'<div class="muted small">Le livreur ou le caissier encaisse à la remise.</div>'}</div>
+      ${P.kind!=='cod'?`<div style="display:flex;gap:6px;flex-direction:column;align-items:flex-end"><label class="btn ghost sm" style="white-space:nowrap">${v.logo?'Changer le logo':'Ajouter le logo officiel'}<input type="file" accept="image/png,image/jpeg,image/webp" class="sr" data-proclogo="${k}"></label>${v.logo?`<button class="btn ghost sm" data-a="procLogoDel" data-v="${k}">Retirer</button>`:''}</div>`:''}
       <label class="switch"><input type="checkbox" data-proc-on="${k}" ${v.enabled?'checked':''} aria-label="Activer ${P.name}"><span></span></label></div>`; }).join('')}
     <label class="row" style="align-items:center;gap:10px;margin-top:14px"><span class="switch" style="flex:0 0 42px"><input type="checkbox" id="st-test" ${st.testMode?'checked':''}><span></span></span><span><b>Mode test</b> <span class="muted small">— les paiements sont simulés, rien n’est débité</span></span></label>
     <div class="test-note">Les clés secrètes Wave et Orange Money sont stockées dans le fichier .env du serveur, jamais ici. Les champs ci-dessus servent seulement de mémo interne.</div></div>
@@ -3331,6 +3337,7 @@ document.addEventListener('change', async e=>{
   if(a==='togglePromo'){ const p=S.promos.find(x=>x.code===t.dataset.id); try{ await patch('promos',p.code,{active:t.checked}); await patch('promo-lookup',await hashCode(p.code),{active:t.checked}); }catch(err){ dbErr(err); } }
   if(a==='selPromo'){ t.checked?S.selPromos.add(t.dataset.id):S.selPromos.delete(t.dataset.id); schedule(); }
   if(a==='selAll'){ S.selPromos = t.checked ? new Set(S.promos.map(p=>p.code)) : new Set(); schedule(); }
+  if(t.dataset.proclogo){ const k = t.dataset.proclogo, f = t.files[0]; if(f){ logoFile(f).then(async data=>{ const s2 = structuredClone(S.settings); s2.processors[k] = {...(s2.processors[k]||{}), logo:data}; await put('settings','main',s2); toast('Logo '+PROCESSORS[k].name+' enregistré'); }).catch(err=>{ dbErr(err); toast(err.message||'Image illisible'); }); } }
   if(t.dataset.audsel || t.id==='cp-prod' || t.id==='cp-code'){ S.audCid = null; }
   if(t.dataset.audsel){ S.audForm = {prod:$('#cp-prod')?.value||'', code:$('#cp-code')?.value||'', name:$('#cp-name')?.value||''}; S.audSel[t.dataset.audsel] = t.checked; S.audTpl = S.audTpl || {}; document.querySelectorAll('[data-cptpl]').forEach(x=>S.audTpl[x.dataset.cptpl]=x.value); schedule(); }
   if(t.dataset.top==='sort'){ S.topSort=t.value; schedule(); }
@@ -3449,6 +3456,7 @@ document.addEventListener('click', async e=>{
     case 'removePromo': if(el.dataset.t==='pos') S.posPromo=null; else S.appliedPromo=null; schedule(); break;
     case 'checkout': if(!enabledProcs().length){ toast('Aucun moyen de paiement actif pour le moment.'); break; } openCheckout(); break;
     case 'coDelivery': readCO(); CO.delivery=el.dataset.v; drawCheckout(); break;
+    case 'procLogoDel': { const s2 = structuredClone(S.settings); if(s2.processors[el.dataset.v]) delete s2.processors[el.dataset.v].logo; try{ await put('settings','main',s2); toast('Logo retiré'); }catch(err){ dbErr(err); } break; }
     case 'copyPayNum': try{ await navigator.clipboard.writeText(el.dataset.v.replace(/\s/g,'')); toast('Numéro copié'); }catch(err){ toast(el.dataset.v); } break;
     case 'install': installGuide(); break;
     case 'instTab': installGuide(el.dataset.v); break;

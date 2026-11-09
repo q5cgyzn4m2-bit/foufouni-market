@@ -134,7 +134,7 @@ const manualPay = () => { const s = settings(), out = {}; for (const k of ['oran
 const providers = () => { const s = settings(); return [...Object.keys(CONFIGURED).filter(k => CONFIGURED[k] && s.processors?.[k]?.enabled !== false), ...Object.keys(manualPay())]; };
 function publicSettings() {
   const s = settings();
-  const procs = {}; for (const [k, v] of Object.entries(s.processors || {})) procs[k] = { enabled: !!v.enabled }; // jamais d'identifiants côté public
+  const procs = {}; for (const [k, v] of Object.entries(s.processors || {})) procs[k] = { enabled: !!v.enabled, ...(/^data:image\/(png|jpeg|webp);base64,/.test(v.logo || '') && v.logo.length < 250000 ? { logo: v.logo } : {}) }; // jamais d'identifiants côté public, seulement le logo
   return { shopName: s.shopName, tagline: s.tagline, intro: s.intro, currency: s.currency, deliveryFee: s.deliveryFee, freeFrom: s.freeFrom, city: s.city, phone: s.phone, processors: procs,
     manualPay: manualPay(), shipCountries: Array.isArray(s.shipCountries) ? s.shipCountries : ['ML'],
     headerSub: s.headerSub || '', legalName: s.legalName || '', legalForm: s.legalForm || '', capital: s.capital || '', rccm: s.rccm || '', nif: s.nif || '', address: s.address || '', country: s.country || '', whatsapp: s.whatsapp || '', phone2: s.phone2 || '', email: s.email || '', hours: s.hours || '', receiptNote: s.receiptNote || '',
