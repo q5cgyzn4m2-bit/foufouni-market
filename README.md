@@ -224,3 +224,10 @@ Nom commercial, sous-titre de l'en-tête, raison sociale, forme juridique, capit
 - **✨ Lire la facture** (photo ou PDF, `/api/admin/ai/invoice`, nécessite `ANTHROPIC_API_KEY`) : l'assistante extrait les lignes (désignation, quantité, prix unitaire), le numéro, la date, la devise et les frais. Chaque ligne est reliée automatiquement à un article existant (par code-barres ou par nom), sinon elle crée un nouvel article.
 - **📷 Scanner un article** (douchette ou caméra) et **＋ Ajouter une ligne** pour la saisie manuelle.
 - À la validation : création des nouveaux articles (en vente si un prix de vente est indiqué), entrée en stock avec un mouvement « Facture … · fournisseur », prix d'achat mis à jour (coût moyen pondéré ou prix de la facture, frais répartis au prorata), facture ajoutée au solde dû du fournisseur, et historique des factures dans la fiche du fournisseur.
+
+
+## Afrique de l'Ouest, installation de l'application, paiement dynamique
+
+- **Drapeaux** des pays livrés (16 pays d'Afrique de l'Ouest par défaut, à cocher dans Gestion › Société › Pays de livraison), en bande défilante sur l'accueil. Le client choisit son pays à la commande ; hors Mali, un message indique que le délai et les frais d'envoi sont confirmés par WhatsApp.
+- **Guide d'installation** (bandeau sur l'accueil, bouton en pied de page) : étapes illustrées pour iPhone (Safari › Partager › Sur l'écran d'accueil) et Android (Chrome › ⋮ › Installer l'application), avec bouton « Installer maintenant » quand Android le permet.
+- **Paiement** : cartes animées Orange Money, Wave, Moov Money et paiement à la livraison ; impossible de continuer sans choisir. Sans clé API, un opérateur activé avec un **numéro marchand** (Gestion › Paiements) fonctionne en **transfert manuel** : le client envoie le montant au numéro affiché, saisit la référence de la transaction, et la commande arrive « à vérifier » avec une notification. Passez-la en « Payée » après vérification.

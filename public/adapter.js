@@ -308,12 +308,12 @@
     if (CO.step === 2 && CO.delivery === 'livraison' && !CO.address) { err.textContent = 'Indiquez votre adresse ou votre quartier.'; return; }
     if (CO.step === 1) { contact = { name: CO.name, phone: CO.phone }; syncCart(true); }
     if (CO.step < 3) { CO.step++; drawCheckout(); return; }
-    if (!CO.method) { err.textContent = 'Choisissez un moyen de paiement.'; return; }
+    if (!payCheck()) return;
     const btn = document.querySelector('[data-a="coNext"]'); btn.disabled = true; btn.textContent = 'Préparation du paiement…';
     try {
       const r = await api('POST', '/api/orders', {
         items: S.cart.map(l => l.b ? { bundle: l.b, qty: l.qty } : (l.v ? { id: l.id, qty: l.qty, v: l.v } : { id: l.id, qty: l.qty })), promoCode: S.appliedPromo ? S.appliedPromo.code : '',
-        customer: { name: CO.name, phone: CO.phone, address: CO.address, city: CO.city, note: CO.note },
+        customer: { name: CO.name, phone: CO.phone, address: CO.address, city: CO.city, note: CO.note, country: CO.country || 'ML' }, payRef: CO.payRef || '',
         delivery: CO.delivery, method: CO.method, cartId, ref: refCode(), source: srcCode(), campaign: cmpCode()
       });
       addMine(r.id, r.token); syncAlerts();

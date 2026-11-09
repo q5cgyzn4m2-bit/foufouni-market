@@ -326,6 +326,37 @@ textarea.input{min-height:84px; resize:vertical}
 .lab .n{font-size:8pt; font-weight:700; line-height:1.1; grid-column:1/-1; white-space:nowrap; overflow:hidden; text-overflow:ellipsis}.lab .pr{font-size:11pt; font-weight:800; line-height:1}.lab .sh{font-size:5.5pt; color:#444; grid-column:1/-1; white-space:nowrap; overflow:hidden; text-overflow:ellipsis}
 .lab .bc svg{width:100%; height:auto; display:block}
 @media (prefers-reduced-motion:reduce){ .scan-box .laser{animation:none} }
+/* Drapeaux, installation, paiement dynamique */
+.wa-band{margin:0 0 40px; padding:18px 0 14px; border-radius:20px; background:var(--surface); border:1px solid var(--line); overflow:hidden; text-align:center}
+.wa-band h3{font-size:20px; margin:0 14px 12px}.wa-band h3 small{display:block; font:500 13px var(--f-b); color:var(--muted); margin-top:4px}
+.flag-track{display:flex; gap:14px; width:max-content; animation:flagscroll 40s linear infinite; padding:4px 0}
+.wa-band:hover .flag-track{animation-play-state:paused}
+@keyframes flagscroll{from{transform:translateX(0)}to{transform:translateX(-50%)}}
+.flag{display:flex; flex-direction:column; align-items:center; gap:5px; font:700 11px var(--f-b); color:var(--muted); min-width:58px}
+.flag svg{width:48px; height:32px; border-radius:5px; box-shadow:0 2px 8px rgba(0,0,0,.35); display:block}
+.inst-bar{display:flex; align-items:center; gap:12px; padding:12px 16px; margin:0 0 18px; border-radius:16px; background:linear-gradient(135deg,var(--indigo-soft),transparent); border:1px solid color-mix(in srgb,var(--indigo) 40%,var(--line))}
+.inst-steps{counter-reset:st; display:grid; gap:12px; margin:14px 0 0; padding:0; list-style:none}
+.inst-steps li{counter-increment:st; display:grid; grid-template-columns:40px 1fr auto; gap:12px; align-items:center; padding:12px 14px; border-radius:14px; background:var(--surface); border:1px solid var(--line)}
+.inst-steps li::before{content:counter(st); width:34px; height:34px; border-radius:50%; background:var(--indigo); color:var(--on-indigo); font:800 16px var(--f-b); display:grid; place-items:center}
+.inst-steps .ic{width:44px; height:44px; border-radius:12px; background:var(--bg); border:1px solid var(--line); display:grid; place-items:center; font-size:22px}
+.pay-grid{display:grid; grid-template-columns:repeat(auto-fit,minmax(150px,1fr)); gap:12px}
+.pay-card{position:relative; border:2px solid var(--line); border-radius:18px; padding:16px 14px 14px; background:var(--surface); color:var(--ink); text-align:left; cursor:pointer; overflow:hidden; transition:transform .18s, border-color .18s, box-shadow .18s; display:flex; flex-direction:column; gap:8px; min-height:132px}
+.pay-card::after{content:''; position:absolute; inset:0; background:linear-gradient(110deg,transparent 30%,rgba(255,255,255,.18) 48%,transparent 66%); transform:translateX(-120%); animation:payshine 3.2s ease-in-out infinite}
+.pay-card:nth-child(2)::after{animation-delay:.5s}.pay-card:nth-child(3)::after{animation-delay:1s}.pay-card:nth-child(4)::after{animation-delay:1.5s}
+@keyframes payshine{0%,55%{transform:translateX(-120%)}85%,100%{transform:translateX(120%)}}
+.pay-card:hover{transform:translateY(-3px)}
+.pay-card[aria-pressed="true"]{border-color:var(--pc); box-shadow:0 0 0 4px color-mix(in srgb,var(--pc) 28%,transparent), 0 14px 30px rgba(0,0,0,.35); transform:translateY(-3px) scale(1.02)}
+.pay-card .lg{width:48px; height:48px; border-radius:14px; background:var(--pc); color:#fff; display:grid; place-items:center; font:900 17px var(--f-b); letter-spacing:-.02em; box-shadow:0 6px 16px color-mix(in srgb,var(--pc) 45%,transparent)}
+.pay-card b{font-size:16px}.pay-card .sub{font-size:12px; color:var(--muted); line-height:1.35}
+.pay-card .tick{position:absolute; top:10px; right:10px; width:26px; height:26px; border-radius:50%; background:var(--pc); color:#fff; display:none; place-items:center; font-weight:900}
+.pay-card[aria-pressed="true"] .tick{display:grid}
+.pay-card .badge{position:absolute; top:10px; right:10px; font:800 10px var(--f-b); letter-spacing:.06em; text-transform:uppercase; padding:3px 8px; border-radius:999px; background:var(--indigo); color:var(--on-indigo)}
+.pay-card[aria-pressed="true"] .badge{display:none}
+.pay-pick .pay-card:not([aria-pressed="true"]){animation:paypulse 2.2s ease-in-out infinite}
+@keyframes paypulse{0%,100%{box-shadow:0 0 0 0 color-mix(in srgb,var(--pc) 0%,transparent)}50%{box-shadow:0 0 0 6px color-mix(in srgb,var(--pc) 22%,transparent)}}
+.pay-shake{animation:payshake .45s}@keyframes payshake{20%,60%{transform:translateX(-7px)}40%,80%{transform:translateX(7px)}}
+.pay-howto{margin-top:12px; padding:14px; border-radius:14px; border:1px dashed var(--pc,var(--line)); background:color-mix(in srgb,var(--pc,#888) 8%,transparent)}
+@media (prefers-reduced-motion:reduce){ .flag-track,.pay-card::after,.pay-pick .pay-card{animation:none} }
 .empty{border:2px dashed var(--line); border-radius:var(--r-m); padding:48px 20px; text-align:center; color:var(--muted)}
 .empty h3{color:var(--ink); margin-bottom:8px; font-size:20px}
 
@@ -491,6 +522,7 @@ const DEFAULT_SETTINGS = {
   intro:'Commandez en ligne, payez par mobile money ou à la livraison, et recevez vos articles chez vous.',
   currency:'FCFA', deliveryFee:1500, freeFrom:50000, city:'Bamako', phone:'',
   affDefaultPct:5, affDiscountPct:5, affDays:30, siteUrl:'',
+  shipCountries:['ML','SN','CI','BF','GN','NE','BJ','TG','GH','NG','MR','GM','GW','SL','LR','CV'],
   headerSub:'', legalName:'', legalForm:'', capital:'', rccm:'', nif:'', address:'', country:'Mali', whatsapp:'', phone2:'', email:'', hours:'', receiptNote:'Merci pour votre confiance !',
   testMode:true,
   processors:{
@@ -499,8 +531,8 @@ const DEFAULT_SETTINGS = {
   }
 };
 const PROCESSORS = {
-  orange:{name:'Orange Money', kind:'momo', color:'#F16E00', short:'OM', field:'Numéro marchand'},
-  moov:{name:'Moov Money', kind:'momo', color:'#0057A8', short:'MM', field:'Numéro marchand'},
+  orange:{name:'Orange Money', kind:'momo', color:'#FF7900', short:'OM', field:'Numéro marchand'},
+  moov:{name:'Moov Money', kind:'momo', color:'#0066B3', short:'Moov', field:'Numéro marchand'},
   wave:{name:'Wave', kind:'momo', color:'#1DC8F2', short:'W', field:'Identifiant marchand'},
   card:{name:'Carte bancaire (Stripe)', kind:'card', color:'#635BFF', short:'CB', field:'Clé publique (pk_…)'},
   paypal:{name:'PayPal', kind:'card', color:'#003087', short:'PP', field:'Client ID'},
@@ -822,7 +854,8 @@ function viewShop(){
   const empty = S.products.length===0
     ? `<div class="empty"><h3>La boutique est vide</h3><p>${S.isAdmin?'Ajoutez votre premier produit pour ouvrir la vente.':'Les produits arrivent bientôt.'}</p>${S.isAdmin?'<button class="btn primary" data-a="newProduct">Ajouter un produit</button>':''}</div>`
     : `<div class="empty"><h3>Aucun produit trouvé</h3><p>Essayez un autre mot ou une autre catégorie.</p><button class="btn ghost" data-a="clearSearch">Afficher tout le catalogue</button></div>`;
-  return `${ribbon}${hero}${saleBlock}${usedBlock}${S.cat==='Tout'?bundleBlock:''}
+  const instBar = !isStandalone() && !S.instHide && !S.isAdmin ? `<div class="inst-bar"><span style="font-size:26px">📲</span><div style="flex:1"><b>Installez l’application ${esc(S.settings.shopName)}</b><div class="muted small">Plus rapide, en plein écran, avec les alertes de commande. Gratuit.</div></div><button class="btn primary sm" data-a="install" style="border-radius:999px;white-space:nowrap">Comment faire ?</button><button class="btn ghost sm" data-a="instHide" aria-label="Masquer" style="flex:0">×</button></div>` : '';
+  return `${instBar}${ribbon}${hero}${S.cat==='Tout'&&!S.q?flagsBand():''}${saleBlock}${usedBlock}${S.cat==='Tout'?bundleBlock:''}
     <div class="sec-h" id="catalogue"><h2>${S.q?`Résultats pour « ${esc(S.q)} »`:S.cat==='Tout'?'La collection':esc(S.cat)}</h2><span class="muted small">${S.cat==='Lots'?bundles.length+' lot'+(bundles.length>1?'s':''):list.length+' produit'+(list.length>1?'s':'')}</span></div>
     <div class="cats" role="group" aria-label="Catégories">${cats.map(c=>`<button aria-pressed="${S.cat===c}" data-a="cat" data-v="${esc(c)}">${esc(c)}</button>`).join('')}</div>
     ${S.cat==='Lots'?'':facetBar()}
@@ -836,7 +869,7 @@ function viewShop(){
       </article>`).join('')}</div>`:empty}
     <footer class="shop-foot"><div><span class="fb">${esc(st.shopName)}</span><p style="margin-top:10px">${esc(st.intro)}</p></div>
       <div><h4>Paiement sécurisé</h4><p>Orange Money, Wave ou en espèces à la réception.</p></div>
-      <div><h4>Livraison</h4><p>À ${esc(st.city)}, offerte dès ${fmt(st.freeFrom)} d’achat. Retrait en boutique possible.</p></div>
+      <div><h4>Livraison</h4><p>À ${esc(st.city)}, offerte dès ${fmt(st.freeFrom)} d’achat, et partout en Afrique de l’Ouest. Retrait en boutique possible.</p><button class="btn ghost sm" data-a="install" style="margin-top:10px">📲 Installer l’application</button></div>
       <div><h4>Nous contacter</h4><p>${st.phone?`📞 <a href="tel:${esc(st.phone.replace(/\s/g,''))}" style="color:var(--indigo)">${esc(st.phone)}</a>${st.phone2?` · <a href="tel:${esc(st.phone2.replace(/\s/g,''))}" style="color:var(--indigo)">${esc(st.phone2)}</a>`:''}<br>`:''}${st.whatsapp?`💬 <a href="https://wa.me/${waNumber(st.whatsapp)}" target="_blank" rel="noopener" style="color:var(--indigo)">WhatsApp ${esc(st.whatsapp)}</a><br>`:''}${st.email?`✉️ <a href="mailto:${esc(st.email)}" style="color:var(--indigo)">${esc(st.email)}</a><br>`:''}${st.address?`📍 ${esc(st.address)}${st.city?', '+esc(st.city):''}<br>`:''}${st.hours?`🕘 ${esc(st.hours)}`:''}${!st.phone&&!st.whatsapp&&!st.email&&!st.address?'Notre équipe vous répond à la livraison et en boutique.':''}</p></div></footer>
     <p class="foot-note">© ${new Date().getFullYear()} ${esc(st.legalName||st.shopName)}${st.legalForm?' · '+esc(st.legalForm):''}${st.capital?' au capital de '+esc(st.capital):''}${st.rccm?' · RCCM '+esc(st.rccm):''}${st.nif?' · NIF '+esc(st.nif):''}${st.address?' · '+esc(st.address)+(st.city?', '+esc(st.city):''):''}${st.country?' · '+esc(st.country):''}</p>`;
 }
@@ -1258,6 +1291,64 @@ function driversDialog(){
     try{ await put('drivers', newId('d'), {name, phone, active:true, token:(newId('t')+rnd(16)).toLowerCase(), createdAt:Date.now()}); toast('Livreur ajouté'); setTimeout(driversDialog, 300); }catch(e){ dbErr(e); } };
 }
 
+/* --- Afrique de l'Ouest : drapeaux --- */
+const WA = {ML:'Mali',SN:'Sénégal',CI:'Côte d’Ivoire',BF:'Burkina Faso',GN:'Guinée',NE:'Niger',BJ:'Bénin',TG:'Togo',GH:'Ghana',NG:'Nigeria',MR:'Mauritanie',GM:'Gambie',GW:'Guinée-Bissau',SL:'Sierra Leone',LR:'Liberia',CV:'Cap-Vert'};
+const starP = (cx,cy,r,f) => { let d=''; for(let i=0;i<10;i++){ const a = -Math.PI/2 + i*Math.PI/5, rr = i%2 ? r*0.4 : r; d += (i?'L':'M')+(cx+rr*Math.cos(a)).toFixed(2)+' '+(cy+rr*Math.sin(a)).toFixed(2); } return `<path d="${d}Z" fill="${f}"/>`; };
+const v3 = (a,b,c) => `<rect width="10" height="20" fill="${a}"/><rect x="10" width="10" height="20" fill="${b}"/><rect x="20" width="10" height="20" fill="${c}"/>`;
+const h3 = (a,b,c) => `<rect width="30" height="6.67" fill="${a}"/><rect y="6.67" width="30" height="6.67" fill="${b}"/><rect y="13.33" width="30" height="6.67" fill="${c}"/>`;
+function flagSVG(c){
+  const F = {
+    ML: v3('#14B53A','#FCD116','#CE1126'),
+    SN: v3('#00853F','#FDEF42','#E31B23') + starP(15,10,3.4,'#00853F'),
+    CI: v3('#F77F00','#FFFFFF','#009E60'),
+    BF: `<rect width="30" height="10" fill="#EF2B2D"/><rect y="10" width="30" height="10" fill="#009E49"/>` + starP(15,10,3.2,'#FCD116'),
+    GN: v3('#CE1126','#FCD116','#009460'),
+    NE: h3('#E05206','#FFFFFF','#0DB02B') + '<circle cx="15" cy="10" r="2.2" fill="#E05206"/>',
+    BJ: `<rect width="30" height="20" fill="#FCD116"/><rect y="10" width="30" height="10" fill="#E8112D"/><rect width="12" height="20" fill="#008751"/>`,
+    TG: [0,1,2,3,4].map(i=>`<rect y="${i*4}" width="30" height="4" fill="${i%2?'#FFCE00':'#006A4E'}"/>`).join('') + '<rect width="12" height="12" fill="#D21034"/>' + starP(6,6,3.4,'#FFFFFF'),
+    GH: h3('#CE1126','#FCD116','#006B3F') + starP(15,10,3,'#000000'),
+    NG: v3('#008751','#FFFFFF','#008751'),
+    MR: '<rect width="30" height="20" fill="#00A95C"/><rect width="30" height="3" fill="#D01C1F"/><rect y="17" width="30" height="3" fill="#D01C1F"/><path d="M9.5 8.5 A5.5 5.5 0 0 0 20.5 8.5 A6.5 6.5 0 0 1 9.5 8.5Z" fill="#FFD700"/>' + starP(15,7,1.8,'#FFD700'),
+    GM: `<rect width="30" height="7" fill="#CE1126"/><rect y="7" width="30" height="6" fill="#FFFFFF"/><rect y="8" width="30" height="4" fill="#0C1C8C"/><rect y="13" width="30" height="7" fill="#3A7728"/>`,
+    GW: `<rect width="30" height="10" fill="#FCD116"/><rect y="10" width="30" height="10" fill="#009E49"/><rect width="11" height="20" fill="#CE1126"/>` + starP(5.5,10,3,'#000000'),
+    SL: h3('#1EB53A','#FFFFFF','#0072C6'),
+    LR: Array.from({length:11},(_,i)=>`<rect y="${(i*20/11).toFixed(2)}" width="30" height="${(20/11+0.05).toFixed(2)}" fill="${i%2?'#FFFFFF':'#BF0A30'}"/>`).join('') + '<rect width="10.9" height="10.9" fill="#002868"/>' + starP(5.45,5.45,3.2,'#FFFFFF'),
+    CV: '<rect width="30" height="20" fill="#003893"/><rect y="10.6" width="30" height="1.2" fill="#FFFFFF"/><rect y="11.8" width="30" height="1.2" fill="#CF2027"/><rect y="13" width="30" height="1.2" fill="#FFFFFF"/>' + Array.from({length:10},(_,i)=>{ const a = i*Math.PI/5; return starP(11+4.6*Math.cos(a), 12.4+4.6*Math.sin(a), 0.9, '#F7D116'); }).join('')
+  };
+  return `<svg viewBox="0 0 30 20" xmlns="http://www.w3.org/2000/svg" role="img" aria-label="Drapeau ${esc(WA[c]||c)}">${F[c]||''}</svg>`;
+}
+function flagsBand(){
+  const list = (S.settings.shipCountries||[]).filter(c=>WA[c]); if(!list.length) return '';
+  const one = list.map(c=>`<div class="flag" title="${esc(WA[c])}">${flagSVG(c)}<span>${esc(WA[c])}</span></div>`).join('');
+  return `<section class="wa-band" aria-label="Pays de livraison"><h3>🚚 Nous livrons partout en Afrique de l’Ouest<small>${list.length} pays desservis · délais et frais confirmés à la commande</small></h3><div class="flag-track">${one}${one}</div></section>`;
+}
+/* --- Installation de l'application (PWA) --- */
+let installEvt = null;
+window.addEventListener('beforeinstallprompt', e=>{ e.preventDefault(); installEvt = e; schedule(); });
+const isStandalone = () => (window.matchMedia && matchMedia('(display-mode: standalone)').matches) || navigator.standalone === true;
+const devOS = () => /iPad|iPhone|iPod/.test(navigator.userAgent) || (navigator.platform==='MacIntel' && navigator.maxTouchPoints>1) ? 'ios' : /Android/i.test(navigator.userAgent) ? 'android' : 'other';
+const shareIco = '<svg viewBox="0 0 24 24" width="24" height="24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 3v12"/><path d="M8 7l4-4 4 4"/><path d="M5 12v7a2 2 0 0 0 2 2h10a2 2 0 0 0 2-2v-7"/></svg>';
+function installGuide(tab){
+  tab = tab || (devOS()==='other' ? 'android' : devOS());
+  const st = S.settings, steps = tab==='ios'
+    ? [['Ouvrez la boutique dans <b>Safari</b>','🧭','Sur iPhone, l’installation se fait depuis Safari (ou Chrome à partir d’iOS 16.4).'],
+       ['Touchez le bouton <b>Partager</b>', shareIco, 'Le carré avec une flèche vers le haut, en bas de l’écran (en haut sur iPad).'],
+       ['Faites défiler et choisissez <b>« Sur l’écran d’accueil »</b>','➕','Si vous ne le voyez pas, touchez « Modifier les actions » en bas de la liste.'],
+       ['Touchez <b>« Ajouter »</b> en haut à droite','✅','L’icône foûfoûni apparaît sur votre écran d’accueil.'],
+       ['Ouvrez l’application depuis l’icône','📲','Elle s’ouvre en plein écran, comme une vraie application, et vous pouvez activer les alertes.']]
+    : [['Ouvrez la boutique dans <b>Chrome</b>','🌐','Ou dans le navigateur Samsung Internet.'],
+       ['Touchez le menu <b>⋮</b> en haut à droite','⋮','Les trois petits points.'],
+       ['Choisissez <b>« Installer l’application »</b>','📥','Ou « Ajouter à l’écran d’accueil », selon votre téléphone.'],
+       ['Confirmez avec <b>« Installer »</b>','✅','L’icône foûfoûni s’ajoute à vos applications.'],
+       ['Ouvrez l’application depuis l’icône','📲','Plein écran, plus rapide, et les alertes de commande et de promo.']];
+  $('#overlay').innerHTML = `<div class="scrim" data-a="closeAll"><div class="modal" role="dialog" aria-modal="true" aria-label="Installer l’application"><div class="m-h"><h2>📲 Installer ${esc(st.shopName)}</h2><button class="x" data-a="closeAll" aria-label="Fermer">×</button></div>
+    <div class="m-b">${isStandalone()?'<p style="margin-top:0;color:var(--kola);font-weight:700">✓ L’application est déjà installée sur cet appareil.</p>':''}
+    <p class="muted" style="margin-top:0">Gratuit, sans passer par l’App Store ou le Play Store, et ça ne prend presque pas de place.</p>
+    <div class="cats" role="tablist" aria-label="Type de téléphone"><button role="tab" aria-pressed="${tab==='ios'}" data-a="instTab" data-v="ios"> iPhone / iPad</button><button role="tab" aria-pressed="${tab==='android'}" data-a="instTab" data-v="android">🤖 Android</button></div>
+    ${tab==='android'&&installEvt?'<button class="btn primary block" data-a="instNow" style="margin:10px 0 4px;font-size:16px;padding:15px">⬇️ Installer maintenant (1 toucher)</button><p class="muted small" style="text-align:center;margin:0 0 6px">Ou suivez les étapes ci-dessous :</p>':''}
+    <ol class="inst-steps">${steps.map(([t,ic,d])=>`<li><div><b style="font-weight:600">${t}</b><div class="muted small" style="margin-top:3px">${d}</div></div><span class="ic" aria-hidden="true">${ic}</span></li>`).join('')}</ol></div></div></div>`;
+}
+
 /* --- Partage et visuels --- */
 const productLink = p => shopUrl() + '?p=' + encodeURIComponent(p.id);
 const landingLink = (p, src) => shopUrl() + '?lp=' + encodeURIComponent(p.id) + (src ? '&src='+src : '');
@@ -1312,7 +1403,7 @@ async function openPayOrder(id, token){
   try{ history.replaceState(null,'',location.pathname); }catch(e){}
   if(!o) return toast('Paiement introuvable : demandez un nouveau QR au vendeur.');
   const paid = o.status==='payee' || /réussi|payé/i.test(o.payment&&o.payment.status||'');
-  const procs = enabledProcs().filter(([k])=>k!=='cod');
+  const procs = enabledProcs().filter(([k])=>k!=='cod' && !(S.settings.manualPay||{})[k]);
   $('#overlay').innerHTML = `<div class="scrim" data-a="closeAll"><div class="modal" role="dialog" aria-modal="true" aria-label="Paiement"><div class="m-h"><h2>Paiement ${esc(o.number||'')}</h2><button class="x" data-a="closeAll" aria-label="Fermer">×</button></div>
     <div class="m-b"><div class="lcd" style="grid-template-columns:1fr;text-align:center;margin-bottom:14px"><div class="l2">${esc(S.settings.shopName.toUpperCase())}</div><div class="tot" style="text-align:center">${fmt(o.total)}</div></div>
     <div class="small" style="margin-bottom:12px">${(o.items||[]).map(i=>`${i.qty} × ${esc(i.name)}`).join('<br>')}</div>
@@ -1887,6 +1978,8 @@ async function validatePromo(code, subtotal){
 
 /* --- Commande --- */
 let CO = null;
+try{ if(localStorage.getItem('ffm-inst-hide')) S.instHide = true; }catch(e){}
+document.addEventListener('change', e=>{ if(e.target && e.target.id==='co-country' && CO){ readCO(); drawCheckout(); } });
 function openCheckout(){
   CO = {step:1, delivery:'livraison', name:S.myName && S.myName!=='Mode démo'?S.myName:'', phone:'', address:'', city:S.settings.city, note:'', method:null};
   drawCheckout();
@@ -1904,12 +1997,23 @@ function drawCheckout(){
       <button class="pay-opt" data-a="coDelivery" data-v="retrait" aria-pressed="${CO.delivery==='retrait'}"><span class="pay-logo" style="background:var(--kola)">🏪</span><span><b>Retrait en boutique</b><br><span class="muted small">Gratuit</span></span></button>
     </div>
     ${CO.delivery==='livraison'?`<div class="field"><label for="co-address">Adresse ou quartier</label><input class="input" id="co-address" value="${esc(CO.address)}" autocomplete="street-address"></div>
-    <div class="field"><label for="co-city">Ville</label><input class="input" id="co-city" value="${esc(CO.city)}"></div>`:''}
+    <div class="row"><div class="field"><label for="co-city">Ville</label><input class="input" id="co-city" value="${esc(CO.city)}"></div>
+    <div class="field"><label for="co-country">Pays</label><select class="input" id="co-country">${(S.settings.shipCountries||['ML']).filter(c=>WA[c]).map(c=>`<option value="${c}" ${(CO.country||'ML')===c?'selected':''}>${esc(WA[c])}</option>`).join('')}</select></div></div>
+    ${(CO.country||'ML')!=='ML'?'<p class="small" style="margin:-4px 0 12px;color:var(--indigo)">🌍 Livraison internationale : le délai et les frais d’envoi vous seront confirmés par notre équipe sur WhatsApp avant l’expédition.</p>':''}`:''}
     <div class="field"><label for="co-note">Instructions (facultatif)</label><input class="input" id="co-note" value="${esc(CO.note)}" placeholder="Point de repère, horaire…"></div>`;
   if(CO.step===3){
     const procs = enabledProcs();
     body = `<h3 style="margin-bottom:14px">Paiement</h3>
-    ${procs.length?`<div class="pay-opts">${procs.map(([k])=>`<button class="pay-opt" data-a="coMethod" data-v="${k}" aria-pressed="${CO.method===k}"><span class="pay-logo" style="background:${PROCESSORS[k].color}">${PROCESSORS[k].short}</span><span><b>${PROCESSORS[k].name}</b><br><span class="muted small">${PROCESSORS[k].kind==='momo'?'Confirmation sur votre téléphone':PROCESSORS[k].kind==='card'?'Paiement sécurisé':'Vous payez à la réception'}</span></span></button>`).join('')}</div>`
+    ${procs.length?(()=>{ const order = ['orange','wave','moov','card','paypal','cod'], ps = procs.slice().sort((a,b)=>order.indexOf(a[0])-order.indexOf(b[0])), man = S.settings.manualPay||{}, firstMomo = (ps.find(([k])=>PROCESSORS[k].kind==='momo')||[])[0];
+      const sub = k => man[k] ? 'Transfert vers notre numéro, puis référence' : PROCESSORS[k].kind==='momo' ? 'Validation sur votre téléphone' : PROCESSORS[k].kind==='card' ? 'Paiement sécurisé' : 'Vous payez à la réception';
+      const sel = CO.method && PROCESSORS[CO.method] ? CO.method : '', pc = sel ? PROCESSORS[sel].color : '';
+      return `<p style="margin:-6px 0 12px;font-weight:700">${sel?'✓ '+esc(PROCESSORS[sel].name)+' sélectionné':'👇 Choisissez comment vous voulez payer'}</p>
+      <div class="pay-grid ${sel?'':'pay-pick'}" id="pay-grid">${ps.map(([k])=>`<button class="pay-card" data-a="coMethod" data-v="${k}" aria-pressed="${CO.method===k}" style="--pc:${PROCESSORS[k].color}"><span class="lg">${PROCESSORS[k].short}</span><b>${esc(PROCESSORS[k].name)}</b><span class="sub">${sub(k)}</span>${k===firstMomo?'<span class="badge">⚡ Rapide</span>':''}<span class="tick" aria-hidden="true">✓</span></button>`).join('')}</div>
+      ${sel && PROCESSORS[sel].kind==='momo' ? `<div class="pay-howto" style="--pc:${pc}">${man[sel] ? `<b>Comment payer par ${esc(PROCESSORS[sel].name)}</b><ol class="small" style="padding-left:18px;margin:8px 0">
+          <li>Depuis votre application ou le menu ${esc(PROCESSORS[sel].name)}, envoyez <b>${fmt(t.total)}</b> au numéro <b style="font-size:16px;white-space:nowrap">${esc(man[sel])}</b> <button class="btn ghost sm" data-a="copyPayNum" data-v="${esc(man[sel])}" style="padding:2px 10px">Copier</button></li>
+          <li>Notez la <b>référence (ID) de la transaction</b> reçue par SMS.</li><li>Collez-la ci-dessous : nous validons votre commande dès réception.</li></ol>
+          <div class="field" style="margin:0"><label for="co-payref">Référence de la transaction</label><input class="input" id="co-payref" value="${esc(CO.payRef||'')}" placeholder="ex. CI241105.1234.A56789" autocomplete="off"></div>`
+        : `<b>${esc(PROCESSORS[sel].name)}</b><p class="small" style="margin:6px 0 0">En touchant « Payer », vous confirmez le paiement de <b>${fmt(t.total)}</b> sur votre téléphone en quelques secondes.</p>`}</div>` : sel==='cod' ? `<div class="pay-howto" style="--pc:${pc}"><b>Paiement à la livraison</b><p class="small" style="margin:6px 0 0">Préparez <b>${fmt(t.total)}</b> en espèces, ou payez par mobile money au livreur.</p></div>` : ''}`; })()
     :'<div class="empty">Aucun moyen de paiement n’est activé. Le gérant doit en activer un dans Gestion › Paiements.</div>'}
     ${S.settings.testMode?'<div class="test-note"><b>Mode test.</b> Aucun débit réel n’est effectué : le paiement est simulé.</div>':''}
     <div class="totals" style="margin-top:18px"><div><span>Sous-total</span><span>${fmt(t.subtotal)}</span></div>
@@ -1923,13 +2027,17 @@ function drawCheckout(){
       <button class="btn primary" data-a="coNext">${CO.step<3?'Continuer':`Payer ${fmt(t.total)}`}</button></div></div></div>`;
   const first = $('#overlay input'); if(first && !first.value) first.focus();
 }
-function readCO(){ ['name','phone','address','city','note'].forEach(k=>{ const el=$('#co-'+k); if(el) CO[k]=el.value.trim(); }); }
+function readCO(){ ['name','phone','address','city','note','country','payref'].forEach(k=>{ const el=$('#co-'+k); if(el) CO[k==='payref'?'payRef':k]=el.value.trim(); }); }
+function payCheck(){ const err = $('#co-err');
+  if(!CO.method){ err.textContent='Choisissez un moyen de paiement ci-dessus 👆'; const g = $('#pay-grid'); if(g){ g.classList.remove('pay-shake'); void g.offsetWidth; g.classList.add('pay-shake'); g.scrollIntoView({behavior:'smooth', block:'center'}); } return false; }
+  const man = S.settings.manualPay||{}; if(man[CO.method] && !(CO.payRef||'').trim()){ err.textContent='Indiquez la référence de la transaction reçue par SMS, ou choisissez le paiement à la livraison.'; $('#co-payref')?.focus(); return false; }
+  return true; }
 async function coNext(){
   readCO(); const err = $('#co-err');
   if(CO.step===1){ if(!CO.name || CO.phone.replace(/\D/g,'').length<8){ err.textContent='Indiquez votre nom et un numéro de téléphone valide.'; return; } }
   if(CO.step===2 && CO.delivery==='livraison' && !CO.address){ err.textContent='Indiquez votre adresse ou votre quartier.'; return; }
   if(CO.step<3){ CO.step++; drawCheckout(); return; }
-  if(!CO.method){ err.textContent='Choisissez un moyen de paiement.'; return; }
+  if(!payCheck()) return;
   { const si = stockIssue(S.cart); if(si){ err.textContent = si; return; } }
   runPayment(CO.method, computeTotals(S.cart, S.appliedPromo, CO.delivery).total, async (ref)=>{
     const t = computeTotals(S.cart, S.appliedPromo, CO.delivery);
@@ -1941,7 +2049,7 @@ async function coNext(){
       promoCode:S.appliedPromo?S.appliedPromo.code:'',
       source:srcCode(), campaign:cmpCode(),
       affiliate:S.appliedPromo&&S.appliedPromo.affiliate?{id:S.appliedPromo.affiliate.id, code:S.appliedPromo.code, discountPct:S.appliedPromo.value, commission:affCommission(t.lines, S.appliedPromo.value)}:null,
-      customer:{name:CO.name, phone:CO.phone, address:CO.address, city:CO.city, note:CO.note},
+      customer:{name:CO.name, phone:CO.phone, address:CO.address, city:CO.city, note:CO.note, country:CO.country||'ML'},
       delivery:CO.delivery, payment:{method:CO.method, ref, status:CO.method==='cod'?'à encaisser':'réussi'+(S.settings.testMode?' (test)':'')},
       status:CO.method==='cod'?'en_attente':'payee', channel:'en ligne', stockApplied:false,
       createdAt:Date.now(), createdBy:S.uid||'local'
@@ -3127,6 +3235,8 @@ function paneCompany(){
    <div class="panel"><h3>Identité</h3><div class="row">${f('shopName')}${f('headerSub')}</div></div>
    <div class="panel"><h3>Informations légales</h3><div class="row">${f('legalName')}${f('legalForm')}</div><div class="row">${f('capital')}${f('rccm')}${f('nif')}</div></div>
    <div class="panel"><h3>Coordonnées</h3><div class="row">${f('address')}${f('city')}${f('country')}</div><div class="row">${f('phone')}${f('phone2')}</div><div class="row">${f('whatsapp')}${f('email')}</div>${f('hours')}</div>
+   <div class="panel"><h3>Pays de livraison</h3><p class="muted small" style="margin:0 0 10px">Les drapeaux cochés s’affichent dans la boutique, et le client choisit son pays à la commande.</p>
+    <div style="display:grid;grid-template-columns:repeat(auto-fill,minmax(150px,1fr));gap:8px">${Object.entries(WA).map(([c,n])=>`<label style="display:flex;align-items:center;gap:8px;padding:6px 8px;border:1px solid var(--line);border-radius:10px;font-size:14px"><input type="checkbox" data-ship="${c}" ${(st.shipCountries||[]).includes(c)?'checked':''}><span style="width:30px;display:inline-block">${flagSVG(c).replace('<svg ','<svg style="width:30px;height:20px;border-radius:3px;display:block" ')}</span>${esc(n)}</label>`).join('')}</div></div>
    <div class="panel"><h3>Reçus</h3>${f('receiptNote')}</div></div>
    <div style="flex:2 1 300px;position:sticky;top:80px"><div class="panel"><h3>Aperçu</h3><div id="co-prev"></div></div></div></div>`;
 }
@@ -3140,6 +3250,7 @@ function companyPreview(){
 }
 async function saveCompany(){
   const s2 = structuredClone(S.settings); document.querySelectorAll('[data-co]').forEach(i=>s2[i.dataset.co]=i.value.trim());
+  const ship = [...document.querySelectorAll('[data-ship]')].filter(i=>i.checked).map(i=>i.dataset.ship); if(document.querySelector('[data-ship]')) s2.shipCountries = ship.length ? ship : ['ML'];
   if(!s2.shopName) return toast('Le nom commercial est obligatoire.');
   if(s2.email && !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(s2.email)) return toast('L’adresse e-mail ne semble pas valide.');
   for(const k of ['phone','phone2','whatsapp']) if(s2[k] && !phoneOk(s2[k])) return toast('Numéro de téléphone invalide : '+s2[k]);
@@ -3338,7 +3449,12 @@ document.addEventListener('click', async e=>{
     case 'removePromo': if(el.dataset.t==='pos') S.posPromo=null; else S.appliedPromo=null; schedule(); break;
     case 'checkout': if(!enabledProcs().length){ toast('Aucun moyen de paiement actif pour le moment.'); break; } openCheckout(); break;
     case 'coDelivery': readCO(); CO.delivery=el.dataset.v; drawCheckout(); break;
-    case 'coMethod': CO.method=el.dataset.v; drawCheckout(); break;
+    case 'copyPayNum': try{ await navigator.clipboard.writeText(el.dataset.v.replace(/\s/g,'')); toast('Numéro copié'); }catch(err){ toast(el.dataset.v); } break;
+    case 'install': installGuide(); break;
+    case 'instTab': installGuide(el.dataset.v); break;
+    case 'instNow': if(installEvt){ installEvt.prompt(); try{ const r = await installEvt.userChoice; if(r.outcome==='accepted'){ closeAll(); toast('Installation en cours ✓'); } }catch(err){} installEvt = null; } break;
+    case 'instHide': S.instHide = true; try{ localStorage.setItem('ffm-inst-hide','1'); }catch(err){} schedule(); break;
+    case 'coMethod': readCO(); CO.method=el.dataset.v; drawCheckout(); break;
     case 'coBack': readCO(); CO.step--; drawCheckout(); break;
     case 'coNext': coNext(); break;
     case 'receipt': { const o=S.orders.find(x=>x.id===id); if(o) showReceipt(o,false); break; }

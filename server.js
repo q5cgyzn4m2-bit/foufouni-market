@@ -129,11 +129,14 @@ const CONFIGURED = {
   orange: !!(env.OM_AUTH_HEADER && env.OM_MERCHANT_KEY && env.OM_API_BASE),
   cod: true
 };
-const providers = () => { const s = settings(); return Object.keys(CONFIGURED).filter(k => CONFIGURED[k] && s.processors?.[k]?.enabled !== false); };
+/* Mobile money « manuel » : sans clé API, le client transfère au numéro marchand indiqué dans Gestion › Paiements et donne la référence */
+const manualPay = () => { const s = settings(), out = {}; for (const k of ['orange', 'wave', 'moov']) { const pr = s.processors?.[k]; if (!CONFIGURED[k] && pr && pr.enabled !== false && String(pr.account || '').replace(/\D/g, '').length >= 8) out[k] = String(pr.account).trim(); } return out; };
+const providers = () => { const s = settings(); return [...Object.keys(CONFIGURED).filter(k => CONFIGURED[k] && s.processors?.[k]?.enabled !== false), ...Object.keys(manualPay())]; };
 function publicSettings() {
   const s = settings();
   const procs = {}; for (const [k, v] of Object.entries(s.processors || {})) procs[k] = { enabled: !!v.enabled }; // jamais d'identifiants côté public
   return { shopName: s.shopName, tagline: s.tagline, intro: s.intro, currency: s.currency, deliveryFee: s.deliveryFee, freeFrom: s.freeFrom, city: s.city, phone: s.phone, processors: procs,
+    manualPay: manualPay(), shipCountries: Array.isArray(s.shipCountries) ? s.shipCountries : ['ML'],
     headerSub: s.headerSub || '', legalName: s.legalName || '', legalForm: s.legalForm || '', capital: s.capital || '', rccm: s.rccm || '', nif: s.nif || '', address: s.address || '', country: s.country || '', whatsapp: s.whatsapp || '', phone2: s.phone2 || '', email: s.email || '', hours: s.hours || '', receiptNote: s.receiptNote || '',
     affDays: s.affDays || 30, siteUrl: s.siteUrl || '',
     assistant: !!env.ANTHROPIC_API_KEY && s.assistantOn !== false, assistantName: s.assistantName || 'Fanta',
@@ -793,7 +796,9 @@ app.post('/api/orders', h(async (req, res) => {
   const delivery = b.delivery === 'retrait' ? 'retrait' : 'livraison';
   const c = b.customer || {};
   const customer = { name: String(c.name || '').trim().slice(0, 80), phone: String(c.phone || '').trim().slice(0, 30),
-    address: String(c.address || '').trim().slice(0, 200), city: String(c.city || '').trim().slice(0, 60), note: String(c.note || '').trim().slice(0, 300) };
+    address: String(c.address || '').trim().slice(0, 200), city: String(c.city || '').trim().slice(0, 60), note: String(c.note || '').trim().slice(0, 300), country: /^[A-Z]{2}$/.test(String(c.country || '')) ? c.country : 'ML' };
+  const manual = manualPay()[method];
+  if (manual && !String(b.payRef || '').trim()) throw httpErr(400, 'Indiquez la référence de la transaction.');
   if (!customer.name || customer.phone.replace(/\D/g, '').length < 8) throw httpErr(400, 'Nom et numéro de téléphone valides requis.');
   if (delivery === 'livraison' && !customer.address) throw httpErr(400, 'Adresse de livraison requise.');
   const t = computeOrder(b.items, b.promoCode, delivery, b.ref);
@@ -804,7 +809,7 @@ app.post('/api/orders', h(async (req, res) => {
     number: 'FM-' + new Date().toISOString().slice(2, 10).replace(/-/g, '') + '-' + rnd(4),
     items: t.lines, subtotal: t.subtotal, discount: t.discount, shipping: t.shipping, total: t.total, promoCode: t.promoCode, affiliate: t.affiliate,
     source: String(b.source || '').toLowerCase().replace(/[^a-z0-9_-]/g, '').slice(0, 20), campaign: String(b.campaign || '').replace(/[^A-Za-z0-9_-]/g, '').slice(0, 30),
-    customer, delivery, payment: { method, status: method === 'cod' ? 'à encaisser' : 'en attente', ref: '' },
+    customer, delivery, payment: { method, status: method === 'cod' ? 'à encaisser' : manual ? 'à vérifier' : 'en attente', ref: manual ? String(b.payRef || '').trim().slice(0, 60) : '', manual: !!manual, to: manual || '' },
     status: 'en_attente', channel: 'en ligne', stockApplied: false, createdAt: Date.now(), createdBy: 'web', token: randomToken()
   };
   putDoc('orders', id, order);
@@ -815,7 +820,8 @@ app.post('/api/orders', h(async (req, res) => {
 
   let redirect = null;
   try {
-    if (method === 'wave') {
+    if (manual) { notify({ title: `Paiement ${method === 'moov' ? 'Moov Money' : method === 'wave' ? 'Wave' : 'Orange Money'} à vérifier : ${money(order.total)}`, message: `${order.number} · ${customer.name} · réf. ${order.payment.ref}\nVérifiez la réception sur le compte ${manual}, puis passez la commande en « Payée ».`, tags: ['moneybag'], priority: 4, click: BASE_URL + '/' }); }
+    else if (method === 'wave') {
       const s = await waveCreate(order, id);
       patchDoc('orders', id, { payment: { ...order.payment, sessionId: s.id } });
       redirect = s.wave_launch_url;
@@ -927,7 +933,7 @@ app.get('/api/admin/lookup-barcode', requireStaff, h(async (req, res) => {
 app.post('/api/admin/pos/qr-order', requireStaff, h(async (req, res) => {
   const b = req.body || {}, t = computeOrder(b.items, b.promoCode, 'retrait');
   if (t.total < 100) throw httpErr(400, 'Montant trop faible pour un paiement mobile.');
-  if (!providers().some(k => k !== 'cod')) throw httpErr(400, 'Aucun paiement mobile (Wave, Orange Money) n’est activé.');
+  if (!providers().some(k => k !== 'cod' && CONFIGURED[k])) throw httpErr(400, 'Le paiement par QR demande Wave ou Orange Money connecté par API.');
   const id = newOrderId(), order = {
     number: 'FM-' + new Date().toISOString().slice(2, 10).replace(/-/g, '') + '-' + rnd(4),
     items: t.lines, subtotal: t.subtotal, discount: t.discount, shipping: 0, total: t.total, promoCode: t.promoCode, affiliate: t.affiliate,
@@ -942,7 +948,7 @@ app.post('/api/orders/:id/pay', h(async (req, res) => {
   if (!o || !req.body?.t || !safeEq(o.token, String(req.body.t))) throw httpErr(404, 'Commande introuvable.');
   if (o.status !== 'en_attente') throw httpErr(400, o.status === 'payee' ? 'Cette commande est déjà payée.' : 'Cette commande n’est plus payable.');
   const method = String(req.body.method || '');
-  if (method === 'cod' || !providers().includes(method)) throw httpErr(400, 'Ce moyen de paiement n’est pas disponible.');
+  if (method === 'cod' || !CONFIGURED[method] || !providers().includes(method)) throw httpErr(400, 'Ce moyen de paiement n’est pas disponible.');
   patchDoc('orders', id, { payment: { ...o.payment, method, status: 'en attente' } });
   const order = getDoc('orders', id); let redirect = null;
   try {
