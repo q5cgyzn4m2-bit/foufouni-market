@@ -253,3 +253,11 @@ Gestion › Produits › **🇨🇳 Importer un produit chinois** : plateforme e
 
 - L'import lit jusqu'à 8 captures (dont les longues images de description) et peut rédiger **toute la page de vente en français** : accroche, sous-titre, problème et solution, description détaillée, usages, FAQ, une légende par photo, et les options (couleurs, tailles) reprises dans la fiche. Le texte chinois des images est traduit dans la page ; les images elles-mêmes ne sont pas retouchées.
 - La lecture directe d'un lien Pinduoduo, 1688 ou Taobao n'est pas possible : ces plateformes bloquent l'accès automatique et l'interdisent dans leurs conditions.
+
+
+## Import depuis un lien et choix de la devise
+
+- Gestion › Produits › **🌍 Importer un produit** › **🔗 Lire le lien** (`/api/admin/import-url`) : lit les données produit publiques de la page (JSON-LD schema.org, Open Graph, fiche JSON des boutiques Shopify) : nom, description, photos (6 au maximum), prix et devise, marque, code-barres GTIN, options. L'assistante réécrit les textes en français avec ses propres mots et rédige la page de vente.
+- Sécurité : seuls les sites publics sont lus (adresses privées refusées, y compris après redirection), le fichier `robots.txt` du site est respecté, et Amazon, Temu, Shein, Pinduoduo, 1688 et Taobao, qui l'interdisent, sont renvoyés vers l'import par captures d'écran.
+- **Devise** du prix d'achat : yuan, dollar, euro, livre, dirham ou FCFA, avec un taux mémorisé pour chaque devise.
+- `IMPORT_TEST_LOCAL=1` sert uniquement aux tests (lecture d'adresses locales) : ne jamais l'ajouter sur Render.

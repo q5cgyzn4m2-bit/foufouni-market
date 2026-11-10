@@ -475,6 +475,94 @@ app.post('/webhooks/orange', express.json({ limit: '50kb' }), h(async (req, res)
   if (o) await refreshPayment(o, o.id, true);
 }));
 
+/* Import d'un produit depuis un lien : données produit publiques du site (JSON-LD, Open Graph, Shopify), puis réécriture en français */
+const dnsP = require('dns').promises, netM = require('net');
+const privateIp = ip => { if (netM.isIPv6(ip)) { const l = ip.toLowerCase(); if (l.startsWith('::ffff:')) return privateIp(l.slice(7)); return l === '::1' || l === '::' || l.startsWith('fc') || l.startsWith('fd') || l.startsWith('fe80'); }
+  const [a, b] = ip.split('.').map(Number); return a === 10 || a === 127 || a === 0 || (a === 169 && b === 254) || (a === 172 && b >= 16 && b <= 31) || (a === 192 && b === 168) || (a === 100 && b >= 64 && b <= 127) || a >= 224; };
+const BROWSER_UA = 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0 Safari/537.36';
+async function safeFetch(url, hops = 0, timeout = 10000) {
+  const u = new URL(url); if (!/^https?:$/.test(u.protocol)) throw httpErr(400, 'Lien invalide.');
+  let addrs; try { addrs = await dnsP.lookup(u.hostname, { all: true }); } catch (e) { throw httpErr(400, 'Site introuvable : vérifiez le lien.'); }
+  if (!addrs.length || (addrs.some(x => privateIp(x.address)) && env.IMPORT_TEST_LOCAL !== '1')) throw httpErr(400, 'Adresse non autorisée.');
+  const r = await fetch(url, { redirect: 'manual', signal: AbortSignal.timeout(timeout), headers: { 'user-agent': BROWSER_UA, accept: 'text/html,application/json,image/*;q=0.9,*/*;q=0.8', 'accept-language': 'fr-FR,fr;q=0.9,en;q=0.8' } });
+  if (r.status >= 300 && r.status < 400 && r.headers.get('location')) { if (hops >= 4) throw httpErr(400, 'Trop de redirections.'); return safeFetch(new URL(r.headers.get('location'), url).href, hops + 1, timeout); }
+  return r;
+}
+async function readLimited(r, max) { const buf = Buffer.from(await r.arrayBuffer()); return buf.length > max ? buf.subarray(0, max) : buf; }
+async function robotsAllows(u) {
+  try { const r = await safeFetch(u.origin + '/robots.txt', 0, 5000); if (!r.ok) return true; const txt = (await readLimited(r, 300000)).toString('utf8');
+    let applies = false, rules = [];
+    for (const raw of txt.split(/\r?\n/)) { const line = raw.replace(/#.*/, '').trim(); const m = /^([a-z-]+)\s*:\s*(.*)$/i.exec(line); if (!m) continue; const k = m[1].toLowerCase(), v = m[2].trim();
+      if (k === 'user-agent') applies = v === '*'; else if (applies && (k === 'disallow' || k === 'allow') && v) rules.push([k, v]); }
+    const path = u.pathname + u.search; let best = null;
+    for (const [k, v] of rules) { const re = new RegExp('^' + v.replace(/[.+?^${}()|[\]\\]/g, '\\$&').replace(/\*/g, '.*').replace(/\\\$$/, '$')); if (re.test(path) && (!best || v.length > best[1].length)) best = [k, v]; }
+    return !best || best[0] === 'allow';
+  } catch (e) { return true; }
+}
+const htmlText = h => String(h || '').replace(/<br\s*\/?>/gi, '\n').replace(/<\/(p|li|div|h\d)>/gi, '\n').replace(/<[^>]+>/g, ' ').replace(/&nbsp;/g, ' ').replace(/&amp;/g, '&').replace(/&quot;/g, '"').replace(/&#39;|&apos;/g, "'").replace(/&lt;/g, '<').replace(/&gt;/g, '>').replace(/&#(\d+);/g, (m, n) => String.fromCharCode(n)).replace(/[ \t]+/g, ' ').replace(/\n\s*\n+/g, '\n').trim();
+function productFromHtml(html, pageUrl) {
+  const out = { name: '', description: '', images: [], price: 0, currency: '', brand: '', gtin: '', sku: '', options: [] };
+  const abs = x => { try { return new URL(String(x), pageUrl).href; } catch (e) { return ''; } };
+  const nodes = [];
+  for (const m of html.matchAll(/<script[^>]+type=["']application\/ld\+json["'][^>]*>([\s\S]*?)<\/script>/gi)) {
+    try { const j = JSON.parse(m[1].trim()); const walk = n => { if (!n || typeof n !== 'object') return; if (Array.isArray(n)) return n.forEach(walk); const t = [].concat(n['@type'] || []); if (t.includes('Product') || t.includes('ProductGroup')) nodes.push(n); if (n['@graph']) walk(n['@graph']); }; walk(j); } catch (e) {}
+  }
+  const p = nodes[0];
+  if (p) {
+    out.name = htmlText(p.name); out.description = htmlText(p.description); out.brand = htmlText(typeof p.brand === 'object' ? p.brand && p.brand.name : p.brand); out.sku = String(p.sku || ''); out.gtin = String(p.gtin13 || p.gtin12 || p.gtin || p.gtin8 || '');
+    out.images = [].concat(p.image || []).map(x => typeof x === 'object' ? x.url || x.contentUrl : x).filter(Boolean).map(abs);
+    const offers = [].concat(p.offers || (p.hasVariant ? [].concat(p.hasVariant).map(v => v.offers).flat() : []) || []).flat().filter(Boolean);
+    const o = offers.map(x => x.lowPrice ? { price: x.lowPrice, priceCurrency: x.priceCurrency } : x).find(x => Number(x.price) > 0);
+    if (o) { out.price = Number(o.price); out.currency = String(o.priceCurrency || ''); }
+  }
+  const meta = (prop) => { const re = new RegExp(`<meta[^>]+(?:property|name)=["']${prop}["'][^>]*content=["']([^"']*)["']|<meta[^>]+content=["']([^"']*)["'][^>]*(?:property|name)=["']${prop}["']`, 'i'); const m = re.exec(html); return m ? htmlText(m[1] || m[2]) : ''; };
+  out.name = out.name || meta('og:title') || htmlText((/<title>([^<]*)<\/title>/i.exec(html) || [])[1]);
+  out.description = out.description || meta('og:description') || meta('description');
+  if (!out.images.length) { const im = meta('og:image'); if (im) out.images.push(abs(im)); }
+  if (!out.price) { const pr = Number(meta('product:price:amount') || meta('og:price:amount')); if (pr > 0) { out.price = pr; out.currency = meta('product:price:currency') || meta('og:price:currency'); } }
+  out.images = [...new Set(out.images.filter(x => /^https?:/.test(x)))].slice(0, 8);
+  return out;
+}
+app.post('/api/admin/import-url', express.json({ limit: '50kb' }), requireStaff, h(async (req, res) => {
+  if (limited('imp:' + req.user.id, 60, 3600e3)) throw httpErr(429, 'Trop d’imports en une heure.');
+  let u; try { u = new URL(String(req.body?.url || '').trim()); } catch (e) { throw httpErr(400, 'Collez un lien complet (https://…).'); }
+  const host = u.hostname.replace(/^www\./, '');
+  if (/(^|\.)amazon\.|(^|\.)amzn\.|yangkeduo\.com|pinduoduo\.com|1688\.com|taobao\.com|tmall\.com|temu\.com|shein\.com/.test(host))
+    throw httpErr(422, 'Ce site interdit la lecture automatique de ses pages : faites des captures d’écran de la fiche et ajoutez-les ci-dessous.');
+  if (!await robotsAllows(u)) throw httpErr(422, 'Ce site interdit la lecture automatique de cette page : utilisez plutôt les captures d’écran.');
+  let r; try { r = await safeFetch(u.href); } catch (e) { if (e.status) throw e; throw httpErr(422, 'Le site ne répond pas : utilisez les captures d’écran.'); }
+  if (!r.ok) throw httpErr(422, `Le site refuse l’accès (code ${r.status}) : utilisez les captures d’écran.`);
+  const html = (await readLimited(r, 4e6)).toString('utf8');
+  let d = productFromHtml(html, u.href);
+  if ((!d.name || !d.price) && /\/products\/[^/?#]+/.test(u.pathname)) {   // boutique Shopify : fiche JSON publique
+    try { const r2 = await safeFetch(u.origin + u.pathname.replace(/\/$/, '') + '.js'); if (r2.ok) { const j = JSON.parse((await readLimited(r2, 2e6)).toString('utf8'));
+      d = { ...d, name: d.name || j.title, description: d.description || htmlText(j.description), images: d.images.length ? d.images : (j.images || []).map(x => new URL(x, u.href).href).slice(0, 8), price: d.price || (j.price ? j.price / 100 : 0), brand: d.brand || j.vendor || '',
+        options: (j.options || []).map(o => ({ name: String(o.name || ''), values: (o.values || []).map(String) })).filter(o => o.name && o.values.length > 1) }; } } catch (e) {}
+  }
+  if (!d.name) throw httpErr(422, 'Aucune fiche produit lisible sur cette page : utilisez les captures d’écran.');
+  // Photos du produit (copiées pour être recadrées dans la boutique)
+  const images = [];
+  for (const src of d.images.slice(0, 6)) { try { const ri = await safeFetch(src, 0, 8000); const ct = (ri.headers.get('content-type') || '').split(';')[0]; if (ri.ok && /^image\/(jpeg|png|webp)$/.test(ct)) { const b = await readLimited(ri, 3e6); if (b.length < 3e6) images.push(`data:${ct};base64,${b.toString('base64')}`); } } catch (e) {} }
+  // Réécriture en français par l'assistante (si la clé est configurée)
+  let fr = null;
+  if (env.ANTHROPIC_API_KEY) {
+    const system = `Tu prépares la fiche d'un produit pour une boutique en ligne malienne, à partir des données publiques d'une autre boutique. Écris en français simple et vendeur, AVEC TES PROPRES MOTS : ne recopie aucune phrase du texte source, n'invente aucune caractéristique, garantie ou certification absente des données.
+Réponds UNIQUEMENT avec un objet JSON valide : {"name":"nom court en français (60 caractères max.)","category":"une catégorie parmi : Électronique, Maison, Cuisine, Mode, Beauté, Quincaillerie, Épicerie, Bébé, Sport, Auto-moto, Bureau, Jouets","description":"2 phrases","highlights":["4 points forts courts"],"specs":["Clé : valeur, seulement ce qui figure dans les données"],"options":[{"name":"Couleur, Taille…","values":["valeurs traduites"]}],"hook":"accroche de 6 à 10 mots","sub":"sous-titre d'une phrase","problem":"1 à 2 phrases","solution":"1 à 2 phrases","details":"2 courts paragraphes séparés par une ligne vide","usages":["3 usages « Titre : texte court » adaptés au Mali, seulement s'ils correspondent au produit"],"faq":[{"q":"question propre au produit","a":"réponse tirée des données"}],"weightKg":poids en kg s'il est indiqué (nombre, 0 sinon)}`;
+    const data = JSON.stringify({ name: d.name, brand: d.brand, description: d.description.slice(0, 4000), options: d.options, sku: d.sku });
+    try { const txt = await askClaude(system, [{ role: 'user', content: data }], 2500); fr = JSON.parse(txt.replace(/^[^{]*/, '').replace(/[^}]*$/, '')); } catch (e) { fr = null; }
+  }
+  const str = (v, n) => String(v || '').slice(0, n), num = v => { const n = Number(String(v ?? '').replace(/[^\d.,]/g, '').replace(',', '.')); return Number.isFinite(n) ? n : 0; };
+  const cur = String(d.currency || '').toUpperCase().replace('XOF', 'FCFA');
+  res.json({ source: host, url: u.href, title_cn: '', name: str(fr && fr.name || d.name, 80), category: str(fr && fr.category, 30), description: str(fr && fr.description || d.description.slice(0, 300), 400),
+    highlights: (fr && Array.isArray(fr.highlights) ? fr.highlights : []).slice(0, 6).map(x => str(x, 90)),
+    specs: [...(fr && Array.isArray(fr.specs) ? fr.specs : []).slice(0, 12).map(x => str(x, 120)), d.brand ? 'Marque : ' + str(d.brand, 40) : ''].filter(Boolean),
+    options: (fr && Array.isArray(fr.options) && fr.options.length ? fr.options : d.options).slice(0, 3).map(x => ({ name: str(x && x.name, 30), values: (Array.isArray(x && x.values) ? x.values : []).slice(0, 20).map(v => str(v, 30)).filter(Boolean) })).filter(x => x.name && x.values.length),
+    price: d.price > 0 ? d.price : 0, currency: cur, gtin: /^\d{8,14}$/.test(d.gtin) ? d.gtin : '', weightKg: Math.max(0, num(fr && fr.weightKg)),
+    hook: str(fr && fr.hook, 90), sub: str(fr && fr.sub, 200), problem: str(fr && fr.problem, 400), solution: str(fr && fr.solution, 400), details: str(fr && fr.details, 1200),
+    usages: (fr && Array.isArray(fr.usages) ? fr.usages : []).slice(0, 5).map(x => str(x, 120)), faq: (fr && Array.isArray(fr.faq) ? fr.faq : []).slice(0, 4).map(f => ({ q: str(f && f.q, 140), a: str(f && f.a, 400) })).filter(f => f.q && f.a),
+    captions: [], images, translated: !!fr });
+}));
+
 /* Lecture et traduction d'une fiche produit chinoise (Pinduoduo, 1688, Taobao…) à partir de captures d'écran */
 app.post('/api/admin/ai/cn-product', express.json({ limit: '24mb' }), requireStaff, h(async (req, res) => {
   if (!env.ANTHROPIC_API_KEY) throw httpErr(503, 'Ajoutez la clé ANTHROPIC_API_KEY sur Render pour lire et traduire les fiches automatiquement.');
