@@ -475,6 +475,39 @@ app.post('/webhooks/orange', express.json({ limit: '50kb' }), h(async (req, res)
   if (o) await refreshPayment(o, o.id, true);
 }));
 
+/* Lecture et traduction d'une fiche produit chinoise (Pinduoduo, 1688, Taobao…) à partir de captures d'écran */
+app.post('/api/admin/ai/cn-product', express.json({ limit: '24mb' }), requireStaff, h(async (req, res) => {
+  if (!env.ANTHROPIC_API_KEY) throw httpErr(503, 'Ajoutez la clé ANTHROPIC_API_KEY sur Render pour lire et traduire les fiches automatiquement.');
+  if (limited('cn:' + req.user.id, 40, 3600e3)) throw httpErr(429, 'Trop de fiches lues en une heure.');
+  const imgRe = /^data:(image\/(jpeg|png|webp));base64,([A-Za-z0-9+/=]+)$/;
+  const photos = (Array.isArray(req.body?.photos) ? req.body.photos : []).slice(0, 8).map(x => imgRe.exec(String(x || ''))).filter(Boolean);
+  const shots = (Array.isArray(req.body?.shots) ? req.body.shots : []).slice(0, 8).map(x => /^data:(image\/(jpeg|png|webp));base64,([A-Za-z0-9+/=]+)$/.exec(String(x || ''))).filter(Boolean);
+  if (!shots.length) throw httpErr(400, 'Ajoutez au moins une capture d’écran de la fiche.');
+  const system = `Tu lis des captures d'écran de fiches produits de plateformes chinoises (Pinduoduo, 1688, Taobao, Tmall, AliExpress) pour une boutique en ligne malienne.
+Traduis en français simple et vendeur, sans rien inventer : n'ajoute aucune caractéristique, matière, garantie ou certification absente des captures. Ignore les promotions de la plateforme, les avis, les logos et les noms de marques déposées que tu ne vois pas clairement.
+Réponds UNIQUEMENT avec un objet JSON valide :
+{"title_cn":"titre original","name":"nom court en français (60 caractères max.)","category":"une catégorie parmi : Électronique, Maison, Cuisine, Mode, Beauté, Quincaillerie, Épicerie, Bébé, Sport, Auto-moto, Bureau, Jouets","description":"2 phrases en français","highlights":["4 points forts courts"],"specs":["Clé : valeur (matière, dimensions, puissance, contenu… seulement ce qui est écrit)"],"options":[{"name":"Couleur ou Taille…","values":["valeurs traduites"]}],"priceCNY":prix unitaire affiché en yuans pour l'option la moins chère (nombre, 0 si absent),"weightKg":poids en kg s'il est écrit (nombre, 0 sinon),
+"hook":"accroche de page de vente, 6 à 10 mots","sub":"sous-titre d'une phrase","problem":"le problème du client, 1 à 2 phrases","solution":"comment le produit le résout, 1 à 2 phrases","details":"2 courts paragraphes de description détaillée, séparés par une ligne vide",
+"usages":["3 usages au format « Titre : texte court », adaptés au Mali (chaleur, délestages, fêtes, famille…) seulement s'ils correspondent au produit"],"faq":[{"q":"question propre au produit","a":"réponse tirée des captures"}],
+"captions":[{"t":"titre court de l'angle","d":"ce que le client doit remarquer"}]}
+Les longues images de description contiennent souvent l'essentiel : lis tout le texte chinois et reprends-en le sens en français, sans recopier les slogans de marque.
+captions : une entrée par photo produit fournie, dans l'ordre (aucune si aucune photo). faq : 3 questions au maximum, sans paiement ni livraison.`;
+  const content = [{ type: 'text', text: `Captures de la fiche (${shots.length}) :` }, ...shots.map(m => ({ type: 'image', source: { type: 'base64', media_type: m[1], data: m[3] } })),
+    ...(photos.length ? [{ type: 'text', text: `Photos du produit à légender, dans l'ordre (${photos.length}) :` }, ...photos.map(m => ({ type: 'image', source: { type: 'base64', media_type: m[1], data: m[3] } }))] : [])];
+  const txt = await askClaude(system, [{ role: 'user', content }], 3500);
+  let o; try { o = JSON.parse(txt.replace(/^[^{]*/, '').replace(/[^}]*$/, '')); } catch (e) { throw httpErr(502, 'Captures illisibles : essayez des captures plus nettes, sans zoom.'); }
+  const str = (v, n) => String(v || '').slice(0, n), num = v => { const n = Number(String(v ?? '').replace(/[^\d.,]/g, '').replace(',', '.')); return Number.isFinite(n) ? n : 0; };
+  res.json({ title_cn: str(o.title_cn, 200), name: str(o.name, 80), category: str(o.category, 30), description: str(o.description, 400),
+    highlights: (Array.isArray(o.highlights) ? o.highlights : []).slice(0, 6).map(x => str(x, 90)).filter(Boolean),
+    specs: (Array.isArray(o.specs) ? o.specs : []).slice(0, 12).map(x => str(x, 120)).filter(Boolean),
+    options: (Array.isArray(o.options) ? o.options : []).slice(0, 3).map(x => ({ name: str(x && x.name, 30), values: (Array.isArray(x && x.values) ? x.values : []).slice(0, 20).map(v => str(v, 30)).filter(Boolean) })).filter(x => x.name && x.values.length),
+    priceCNY: Math.max(0, num(o.priceCNY)), weightKg: Math.max(0, num(o.weightKg)),
+    hook: str(o.hook, 90), sub: str(o.sub, 200), problem: str(o.problem, 400), solution: str(o.solution, 400), details: str(o.details, 1200),
+    usages: (Array.isArray(o.usages) ? o.usages : []).slice(0, 5).map(x => str(x, 120)).filter(Boolean),
+    faq: (Array.isArray(o.faq) ? o.faq : []).slice(0, 4).map(f => ({ q: str(f && f.q, 140), a: str(f && f.a, 400) })).filter(f => f.q && f.a),
+    captions: (Array.isArray(o.captions) ? o.captions : []).slice(0, photos.length).map(c => ({ t: str(c && c.t, 60), d: str(c && c.d, 220) })) });
+}));
+
 /* Lecture d'une facture fournisseur (photo ou PDF) par l'assistante : avant le lecteur JSON général, pour accepter un fichier plus lourd */
 app.post('/api/admin/ai/invoice', express.json({ limit: '12mb' }), requireStaff, h(async (req, res) => {
   if (!env.ANTHROPIC_API_KEY) throw httpErr(503, 'Ajoutez la clé ANTHROPIC_API_KEY sur Render pour lire les factures automatiquement.');

@@ -245,3 +245,11 @@ Nom commercial, sous-titre de l'en-tête, raison sociale, forme juridique, capit
 - **Google Tag Manager** (`GTM-WJVTWPWW`) : balise placée juste après `<head>` sur chaque page. Les étapes d'achat sont poussées dans le `dataLayer` au format Google Analytics 4 : `view_item`, `add_to_cart`, `begin_checkout`, `purchase` (avec `transaction_id` = numéro de commande), `payment_confirmed`.
 - **Pixel Meta** (`1784224236125858`, code officiel avec `noscript`) dans l'en-tête : `PageView`, `ViewContent`, `AddToCart`, `InitiateCheckout`, `Purchase` (montant en XOF, identifiants produits, `eventID` = numéro de commande pour éviter les doublons).
 - Les trois identifiants (GTM, Meta, TikTok) se modifient ou se désactivent dans Gestion › Société › Suivi publicitaire.
+
+
+## Import de produits chinois (Pinduoduo, 1688, Taobao, AliExpress)
+
+Gestion › Produits › **🇨🇳 Importer un produit chinois** : plateforme et lien (gardés en privé avec le prix d'achat), 1 à 4 captures d'écran lues et traduites en français par l'assistante (`/api/admin/ai/cn-product` : nom, catégorie, description, points forts, caractéristiques, options, prix en yuans, poids), jusqu'à 8 photos, puis calcul du prix de revient (yuans × taux + poids × tarif transport au kg + autres frais) et du prix de vente avec la marge, arrondi à 100 FCFA. L'article s'ouvre dans sa fiche pré-remplie pour vérification, en brouillon par défaut. Les taux et tarifs saisis sont mémorisés pour la fois suivante.
+
+- L'import lit jusqu'à 8 captures (dont les longues images de description) et peut rédiger **toute la page de vente en français** : accroche, sous-titre, problème et solution, description détaillée, usages, FAQ, une légende par photo, et les options (couleurs, tailles) reprises dans la fiche. Le texte chinois des images est traduit dans la page ; les images elles-mêmes ne sont pas retouchées.
+- La lecture directe d'un lien Pinduoduo, 1688 ou Taobao n'est pas possible : ces plateformes bloquent l'accès automatique et l'interdisent dans leurs conditions.

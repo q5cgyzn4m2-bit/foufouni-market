@@ -1103,6 +1103,60 @@ async function posQrPay(){
       S.pos = []; S.posPromo = null; S.posLcd = {l1:'PAIEMENT REÇU ✓', l2:res.number}; setTimeout(()=>{ closeAll(); schedule(); }, 1600); } }, 3000);
 }
 
+/* --- Import de produits chinois (Pinduoduo, 1688, Taobao, AliExpress…) --- */
+function cnImport(){
+  const saved = (()=>{ try{ return JSON.parse(localStorage.getItem('ffm-cn')||'{}'); }catch(e){ return {}; } })();
+  const D = {src:'Pinduoduo', link:'', shots:[], photos:[], info:null, cny:'', rate:saved.rate||'', kg:'', perKg:saved.perKg||'', extra:saved.extra||'', margin:saved.margin??40, stock:0, publish:false, name:'', category:'', landing:true};
+  const calc = ()=>{ const cny = Number(String(D.cny).replace(',','.'))||0, rate = Number(String(D.rate).replace(',','.'))||0, ship = (Number(String(D.kg).replace(',','.'))||0)*(Number(D.perKg)||0) + (Number(D.extra)||0);
+    const cost = Math.round(cny*rate + ship), price = cost ? Math.ceil(cost*(1+(Number(D.margin)||0)/100)/100)*100 : 0; return {cny, rate, ship, cost, price}; };
+  const draw = ()=>{ const c = calc(), inf = D.info;
+    $('#overlay').innerHTML = `<div class="scrim"><div class="modal wide" role="dialog" aria-modal="true" aria-label="Importer un produit chinois"><div class="m-h"><h2>🇨🇳 Importer un produit chinois</h2><button class="x" data-a="closeAll" aria-label="Fermer">×</button></div>
+    <div class="m-b">
+      <div class="row"><div class="field" style="flex:0 1 180px"><label for="cn-src">Plateforme</label><select class="input" id="cn-src" data-cn="src">${['Pinduoduo','1688','Taobao','Tmall','AliExpress','Alibaba','Autre'].map(x=>`<option ${x===D.src?'selected':''}>${x}</option>`).join('')}</select></div>
+        <div class="field"><label for="cn-link">Lien du produit (gardé pour vous, jamais affiché aux clients)</label><input class="input" id="cn-link" data-cn="link" value="${esc(D.link)}" placeholder="https://mobile.yangkeduo.com/…"></div></div>
+      <div class="panel" style="padding:14px"><h3 style="font-size:17px;margin-bottom:4px">1. Captures d’écran de la fiche</h3><p class="muted small" style="margin:0 0 8px">Dans l’application, faites 1 à 8 captures : titre et prix, options (couleurs, tailles), caractéristiques, et les <b>longues images de description</b> sous le produit. ${isServer()?'L’assistante lit le chinois et rédige tout en français. <b>Ajoutez les photos (étape 2) avant de lancer la lecture</b> pour obtenir une légende par photo.':'Saisissez ensuite les informations à la main.'}</p>
+        <div style="display:flex;gap:8px;flex-wrap:wrap;align-items:center">${D.shots.map((x,i)=>`<img src="${esc(x)}" alt="Capture ${i+1}" style="width:58px;height:96px;object-fit:cover;border-radius:8px;border:1px solid var(--line)">`).join('')}
+        ${D.shots.length<8?'<label class="btn ghost sm">📸 Ajouter des captures<input type="file" accept="image/*" multiple class="sr" id="cn-shots"></label>':''}${isServer()&&D.shots.length?'<button class="btn primary sm" id="cn-read">✨ Lire et traduire</button>':''}</div>
+        <div class="small" id="cn-msg" style="margin-top:8px"></div>
+        ${inf?`<div style="margin-top:10px;padding:10px 12px;border-radius:12px;background:var(--bg);border:1px solid var(--line)"><div class="muted small">${esc(inf.title_cn||'')}</div><b>${esc(inf.name||'')}</b><div class="small muted" style="margin-top:4px">${esc((inf.highlights||[]).slice(0,3).join(' · '))}</div>${(inf.options||[]).length?`<div class="small" style="margin-top:4px">Options : ${esc(inf.options.map(o=>o.name+' ('+o.values.join(', ')+')').join(' · '))}</div>`:''}</div>`:''}</div>
+      <div class="panel" style="padding:14px"><h3 style="font-size:17px;margin-bottom:4px">2. Photos du produit</h3><p class="muted small" style="margin:0 0 8px">Enregistrez les photos depuis l’application (appui long sur l’image), puis ajoutez-les ici : 8 au maximum, la première sera la photo principale.</p>
+        <div style="display:flex;gap:8px;flex-wrap:wrap;align-items:center">${D.photos.map((x,i)=>`<span style="position:relative"><img src="${esc(x)}" alt="Photo ${i+1}" style="width:72px;height:72px;object-fit:cover;border-radius:10px;border:1px solid var(--line)"><button class="btn ghost sm" data-cnx="${i}" style="position:absolute;top:-6px;right:-6px;padding:0 7px" aria-label="Retirer">×</button></span>`).join('')}
+        ${D.photos.length<8?'<label class="btn ghost sm">🖼 Ajouter des photos<input type="file" accept="image/*" multiple class="sr" id="cn-photos"></label>':''}</div></div>
+      <div class="panel" style="padding:14px"><h3 style="font-size:17px;margin-bottom:8px">3. Prix de revient et prix de vente</h3>
+        <div class="row"><div class="field"><label for="cn-cny">Prix en Chine (¥ CNY, par article)</label><input class="input" id="cn-cny" data-cn="cny" inputmode="decimal" value="${esc(D.cny)}"></div><div class="field"><label for="cn-rate">Taux : 1 ¥ = … FCFA</label><input class="input" id="cn-rate" data-cn="rate" inputmode="decimal" value="${esc(D.rate)}" placeholder="votre taux du jour"></div></div>
+        <div class="row"><div class="field"><label for="cn-kg">Poids par article (kg)</label><input class="input" id="cn-kg" data-cn="kg" inputmode="decimal" value="${esc(D.kg)}" placeholder="ex. 0,8"></div><div class="field"><label for="cn-perkg">Transport Chine → Mali (FCFA / kg)</label><input class="input" id="cn-perkg" data-cn="perKg" inputmode="numeric" value="${esc(D.perKg)}"></div><div class="field"><label for="cn-extra">Autres frais par article (FCFA)</label><input class="input" id="cn-extra" data-cn="extra" inputmode="numeric" value="${esc(D.extra)}" placeholder="douane, emballage…"></div></div>
+        <div class="row" style="align-items:flex-end"><div class="field" style="flex:0 1 160px"><label for="cn-margin">Marge (%)</label><input class="input" id="cn-margin" data-cn="margin" inputmode="numeric" value="${esc(D.margin)}"></div>
+          <div style="flex:1;text-align:right"><div class="muted small">Achat ${fmt(Math.round(c.cny*c.rate))} + transport et frais ${fmt(Math.round(c.ship))} = <b>revient ${fmt(c.cost)}</b></div><div style="font:700 26px var(--f-d)">${c.price?fmt(c.price):'—'}</div><div class="muted small">prix de vente conseillé (arrondi)</div></div></div></div>
+      <div class="row"><div class="field"><label for="cn-name">Nom en français</label><input class="input" id="cn-name" data-cn="name" value="${esc(D.name)}"></div><div class="field" style="flex:0 1 200px"><label for="cn-cat">Catégorie</label><input class="input" id="cn-cat" data-cn="category" value="${esc(D.category)}" list="cn-cats"><datalist id="cn-cats">${[...new Set(S.products.map(p=>p.category).filter(Boolean))].map(x=>`<option>${esc(x)}</option>`).join('')}</datalist></div><div class="field" style="flex:0 1 140px"><label for="cn-stock">Stock reçu</label><input class="input" id="cn-stock" data-cn="stock" inputmode="numeric" value="${esc(D.stock)}"></div></div>
+      ${inf&&inf.hook?`<label style="display:flex;gap:8px;align-items:center;margin-bottom:8px"><input type="checkbox" id="cn-lp" ${D.landing?'checked':''}> Créer aussi la page de vente en français (« ${esc(inf.hook)} »)</label>`:''}
+      <label style="display:flex;gap:8px;align-items:center"><input type="checkbox" id="cn-pub" ${D.publish?'checked':''}> Mettre en vente tout de suite (sinon l’article reste en brouillon, invisible des clients)</label>
+      <div class="small" id="cn-err" style="color:var(--danger);margin-top:8px"></div></div>
+    <div class="m-f"><button class="btn ghost" data-a="closeAll">Annuler</button><button class="btn primary" id="cn-go">Créer l’article et vérifier la fiche</button></div></div></div>`;
+    document.querySelectorAll('[data-cn]').forEach(x=>x.onchange = ()=>{ D[x.dataset.cn] = x.value; if(['rate','perKg','extra','margin'].includes(x.dataset.cn)) try{ localStorage.setItem('ffm-cn', JSON.stringify({rate:D.rate, perKg:D.perKg, extra:D.extra, margin:D.margin})); }catch(e){} draw(); });
+    $('#cn-pub').onchange = e=>{ D.publish = e.target.checked; }; if($('#cn-lp')) $('#cn-lp').onchange = e=>{ D.landing = e.target.checked; };
+    document.querySelectorAll('[data-cnx]').forEach(b=>b.onclick = e=>{ e.stopPropagation(); D.photos.splice(Number(b.dataset.cnx),1); draw(); });
+    if($('#cn-shots')) $('#cn-shots').onchange = async e=>{ for(const f of [...e.target.files].slice(0, 8-D.shots.length)){ try{ D.shots.push(await shrinkDoc(f)); }catch(err){} } draw(); };
+    if($('#cn-photos')) $('#cn-photos').onchange = async e=>{ for(const f of [...e.target.files]){ if(D.photos.length>=8) break; try{ D.photos.push(await compress(f)); }catch(err){} } draw(); };
+    if($('#cn-read')) $('#cn-read').onclick = async e=>{ e.stopPropagation(); const m = $('#cn-msg'); m.textContent = 'Lecture et traduction en cours…'; m.style.color = 'var(--muted)';
+      try{ const r = await window.readCnProduct(D.shots, D.photos); D.info = r; if(r.name) D.name = r.name; if(r.category && !D.category) D.category = r.category; if(r.priceCNY) D.cny = String(r.priceCNY); if(r.weightKg && !D.kg) D.kg = String(r.weightKg);
+        draw(); const m2 = $('#cn-msg'); m2.textContent = '✓ Fiche lue et traduite'+(r.hook?', page de vente rédigée':'')+(r.captions&&r.captions.length?', '+r.captions.length+' photo(s) légendée(s)':'')+'. Vérifiez le prix (prix de l’option choisie, frais de port chinois non compris).'; m2.style.color = 'var(--kola)'; }
+      catch(err){ m.textContent = err.message || 'Lecture impossible : saisissez le nom et le prix à la main.'; m.style.color = 'var(--danger)'; } };
+    $('#cn-go').onclick = e=>{ e.stopPropagation(); const c2 = calc(), err = $('#cn-err');
+      if(!String(D.name).trim()) return err.textContent = 'Indiquez le nom du produit en français.';
+      if(!c2.cost) return err.textContent = 'Indiquez le prix en yuans et votre taux de change pour calculer le prix.';
+      const inf = D.info || {}, photos = D.photos.slice();
+      const specs = [...(inf.specs||[]), D.kg?'Poids : '+String(D.kg).replace('.',',')+' kg':''].filter(Boolean).join('\n');
+      productForm({name:String(D.name).trim().slice(0,120), category:D.category||'', price:c2.price, stock:Math.max(0,parseInt(D.stock)||0), active:!!D.publish,
+        description:inf.description||'', highlights:(inf.highlights||[]).join('\n'), specs, details:inf.details||'', image:photos[0]||'', newPhotos:photos.slice(1), emoji:'📦',
+        options:(inf.options||[]).slice(0,3),
+        ...(D.landing && inf.hook ? {lpHook:inf.hook, lpSub:inf.sub||'', lpProblem:inf.problem||'', lpSolution:inf.solution||'', lpUsages:(inf.usages||[]).join('\n'), lpFaq:(inf.faq||[]).map(f=>f.q+'\n'+f.a).join('\n\n'), angleCaps:photos.map((_,i)=>(inf.captions||[])[i]||{t:'',d:''})} : {})});
+      setTimeout(()=>{ if($('#pf-cost')){ $('#pf-cost').value = c2.cost; $('#pf-cost').dispatchEvent(new Event('input')); }
+        if((inf.options||[]).length && $('#vo-n0')) toast('Options reprises : '+inf.options.map(o=>o.name).join(', ')+'. Touchez « Créer / mettre à jour les variantes » pour leur donner un stock.');
+        window.__cnSource = {platform:D.src, url:D.link, cny:c2.cny, rate:c2.rate}; }, 80);
+      toast((D.landing && inf.hook ? 'Fiche et page de vente remplies en français. ' : '') + (D.publish ? 'Vérifiez, puis Enregistrer : l’article sera en vente' : 'Vérifiez, puis Enregistrer : l’article reste en brouillon')); };
+  };
+  draw();
+}
 /* --- Import par scan : retrouver, créer ou modifier un article --- */
 const dataToFile = d => fetch(d).then(r=>r.blob()).then(b=>new File([b], 'photo.jpg', {type:b.type||'image/jpeg'}));
 async function importByCode(raw, opt){
@@ -2885,7 +2939,7 @@ function paneProducts(){
   const list = S.products.filter(p=>!q || (p.name+' '+p.sku+' '+p.category).toLowerCase().includes(q));
   return `<div class="toolbar"><h2 style="font-size:24px;flex:1">Produits <span class="muted small">(${S.products.length})</span></h2>
     <label class="sr" for="aq">Rechercher</label><input class="input" id="aq" data-in="aq" value="${esc(S.aq)}" placeholder="Rechercher…">
-    <button class="btn ghost" data-a="scanImport">📷 Scanner un produit</button><button class="btn ghost" data-a="labelsAll">🏷️ Étiquettes</button>${isServer()?'<button class="btn ghost" data-a="fbCatalog">Catalogue Facebook</button>':''}${dl?'<button class="btn ghost" data-a="exportProducts">Exporter CSV</button>':''}<button class="btn primary" data-a="newProduct">Ajouter un produit</button></div>
+    <button class="btn ghost" data-a="cnImport">🇨🇳 Importer un produit chinois</button><button class="btn ghost" data-a="scanImport">📷 Scanner un produit</button><button class="btn ghost" data-a="labelsAll">🏷️ Étiquettes</button>${isServer()?'<button class="btn ghost" data-a="fbCatalog">Catalogue Facebook</button>':''}${dl?'<button class="btn ghost" data-a="exportProducts">Exporter CSV</button>':''}<button class="btn primary" data-a="newProduct">Ajouter un produit</button></div>
     <div class="panel tbl-wrap">${list.length?`<table><thead><tr><th></th><th>Produit</th><th>Catégorie</th><th>Prix</th><th>Achat</th><th>Marge</th><th>Stock</th><th>En vente</th></tr></thead><tbody>
     ${list.map(p=>`<tr class="click" data-a="editProduct" data-id="${p.id}"><td><div class="li-img" style="width:40px;height:40px;font-size:20px">${pImg(p)}</div></td><td><b>${esc(p.name)}</b><div class="muted small">${esc(p.sku)}</div></td><td>${esc(p.category)}</td><td>${fmt(p.price)}</td><td class="small">${costOf(p.id)?fmt(costOf(p.id)):'<span class="muted">—</span>'}</td><td class="small">${costOf(p.id)?`<span class="${p.price-costOf(p.id)>=0?'amt-in':'amt-out'}">${pct(p.price-costOf(p.id),p.price)} %</span>`:'—'}</td>
     <td><span class="pill ${p.stock<=0?'bad':p.stock<=(p.lowStock||5)?'warn':'ok'}">${p.stock}</span></td><td><span class="pill ${p.active!==false?'ok':''}">${p.active!==false?'Oui':'Masqué'}</span></td></tr>`).join('')}</tbody></table>`
@@ -3002,7 +3056,7 @@ function productForm(p){
       </div></div><div class="small" id="pf-err" style="color:var(--danger)"></div></div>
     <div class="m-f">${isNew0?'':`<button class="btn danger" id="pf-del" style="margin-right:auto">Supprimer</button>`}<button class="btn ghost" data-a="closeAll">Annuler</button><button class="btn primary" id="pf-save">${isNew0?'Ajouter le produit':'Enregistrer'}</button></div></div></div>`;
   const pid = p.id || newId('p');
-  let items = (p.image ? [{kind:'main', src:p.image, data:p.image}] : []).concat((p.gallery||[]).map(gid=>({kind:'old', id:gid, src:extraSrc(gid)}))), removed = [];
+  let items = (p.image ? [{kind:'main', src:p.image, data:p.image}] : []).concat((p.gallery||[]).map(gid=>({kind:'old', id:gid, src:extraSrc(gid)}))).concat((p.newPhotos||[]).map(d=>({kind:'new', src:d, data:d}))), removed = []; delete p.newPhotos;
   items.forEach((it,i)=>{ it.cap = Object.assign({t:'',d:''}, (p.angleCaps||[])[i]||{}); });
   const drawCaps = ()=>{ const box = $('#pf-caps'); if(!box) return; box.innerHTML = items.length ? items.map((it,i)=>`<div class="cap-ed"><div class="t">${it.src?`<img src="${esc(it.src)}" alt="">`:''}</div><div><input class="input" data-cap="t" data-i="${i}" maxlength="60" value="${esc(it.cap.t)}" placeholder="Angle ${i+1} : ex. ${['Vue de face','Le détail de la broderie','La finition du col','Vue de dos'][i%4]}" style="padding:7px 10px;margin-bottom:5px"><input class="input" data-cap="d" data-i="${i}" maxlength="220" value="${esc(it.cap.d)}" placeholder="Ce que le client doit remarquer sur cette photo" style="padding:7px 10px"></div></div>`).join('') : '<p class="muted small" style="margin:0">Ajoutez des photos pour les légender.</p>';
     box.querySelectorAll('[data-cap]').forEach(x=>x.oninput=()=>{ items[Number(x.dataset.i)].cap[x.dataset.cap] = x.value; }); };
@@ -3090,7 +3144,8 @@ function productForm(p){
       for(const sid of spinRemoved) await del('product-images', sid).catch(()=>{});
       data.spin = spin;
       await put('products', pid, data);
-      { const c = Number(v('#pf-cost').replace(/\s/g,''))||0; if(c !== costOf(pid)){ if(c>0) await put('costs', pid, {cost:c, updatedAt:Date.now()}); else if(costOf(pid)) await del('costs', pid).catch(()=>{}); } }
+      { const c = Number(v('#pf-cost').replace(/\s/g,''))||0, src = isNewP && window.__cnSource ? {source:window.__cnSource} : null; window.__cnSource = null;
+        if(c !== costOf(pid) || src){ if(c>0) await put('costs', pid, {cost:c, updatedAt:Date.now(), ...(src||{})}); else if(costOf(pid)) await del('costs', pid).catch(()=>{}); } }
       if(isNew0 && data.stock>0) await put('stock-moves', newId('s'), {productId:pid, productName:data.name, type:'entree', before:0, after:data.stock, delta:data.stock, note:'Stock initial', by:S.myName||'', createdAt:Date.now()});
       closeAll(); toast(isNew0?'Produit ajouté':'Produit enregistré'); }
     catch(e){ dbErr(e); $('#pf-err').textContent='Enregistrement impossible : seuls les gérants peuvent modifier le catalogue.'; $('#pf-save').disabled=false; }
@@ -3423,6 +3478,7 @@ document.addEventListener('click', async e=>{
     case 'cpPush': { const d = campaignDraft(); if(!d.recips.length){ toast('Aucun contact.'); break; } if(!window.pushToContacts) break; try{ const r = await window.pushToContacts(d); await saveCampaign(d, {sent:r.sent, channel:'notification'}); toast(`Notification envoyée à ${r.sent} appareil${r.sent>1?'s':''}`); }catch(err){ toast(err.message||'Envoi impossible'); } break; }
     case 'labelsAll': labelsDialog(); break;
     case 'scanImport': scanImportDialog(); break;
+    case 'cnImport': cnImport(); break;
     case 'recvCam': openScanner(code=>{ const known = findByCode(code); if(!known){ closeScanner(); recvScan(code); return false; } recvScan(code); const l=$('#scan-last'); if(l) l.textContent = '+1 · '+known.p.name; return true; }, 'Réception : scannez les articles'); break;
     case 'recvQty': { const k = el.dataset.id; S.recv[k] = Math.max(0,(S.recv[k]||0)+Number(el.dataset.d)); if(!S.recv[k]) delete S.recv[k]; schedule(); break; }
     case 'recvOk': recvValidate(); break;

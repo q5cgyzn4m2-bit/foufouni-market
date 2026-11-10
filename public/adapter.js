@@ -290,6 +290,7 @@
   let audLoading = false;
   window.loadAudienceCarts = () => { if (audLoading) return; audLoading = true; api('GET', '/api/admin/audience-carts').then(r => { S.audCarts = r.carts || []; schedule(); }).catch(() => { S.audCarts = []; schedule(); }).finally(() => { audLoading = false; }); };
   window.pushToContacts = d => api('POST', '/api/admin/push/contacts', { keys: d.recips.map(r => r.c.key), productId: d.p ? d.p.id : '', url: d.p ? landingLink(d.p, 'notification') + '&cmp=' + d.cid : shopUrl() + '?src=notification&cmp=' + d.cid });
+  window.readCnProduct = (shots, photos) => api('POST', '/api/admin/ai/cn-product', { shots, photos: photos || [] });
   window.readInvoice = file => api('POST', '/api/admin/ai/invoice', { file });
   window.orderToken = id => { const m = myOrders().find(x => x.id === id); return m ? m.t : ''; };
   window.lookupBarcode = code => api('GET', '/api/admin/lookup-barcode?code=' + encodeURIComponent(code));
