@@ -317,7 +317,7 @@
         delivery: CO.delivery, method: CO.method, cartId, ref: refCode(), source: srcCode(), campaign: cmpCode()
       });
       addMine(r.id, r.token); syncAlerts();
-      { const tt = computeTotals(S.cart, S.appliedPromo, CO.delivery); ttTrack('PlaceAnOrder', { value: Math.round(tt.total), contents: tt.lines.filter(l => l.kind === 'product').map(l => ttItem(l.p, l.qty, l.unit)) }); ttIdentify(CO.phone); }
+      { const tt = computeTotals(S.cart, S.appliedPromo, CO.delivery); ttTrack('PlaceAnOrder', { transaction_id: (r.order && r.order.number) || r.id, value: Math.round(tt.total), contents: tt.lines.filter(l => l.kind === 'product').map(l => ttItem(l.p, l.qty, l.unit)) }); ttIdentify(CO.phone); }
       clearTimeout(syncT); cartId = newCartId(); contact = null; try { localStorage.setItem('ffm-cart-id', cartId); } catch (e) {}
       S.cart = []; S.appliedPromo = null; saveCart(); schedule();
       if (r.redirect) {

@@ -115,7 +115,7 @@ const h = fn => (req, res) => Promise.resolve().then(() => fn(req, res)).catch(e
 /* ================= Réglages et moyens de paiement ================= */
 const DEFAULT_SETTINGS = {
   shopName: 'foûfoûni-Market', currency: 'FCFA', deliveryFee: 1500, freeFrom: 50000, city: 'Bamako',
-  affDefaultPct: 5, affDiscountPct: 5, affDays: 30, tiktokPixel: 'DBOVIVRC77UASCMHBLD0',
+  affDefaultPct: 5, affDiscountPct: 5, affDays: 30, tiktokPixel: 'DBOVIVRC77UASCMHBLD0', gtmId: 'GTM-WJVTWPWW', metaPixel: '1784224236125858',
   assistantOn: true, assistantName: 'Fanta', assistantInfo: '', relaunchCode: '', relaunchPush: true,
   tagline: 'Le marché, sans les embouteillages.', intro: 'Commandez en ligne, payez par mobile money ou à la livraison, et recevez vos articles chez vous.',
   processors: { orange: { enabled: true }, wave: { enabled: true }, cod: { enabled: true } }
@@ -1078,6 +1078,39 @@ try { INDEX_HTML = fs.readFileSync(path.join(__dirname, 'public', 'index.html'),
 const escH = v => String(v ?? '').replace(/[&<>"']/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
 const plain = n => new Intl.NumberFormat('fr-FR').format(Math.round(n || 0)).replace(/[\u202f\u00a0]/g, ' ');
 const productImage = (id, p) => (p && /^data:image\//.test(p.image || '')) ? `${BASE_URL}/img/p/${encodeURIComponent(id)}` : `${BASE_URL}/og-image.jpg`;
+/* Google Tag Manager : balise placée juste après <head> sur chaque page (identifiant réglable dans Gestion › Société) */
+function gtmTag(id) {
+  id = String(id || '').trim().toUpperCase();
+  if (!/^GTM-[A-Z0-9]{4,12}$/.test(id)) return '';
+  return `<script async src="https://www.googletagmanager.com/gtm.js?id=${id}"></script>
+<script>
+  window.dataLayer = window.dataLayer || [];
+  function gtag(){dataLayer.push(arguments);}
+  gtag('js', new Date());
+</script>`;
+}
+/* Pixel Meta (Facebook, Instagram) : code officiel placé dans l'en-tête de chaque page (identifiant réglable dans Gestion › Société) */
+function metaPixel(id) {
+  id = String(id || '').trim();
+  if (!/^\d{10,20}$/.test(id)) return '';
+  return `<!-- Meta Pixel Code -->
+<script>
+!function(f,b,e,v,n,t,s)
+{if(f.fbq)return;n=f.fbq=function(){n.callMethod?
+n.callMethod.apply(n,arguments):n.queue.push(arguments)};
+if(!f._fbq)f._fbq=n;n.push=n;n.loaded=!0;n.version='2.0';
+n.queue=[];t=b.createElement(e);t.async=!0;
+t.src=v;s=b.getElementsByTagName(e)[0];
+s.parentNode.insertBefore(t,s)}(window, document,'script',
+'https://connect.facebook.net/en_US/fbevents.js');
+fbq('init', '${id}');
+fbq('track', 'PageView');
+</script>
+<noscript><img height="1" width="1" style="display:none"
+src="https://www.facebook.com/tr?id=${id}&ev=PageView&noscript=1"
+/></noscript>
+<!-- End Meta Pixel Code -->`;
+}
 /* Pixel TikTok : code officiel placé dans l'en-tête de chaque page (identifiant réglable dans Gestion › Société) */
 function tiktokPixel(id) {
   id = String(id || '').trim().toUpperCase();
@@ -1113,7 +1146,7 @@ function sendPage(req, res) {
     ['name', 'twitter:card', 'summary_large_image'], ['name', 'twitter:title', title], ['name', 'twitter:description', desc], ['name', 'twitter:image', img]
   ].map(([k, n, v]) => `<meta ${k}="${n}" content="${escH(v)}">`).join('\n');
   res.set({ 'Content-Type': 'text/html; charset=utf-8', 'Cache-Control': 'no-cache' })
-    .send(INDEX_HTML.replace(/<title>[^<]*<\/title>/, `<title>${escH(title)}</title>\n<link rel="canonical" href="${escH(url)}">\n${meta}\n${tiktokPixel(s.tiktokPixel)}`));
+    .send(INDEX_HTML.replace(/<head>/i, '<head>\n' + gtmTag(s.gtmId)).replace(/<title>[^<]*<\/title>/, `<title>${escH(title)}</title>\n<link rel="canonical" href="${escH(url)}">\n${meta}\n${tiktokPixel(s.tiktokPixel)}\n${metaPixel(s.metaPixel)}`));
 }
 app.get(['/', '/index.html'], sendPage);
 app.get('/img/p/:id', (req, res) => {

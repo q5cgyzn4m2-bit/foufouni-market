@@ -238,3 +238,10 @@ Nom commercial, sous-titre de l'en-tête, raison sociale, forme juridique, capit
 - Le **pixel TikTok** (code officiel) est placé dans l'en-tête de chaque page servie par Render. Identifiant par défaut : `DBOVIVRC77UASCMHBLD0`, modifiable ou désactivable dans Gestion › Société › Suivi publicitaire.
 - Événements envoyés : `ViewContent` (fiche ou page de vente), `AddToCart`, `InitiateCheckout`, `PlaceAnOrder` (avec le montant), `CompletePayment` (après un paiement Wave ou Orange Money confirmé), et `identify` avec le numéro de téléphone **haché** (SHA-256) pour améliorer la mesure des publicités.
 - **Pop-up d'installation** : proposé automatiquement aux clients sur téléphone, 7 secondes après l'arrivée, au plus une fois par semaine, avec « Plus tard » et « Ne plus afficher ». Le guide reste accessible en bas de page.
+
+
+## Google Tag Manager et pixel Meta
+
+- **Google Tag Manager** (`GTM-WJVTWPWW`) : balise placée juste après `<head>` sur chaque page. Les étapes d'achat sont poussées dans le `dataLayer` au format Google Analytics 4 : `view_item`, `add_to_cart`, `begin_checkout`, `purchase` (avec `transaction_id` = numéro de commande), `payment_confirmed`.
+- **Pixel Meta** (`1784224236125858`, code officiel avec `noscript`) dans l'en-tête : `PageView`, `ViewContent`, `AddToCart`, `InitiateCheckout`, `Purchase` (montant en XOF, identifiants produits, `eventID` = numéro de commande pour éviter les doublons).
+- Les trois identifiants (GTM, Meta, TikTok) se modifient ou se désactivent dans Gestion › Société › Suivi publicitaire.

@@ -723,6 +723,8 @@ function render(){
   if(S.view==='admin' && S.tab==='team') resolveNames();
   if(S.view==='admin' && S.tab==='studio') setTimeout(studioRender, 0);
   if(!S._deep && S.ready && S.products.length && window.__ffmCat){ const c = window.__ffmCat; if(['Tout','Soldes','Nouveautés','Occasion','Lots'].includes(c) || S.products.some(p=>p.category===c)){ S.cat = c; setTimeout(()=>$('#catalogue')?.scrollIntoView({behavior:'smooth'}), 400); } window.__ffmCat = null; }
+  if((S.view==='product' || S.view==='landing') && S._vc !== S.view+S.pid){ S._vc = S.view+S.pid; const pp = S.products.find(x=>x.id===S.pid); if(pp) ttTrack('ViewContent', {contents:[ttItem(pp)], value:Math.round(pp.price)}); }
+  if(S.view!=='product' && S.view!=='landing') S._vc = '';
   if(S.view==='landing') setTimeout(lpAfterRender, 0);
   if(S.view==='admin' && S.tab==='company') setTimeout(()=>{ companyPreview(); document.querySelectorAll('[data-co]').forEach(i=>{ if(!i.dataset.on){ i.dataset.on='1'; i.addEventListener('input', companyPreview); } }); }, 0);
   { const rs = $('#recv-scan'); if(rs && !rs.dataset.on){ rs.dataset.on='1'; rs.onkeydown = e=>{ if(e.key==='Enter'){ e.preventDefault(); const v = rs.value.trim(); rs.value=''; if(v) recvScan(v); setTimeout(()=>$('#recv-scan')?.focus(), 30); } }; } }
@@ -1361,7 +1363,7 @@ function installGuide(tab, popup){
 /* --- Partage et visuels --- */
 const productLink = p => shopUrl() + '?p=' + encodeURIComponent(p.id);
 const landingLink = (p, src) => shopUrl() + '?lp=' + encodeURIComponent(p.id) + (src ? '&src='+src : '');
-function openLanding(id){ { const pp = S.products.find(x=>x.id===id); if(pp) ttTrack('ViewContent', {contents:[ttItem(pp)], value:Math.round(pp.price)}); } closeAll(); S.view='landing'; S.pid=id; S.pqty=1; try{ history.pushState({lp:id}, '', '?lp='+encodeURIComponent(id)); }catch(e){} schedule(); window.scrollTo(0,0); }
+function openLanding(id){ closeAll(); S.view='landing'; S.pid=id; S.pqty=1; try{ history.pushState({lp:id}, '', '?lp='+encodeURIComponent(id)); }catch(e){} schedule(); window.scrollTo(0,0); }
 const lpBlocks = t => String(t||'').split(/\n\s*\n/).map(b=>b.trim()).filter(Boolean);
 function lpFaq(p){
   const own = lpBlocks(p.lpFaq).map(b=>{ const [q, ...r] = b.split('\n'); return [q.trim(), r.join(' ').trim()]; }).filter(x=>x[0]&&x[1]);
@@ -1734,7 +1736,6 @@ function loadExtras(ids){
 function galleryFor(p){ const out = p.image ? [p.image] : []; loadExtras(p.gallery); (p.gallery||[]).forEach(id=>{ const src = extraSrc(id); if(src) out.push(src); }); return out; }
 const lines = t => String(t||'').split(/\r?\n/).map(x=>x.trim()).filter(Boolean);
 function openProduct(id){
-  { const pp = S.products.find(x=>x.id===id); if(pp) ttTrack('ViewContent', {contents:[ttItem(pp)], value:Math.round(pp.price)}); }
   const p = S.products.find(x=>x.id===id); if(!p) return;
   closeAll(); S.view = 'product'; S.pid = id; S.pqty = 1;
   try{ history.pushState({p:id}, '', '?p='+encodeURIComponent(id)); }catch(e){}
@@ -1848,7 +1849,14 @@ function stockIssue(cart){
   return null;
 }
 /* --- Pixel TikTok : événements d'achat (le pixel est chargé par le serveur dans l'en-tête) --- */
-function ttTrack(ev, data){ try{ if(window.ttq && typeof window.ttq.track==='function') window.ttq.track(ev, Object.assign({currency:'XOF'}, data||{})); }catch(e){} }
+const FB_EV = {ViewContent:'ViewContent', AddToCart:'AddToCart', InitiateCheckout:'InitiateCheckout', PlaceAnOrder:'Purchase'};
+const GA_EV = {ViewContent:'view_item', AddToCart:'add_to_cart', InitiateCheckout:'begin_checkout', PlaceAnOrder:'purchase', CompletePayment:'payment_confirmed'};
+function ttTrack(ev, data){
+  try{ if(window.ttq && typeof window.ttq.track==='function') window.ttq.track(ev, Object.assign({currency:'XOF'}, data||{})); }catch(e){}
+  try{ if(typeof window.fbq==='function' && FB_EV[ev]){ const d = data||{}, cs = d.contents||[];
+    window.fbq('track', FB_EV[ev], {currency:'XOF', value:d.value||0, content_type:'product', content_ids:cs.map(c=>c.content_id), contents:cs.map(c=>({id:c.content_id, quantity:c.quantity||1, item_price:c.price||0})), num_items:cs.reduce((t,c)=>t+(c.quantity||1),0), ...(cs.length===1?{content_name:cs[0].content_name, content_category:cs[0].content_category||''}:{})}, d.transaction_id?{eventID:'order-'+d.transaction_id}:undefined); } }catch(e){}
+  try{ if(window.dataLayer && GA_EV[ev]){ const d = data||{}; window.dataLayer.push({ecommerce:null});
+    window.dataLayer.push({event:GA_EV[ev], ecommerce:{currency:'XOF', value:d.value||0, ...(d.transaction_id?{transaction_id:d.transaction_id}:{}), items:(d.contents||[]).map(c=>({item_id:c.content_id, item_name:c.content_name, item_category:c.content_category||'', price:c.price||0, quantity:c.quantity||1}))}}); } }catch(e){} }
 const ttItem = (p, qty, price) => ({content_id:String(p.id), content_type:'product', content_name:p.name, content_category:p.category||'', quantity:qty||1, price:Math.round(price!=null?price:p.price)});
 async function ttIdentify(phone){ try{ if(!window.ttq || !crypto.subtle) return; const ph = intlPhone(phone); if(!ph) return; const h = await crypto.subtle.digest('SHA-256', new TextEncoder().encode(ph)); window.ttq.identify({phone_number:[...new Uint8Array(h)].map(b=>b.toString(16).padStart(2,'0')).join('')}); }catch(e){} }
 function addLine(target, match, make, label){
@@ -2075,7 +2083,7 @@ async function coNext(){
     };
     try{ await put('orders', id, order); }catch(e){ dbErr(e); payFail('La commande n’a pas pu être enregistrée. Vérifiez votre accès puis réessayez.'); return; }
     S.cart=[]; S.appliedPromo=null; saveCart(); schedule();
-    ttTrack('PlaceAnOrder', {value:Math.round(t.total), contents:t.lines.filter(l=>l.kind==='product').map(l=>ttItem(l.p, l.qty, l.unit))}); ttIdentify(CO.phone);
+    ttTrack('PlaceAnOrder', {transaction_id:id, value:Math.round(t.total), contents:t.lines.filter(l=>l.kind==='product').map(l=>ttItem(l.p, l.qty, l.unit))}); ttIdentify(CO.phone);
     showReceipt({id,...order}, true);
   });
 }
@@ -3260,8 +3268,10 @@ function paneCompany(){
    <div class="panel"><h3>Pays de livraison</h3><p class="muted small" style="margin:0 0 10px">Les drapeaux cochés s’affichent dans la boutique, et le client choisit son pays à la commande.</p>
     <div style="display:grid;grid-template-columns:repeat(auto-fill,minmax(150px,1fr));gap:8px">${Object.entries(WA).map(([c,n])=>`<label style="display:flex;align-items:center;gap:8px;padding:6px 8px;border:1px solid var(--line);border-radius:10px;font-size:14px"><input type="checkbox" data-ship="${c}" ${(st.shipCountries||[]).includes(c)?'checked':''}><span style="width:30px;display:inline-block">${flagSVG(c).replace('<svg ','<svg style="width:30px;height:20px;border-radius:3px;display:block" ')}</span>${esc(n)}</label>`).join('')}</div></div>
    <div class="panel"><h3>Reçus</h3>${f('receiptNote')}</div>
-   <div class="panel"><h3>Suivi publicitaire</h3><div class="field"><label for="co-tiktokPixel">Identifiant du pixel TikTok</label><input class="input" id="co-tiktokPixel" data-co="tiktokPixel" value="${esc(st.tiktokPixel||'')}" placeholder="ex. DBOVIVRC77UASCMHBLD0" style="font-family:monospace"></div>
-    <p class="muted small" style="margin:0">Le pixel est placé dans l’en-tête de toutes les pages (version Render). Il mesure les visites, les produits vus, les ajouts au panier, les débuts de commande et les commandes passées, pour vos publicités TikTok. Laissez vide pour le désactiver.</p></div></div>
+   <div class="panel"><h3>Suivi publicitaire</h3><div class="field"><label for="co-gtmId">Google Tag Manager</label><input class="input" id="co-gtmId" data-co="gtmId" value="${esc(st.gtmId||'')}" placeholder="ex. GTM-WJVTWPWW" style="font-family:monospace"></div>
+    <div class="field"><label for="co-metaPixel">Identifiant du pixel Meta (Facebook, Instagram)</label><input class="input" id="co-metaPixel" data-co="metaPixel" inputmode="numeric" value="${esc(st.metaPixel||'')}" placeholder="ex. 1784224236125858" style="font-family:monospace"></div>
+    <div class="field"><label for="co-tiktokPixel">Identifiant du pixel TikTok</label><input class="input" id="co-tiktokPixel" data-co="tiktokPixel" value="${esc(st.tiktokPixel||'')}" placeholder="ex. DBOVIVRC77UASCMHBLD0" style="font-family:monospace"></div>
+    <p class="muted small" style="margin:0">La balise Google Tag Manager, le pixel Meta et le pixel TikTok sont placés dans l’en-tête de toutes les pages (version Render). Ils mesurent les visites, les produits vus, les ajouts au panier, les débuts de commande et les commandes. Laissez un champ vide pour le désactiver.</p></div></div>
    <div style="flex:2 1 300px;position:sticky;top:80px"><div class="panel"><h3>Aperçu</h3><div id="co-prev"></div></div></div></div>`;
 }
 function companyPreview(){
@@ -3276,6 +3286,8 @@ async function saveCompany(){
   const s2 = structuredClone(S.settings); document.querySelectorAll('[data-co]').forEach(i=>s2[i.dataset.co]=i.value.trim());
   const ship = [...document.querySelectorAll('[data-ship]')].filter(i=>i.checked).map(i=>i.dataset.ship); if(document.querySelector('[data-ship]')) s2.shipCountries = ship.length ? ship : ['ML'];
   if(!s2.shopName) return toast('Le nom commercial est obligatoire.');
+  s2.metaPixel = String(s2.metaPixel||'').replace(/\s/g,''); if(s2.metaPixel && !/^\d{10,20}$/.test(s2.metaPixel)) return toast('Identifiant de pixel Meta invalide (uniquement des chiffres).');
+  s2.gtmId = String(s2.gtmId||'').toUpperCase().replace(/\s/g,''); if(s2.gtmId && !/^GTM-[A-Z0-9]{4,12}$/.test(s2.gtmId)) return toast('Identifiant Google Tag Manager invalide (format GTM-XXXXXXX).');
   s2.tiktokPixel = String(s2.tiktokPixel||'').toUpperCase().replace(/\s/g,''); if(s2.tiktokPixel && !/^[A-Z0-9]{10,30}$/.test(s2.tiktokPixel)) return toast('Identifiant de pixel TikTok invalide.');
   if(s2.email && !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(s2.email)) return toast('L’adresse e-mail ne semble pas valide.');
   for(const k of ['phone','phone2','whatsapp']) if(s2[k] && !phoneOk(s2[k])) return toast('Numéro de téléphone invalide : '+s2[k]);
