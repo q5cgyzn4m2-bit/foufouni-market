@@ -317,6 +317,7 @@
         delivery: CO.delivery, method: CO.method, cartId, ref: refCode(), source: srcCode(), campaign: cmpCode()
       });
       addMine(r.id, r.token); syncAlerts();
+      { const tt = computeTotals(S.cart, S.appliedPromo, CO.delivery); ttTrack('PlaceAnOrder', { value: Math.round(tt.total), contents: tt.lines.filter(l => l.kind === 'product').map(l => ttItem(l.p, l.qty, l.unit)) }); ttIdentify(CO.phone); }
       clearTimeout(syncT); cartId = newCartId(); contact = null; try { localStorage.setItem('ffm-cart-id', cartId); } catch (e) {}
       S.cart = []; S.appliedPromo = null; saveCart(); schedule();
       if (r.redirect) {
@@ -339,6 +340,7 @@
       if (o.status !== 'en_attente') {
         load();
         if (o.status === 'annulee') return payFail(`Le paiement n’a pas abouti (${o.payment.status}). Votre panier n’a pas été débité ; vous pouvez repasser commande.`);
+        ttTrack('CompletePayment', { value: Math.round(o.total || 0), contents: (o.items || []).filter(i => !i.bundle).map(i => ({ content_id: String(i.id), content_type: 'product', content_name: i.name, quantity: i.qty, price: i.price })) });
         return showReceipt(o, true);
       }
       if (q.get('err') && Date.now() > end - 110000) return payFail('Le paiement a été annulé. Vous pouvez repasser commande quand vous voulez.');

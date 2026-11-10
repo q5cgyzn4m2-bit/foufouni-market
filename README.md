@@ -231,3 +231,10 @@ Nom commercial, sous-titre de l'en-tête, raison sociale, forme juridique, capit
 - **Drapeaux** des pays livrés (16 pays d'Afrique de l'Ouest par défaut, à cocher dans Gestion › Société › Pays de livraison), en bande défilante sur l'accueil. Le client choisit son pays à la commande ; hors Mali, un message indique que le délai et les frais d'envoi sont confirmés par WhatsApp.
 - **Guide d'installation** (bandeau sur l'accueil, bouton en pied de page) : étapes illustrées pour iPhone (Safari › Partager › Sur l'écran d'accueil) et Android (Chrome › ⋮ › Installer l'application), avec bouton « Installer maintenant » quand Android le permet.
 - **Paiement** : cartes animées Orange Money, Wave, Moov Money et paiement à la livraison ; impossible de continuer sans choisir. Sans clé API, un opérateur activé avec un **numéro marchand** (Gestion › Paiements) fonctionne en **transfert manuel** : le client envoie le montant au numéro affiché, saisit la référence de la transaction, et la commande arrive « à vérifier » avec une notification. Passez-la en « Payée » après vérification.
+
+
+## Pixel TikTok et pop-up d'installation
+
+- Le **pixel TikTok** (code officiel) est placé dans l'en-tête de chaque page servie par Render. Identifiant par défaut : `DBOVIVRC77UASCMHBLD0`, modifiable ou désactivable dans Gestion › Société › Suivi publicitaire.
+- Événements envoyés : `ViewContent` (fiche ou page de vente), `AddToCart`, `InitiateCheckout`, `PlaceAnOrder` (avec le montant), `CompletePayment` (après un paiement Wave ou Orange Money confirmé), et `identify` avec le numéro de téléphone **haché** (SHA-256) pour améliorer la mesure des publicités.
+- **Pop-up d'installation** : proposé automatiquement aux clients sur téléphone, 7 secondes après l'arrivée, au plus une fois par semaine, avec « Plus tard » et « Ne plus afficher ». Le guide reste accessible en bas de page.

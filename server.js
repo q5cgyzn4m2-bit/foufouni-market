@@ -115,7 +115,7 @@ const h = fn => (req, res) => Promise.resolve().then(() => fn(req, res)).catch(e
 /* ================= Réglages et moyens de paiement ================= */
 const DEFAULT_SETTINGS = {
   shopName: 'foûfoûni-Market', currency: 'FCFA', deliveryFee: 1500, freeFrom: 50000, city: 'Bamako',
-  affDefaultPct: 5, affDiscountPct: 5, affDays: 30,
+  affDefaultPct: 5, affDiscountPct: 5, affDays: 30, tiktokPixel: 'DBOVIVRC77UASCMHBLD0',
   assistantOn: true, assistantName: 'Fanta', assistantInfo: '', relaunchCode: '', relaunchPush: true,
   tagline: 'Le marché, sans les embouteillages.', intro: 'Commandez en ligne, payez par mobile money ou à la livraison, et recevez vos articles chez vous.',
   processors: { orange: { enabled: true }, wave: { enabled: true }, cod: { enabled: true } }
@@ -1078,6 +1078,24 @@ try { INDEX_HTML = fs.readFileSync(path.join(__dirname, 'public', 'index.html'),
 const escH = v => String(v ?? '').replace(/[&<>"']/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
 const plain = n => new Intl.NumberFormat('fr-FR').format(Math.round(n || 0)).replace(/[\u202f\u00a0]/g, ' ');
 const productImage = (id, p) => (p && /^data:image\//.test(p.image || '')) ? `${BASE_URL}/img/p/${encodeURIComponent(id)}` : `${BASE_URL}/og-image.jpg`;
+/* Pixel TikTok : code officiel placé dans l'en-tête de chaque page (identifiant réglable dans Gestion › Société) */
+function tiktokPixel(id) {
+  id = String(id || '').trim().toUpperCase();
+  if (!/^[A-Z0-9]{10,30}$/.test(id)) return '';
+  return `<!-- TikTok Pixel Code Start -->
+<script>
+!function (w, d, t) {
+  w.TiktokAnalyticsObject=t;var ttq=w[t]=w[t]||[];ttq.methods=["page","track","identify","instances","debug","on","off","once","ready","alias","group","enableCookie","disableCookie","holdConsent","revokeConsent","grantConsent"],ttq.setAndDefer=function(t,e){t[e]=function(){t.push([e].concat(Array.prototype.slice.call(arguments,0)))}};for(var i=0;i<ttq.methods.length;i++)ttq.setAndDefer(ttq,ttq.methods[i]);ttq.instance=function(t){for(
+var e=ttq._i[t]||[],n=0;n<ttq.methods.length;n++)ttq.setAndDefer(e,ttq.methods[n]);return e},ttq.load=function(e,n){var r="https://analytics.tiktok.com/i18n/pixel/events.js",o=n&&n.partner;ttq._i=ttq._i||{},ttq._i[e]=[],ttq._i[e]._u=r,ttq._t=ttq._t||{},ttq._t[e]=+new Date,ttq._o=ttq._o||{},ttq._o[e]=n||{};n=document.createElement("script")
+;n.type="text/javascript",n.async=!0,n.src=r+"?sdkid="+e+"&lib="+t;e=document.getElementsByTagName("script")[0];e.parentNode.insertBefore(n,e)};
+
+
+  ttq.load('${id}');
+  ttq.page();
+}(window, document, 'ttq');
+</script>
+<!-- TikTok Pixel Code End -->`;
+}
 function sendPage(req, res) {
   if (!INDEX_HTML) return res.status(500).send('Page introuvable : le dossier public manque sur le serveur.');
   const s = settings(), pid = String(req.query.p || req.query.lp || ''), isLp = !!req.query.lp;
@@ -1095,7 +1113,7 @@ function sendPage(req, res) {
     ['name', 'twitter:card', 'summary_large_image'], ['name', 'twitter:title', title], ['name', 'twitter:description', desc], ['name', 'twitter:image', img]
   ].map(([k, n, v]) => `<meta ${k}="${n}" content="${escH(v)}">`).join('\n');
   res.set({ 'Content-Type': 'text/html; charset=utf-8', 'Cache-Control': 'no-cache' })
-    .send(INDEX_HTML.replace(/<title>[^<]*<\/title>/, `<title>${escH(title)}</title>\n<link rel="canonical" href="${escH(url)}">\n${meta}`));
+    .send(INDEX_HTML.replace(/<title>[^<]*<\/title>/, `<title>${escH(title)}</title>\n<link rel="canonical" href="${escH(url)}">\n${meta}\n${tiktokPixel(s.tiktokPixel)}`));
 }
 app.get(['/', '/index.html'], sendPage);
 app.get('/img/p/:id', (req, res) => {
