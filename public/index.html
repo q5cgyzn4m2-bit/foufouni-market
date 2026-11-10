@@ -1328,19 +1328,26 @@ function flagsBand(){
 let installEvt = null;
 /* Pop-up d'installation : proposée une fois aux clients sur téléphone (puis au plus tous les 7 jours) */
 setTimeout(function instPopup(){
-  try{ if(isStandalone() || S.isAdmin || window.FFM_STAFF || devOS()==='other') return;
+  try{ const force = /[?&]installer=1/.test(location.search);
+    if(force){ try{ history.replaceState(null,'',location.pathname); }catch(e){} return installGuide(null, true); }
+    if(isStandalone() || S.isAdmin || window.FFM_STAFF) return;
     if(S.view!=='shop' || document.querySelector('#overlay .scrim') || document.querySelector('.ai-panel')){ return setTimeout(instPopup, 8000); }
     const last = Number(localStorage.getItem('ffm-inst-pop')||0), never = localStorage.getItem('ffm-inst-never');
     if(never || Date.now()-last < 7*864e5) return;
-    localStorage.setItem('ffm-inst-pop', String(Date.now())); installGuide(null, true); }catch(e){} }, 7000);
+    localStorage.setItem('ffm-inst-pop', String(Date.now())); installGuide(null, true); }catch(e){} }, 5000);
 window.addEventListener('beforeinstallprompt', e=>{ e.preventDefault(); installEvt = e; schedule(); });
 const isStandalone = () => (window.matchMedia && matchMedia('(display-mode: standalone)').matches) || navigator.standalone === true;
 const devOS = () => /iPad|iPhone|iPod/.test(navigator.userAgent) || (navigator.platform==='MacIntel' && navigator.maxTouchPoints>1) ? 'ios' : /Android/i.test(navigator.userAgent) ? 'android' : 'other';
 const shareIco = '<svg viewBox="0 0 24 24" width="24" height="24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 3v12"/><path d="M8 7l4-4 4 4"/><path d="M5 12v7a2 2 0 0 0 2 2h10a2 2 0 0 0 2-2v-7"/></svg>';
 function installGuide(tab, popup){
   window.__instPopup = !!popup || (window.__instPopup && !!tab);
-  tab = tab || (devOS()==='other' ? 'android' : devOS());
-  const st = S.settings, steps = tab==='ios'
+  tab = tab || (devOS()==='other' ? 'pc' : devOS());
+  const st = S.settings, steps = tab==='pc'
+    ? [['Ouvrez la boutique dans <b>Chrome</b> ou <b>Edge</b>','🌐','Sur Mac avec Safari : menu <b>Fichier › Ajouter au Dock</b>.'],
+       ['Cliquez sur l’icône <b>Installer</b> à droite de la barre d’adresse','⊕','Un petit écran avec une flèche, ou le menu ⋮ › « Installer foûfoûni… ».'],
+       ['Confirmez avec <b>« Installer »</b>','✅','L’application s’ouvre dans sa propre fenêtre.'],
+       ['Retrouvez-la sur votre bureau ou dans le menu Démarrer','💻','Comme un logiciel, sans téléchargement lourd.']]
+    : tab==='ios'
     ? [['Ouvrez la boutique dans <b>Safari</b>','🧭','Sur iPhone, l’installation se fait depuis Safari (ou Chrome à partir d’iOS 16.4).'],
        ['Touchez le bouton <b>Partager</b>', shareIco, 'Le carré avec une flèche vers le haut, en bas de l’écran (en haut sur iPad).'],
        ['Faites défiler et choisissez <b>« Sur l’écran d’accueil »</b>','➕','Si vous ne le voyez pas, touchez « Modifier les actions » en bas de la liste.'],
@@ -1354,8 +1361,8 @@ function installGuide(tab, popup){
   $('#overlay').innerHTML = `<div class="scrim" data-a="closeAll"><div class="modal" role="dialog" aria-modal="true" aria-label="Installer l’application"><div class="m-h"><h2>📲 ${window.__instPopup?'Installez notre application':'Installer '+esc(st.shopName)}</h2><button class="x" data-a="closeAll" aria-label="Fermer">×</button></div>
     <div class="m-b">${isStandalone()?'<p style="margin-top:0;color:var(--kola);font-weight:700">✓ L’application est déjà installée sur cet appareil.</p>':''}
     <p class="muted" style="margin-top:0">Gratuit, sans passer par l’App Store ou le Play Store, et ça ne prend presque pas de place.</p>
-    <div class="cats" role="tablist" aria-label="Type de téléphone"><button role="tab" aria-pressed="${tab==='ios'}" data-a="instTab" data-v="ios"> iPhone / iPad</button><button role="tab" aria-pressed="${tab==='android'}" data-a="instTab" data-v="android">🤖 Android</button></div>
-    ${tab==='android'&&installEvt?'<button class="btn primary block" data-a="instNow" style="margin:10px 0 4px;font-size:16px;padding:15px">⬇️ Installer maintenant (1 toucher)</button><p class="muted small" style="text-align:center;margin:0 0 6px">Ou suivez les étapes ci-dessous :</p>':''}
+    <div class="cats" role="tablist" aria-label="Type de téléphone"><button role="tab" aria-pressed="${tab==='ios'}" data-a="instTab" data-v="ios"> iPhone / iPad</button><button role="tab" aria-pressed="${tab==='android'}" data-a="instTab" data-v="android">🤖 Android</button><button role="tab" aria-pressed="${tab==='pc'}" data-a="instTab" data-v="pc">💻 Ordinateur</button></div>
+    ${(tab==='android'||tab==='pc')&&installEvt?'<button class="btn primary block" data-a="instNow" style="margin:10px 0 4px;font-size:16px;padding:15px">⬇️ Installer maintenant (1 toucher)</button><p class="muted small" style="text-align:center;margin:0 0 6px">Ou suivez les étapes ci-dessous :</p>':''}
     <ol class="inst-steps">${steps.map(([t,ic,d])=>`<li><div><b style="font-weight:600">${t}</b><div class="muted small" style="margin-top:3px">${d}</div></div><span class="ic" aria-hidden="true">${ic}</span></li>`).join('')}</ol></div>
     ${window.__instPopup?'<div class="m-f"><button class="btn ghost" data-a="instNever">Ne plus afficher</button><button class="btn primary" data-a="closeAll">Plus tard</button></div>':''}</div></div>`;
 }
