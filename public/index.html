@@ -363,6 +363,10 @@ textarea.input{min-height:84px; resize:vertical}
 .ov .rt{color:#F5C55B}
 .gal-main .ov{left:14px; bottom:14px; flex-direction:row; flex-wrap:wrap; right:auto; max-width:calc(100% - 28px)}
 .gal-main .ov span{font-size:13px; padding:6px 12px}
+.pay-row{display:flex; flex-wrap:wrap; gap:8px; align-items:center; margin-top:8px}
+.pay-row .pl{width:46px; height:32px; border-radius:8px; display:grid; place-items:center; font:800 11px/1 var(--f-b); color:#fff; flex:none; box-shadow:0 2px 6px rgba(0,0,0,.25)}
+.pay-row .pl img{width:100%; height:100%; object-fit:contain}
+.pay-row.big .pl{width:58px; height:40px; border-radius:10px; font-size:13px}
 .empty{border:2px dashed var(--line); border-radius:var(--r-m); padding:48px 20px; text-align:center; color:var(--muted)}
 .empty h3{color:var(--ink); margin-bottom:8px; font-size:20px}
 
@@ -840,7 +844,7 @@ function viewShop(){
   const hero = !S.q ? `<section class="hero"><div class="hero-txt">
       <h1>${esc(st.tagline)}</h1><p>${esc(st.intro)}</p>
       <button class="btn primary" data-a="scroll">Découvrir la collection</button>
-      <div class="trust"><span>Livraison à ${esc(st.city)}</span><span>Offerte dès ${fmt(st.freeFrom)}</span><span>Orange Money, Wave ou à la livraison</span></div>
+      <div class="trust"><span>Livraison à ${esc(st.city)}</span><span>Offerte dès ${fmt(st.freeFrom)}</span><span>Paiement mobile ou à la livraison</span></div>${payRow(true)}
     </div>${feat?`<aside class="vitrine" aria-label="Pièce du moment"><em>La pièce du moment</em>
       <button class="v-img" data-a="product" data-id="${feat.id}" aria-label="Voir ${esc(feat.name)}">${pImg(feat)}</button>
       <h3>${esc(feat.name)}</h3>
@@ -877,7 +881,7 @@ function viewShop(){
         </div>
       </article>`).join('')}</div>`:empty}
     <footer class="shop-foot"><div><span class="fb">${esc(st.shopName)}</span><p style="margin-top:10px">${esc(st.intro)}</p></div>
-      <div><h4>Paiement sécurisé</h4><p>Orange Money, Wave ou en espèces à la réception.</p></div>
+      <div><h4>Paiement sécurisé</h4><p>${esc(enabledProcs().map(([k])=>PROCESSORS[k].name).join(', ')||'En espèces à la réception')}.</p>${payRow(false)}</div>
       <div><h4>Livraison</h4><p>À ${esc(st.city)}, offerte dès ${fmt(st.freeFrom)} d’achat, et partout en Afrique de l’Ouest. Retrait en boutique possible.</p><button class="btn ghost sm" data-a="install" style="margin-top:10px">📲 Installer l’application</button></div>
       <div><h4>Nous contacter</h4><p>${st.phone?`📞 <a href="tel:${esc(st.phone.replace(/\s/g,''))}" style="color:var(--indigo)">${esc(st.phone)}</a>${st.phone2?` · <a href="tel:${esc(st.phone2.replace(/\s/g,''))}" style="color:var(--indigo)">${esc(st.phone2)}</a>`:''}<br>`:''}${st.whatsapp?`💬 <a href="https://wa.me/${waNumber(st.whatsapp)}" target="_blank" rel="noopener" style="color:var(--indigo)">WhatsApp ${esc(st.whatsapp)}</a><br>`:''}${st.email?`✉️ <a href="mailto:${esc(st.email)}" style="color:var(--indigo)">${esc(st.email)}</a><br>`:''}${st.address?`📍 ${esc(st.address)}${st.city?', '+esc(st.city):''}<br>`:''}${st.hours?`🕘 ${esc(st.hours)}`:''}${!st.phone&&!st.whatsapp&&!st.email&&!st.address?'Notre équipe vous répond à la livraison et en boutique.':''}</p></div></footer>
     <p class="foot-note">© ${new Date().getFullYear()} ${esc(st.legalName||st.shopName)}${st.legalForm?' · '+esc(st.legalForm):''}${st.capital?' au capital de '+esc(st.capital):''}${st.rccm?' · RCCM '+esc(st.rccm):''}${st.nif?' · NIF '+esc(st.nif):''}${st.address?' · '+esc(st.address)+(st.city?', '+esc(st.city):''):''}${st.country?' · '+esc(st.country):''}</p>`;
@@ -1566,7 +1570,7 @@ function viewLanding(){
     ${hasVar(p)?optionPicker(p):''}
     ${p.stock>0&&p.stock<=(p.lowStock||5)?`<p class="small" style="color:var(--danger);font-weight:700;margin:12px 0 0">Plus que ${p.stock} en stock</p>`:''}
     ${cta(false)}${parseVideo(p.lpVideo)?'<button class="btn ghost sm" data-a="lpVideoGo" style="margin-top:10px">▶ Voir la vidéo</button>':''}${countdown}
-    <div class="trust-box"><div><span>🚚</span><span><b>Livraison à ${esc(st.city)}</b>${st.freeFrom?`Offerte dès ${fmt(st.freeFrom)}`:fmt(st.deliveryFee)} · retrait en boutique possible</span></div><div><span>💳</span><span><b>Paiement sécurisé</b>${esc(enabledProcs().map(([k])=>PROCESSORS[k].name).join(', ')||'À la livraison')}</span></div>${p.warranty?`<div><span>🛡️</span><span><b>Garantie</b>${esc(p.warranty)}</span></div>`:''}</div>
+    <div class="trust-box"><div><span>🚚</span><span><b>Livraison à ${esc(st.city)}</b>${st.freeFrom?`Offerte dès ${fmt(st.freeFrom)}`:fmt(st.deliveryFee)} · retrait en boutique possible</span></div><div><span>💳</span><span><b>Paiement sécurisé</b>${esc(enabledProcs().map(([k])=>PROCESSORS[k].name).join(', ')||'À la livraison')}${payRow(false)}</span></div>${p.warranty?`<div><span>🛡️</span><span><b>Garantie</b>${esc(p.warranty)}</span></div>`:''}</div>
    </div></section>
   ${videoBlock(p)}
   ${p.lpProblem||p.lpSolution?`<section class="lp-sec"><h2>Pourquoi vous allez l’adorer</h2><div class="ps" style="margin-top:22px">${p.lpProblem?`<div><b style="color:var(--muted)">Le problème</b><p>${esc(p.lpProblem)}</p></div>`:''}${p.lpSolution?`<div><b style="color:var(--indigo)">Notre solution</b><p>${esc(p.lpSolution)}</p></div>`:''}</div></section>`:''}
@@ -1917,7 +1921,7 @@ function viewProduct(){
       ${out?'':`<div class="pdp-buy"><div class="qty big"><button data-a="pdpQty" data-d="-1" aria-label="Moins">−</button><span>${q}</span><button data-a="pdpQty" data-d="1" aria-label="Plus">+</button></div>
         <button class="btn primary" data-a="pdpAdd">Ajouter au panier</button><button class="btn ghost" data-a="pdpBuy">Acheter maintenant</button></div>`}
       <div class="trust-box"><div><span>🚚</span><span><b>Livraison à ${esc(st.city)}</b>${st.freeFrom?`Offerte dès ${fmt(st.freeFrom)} d’achat, sinon ${fmt(st.deliveryFee)}. `:''}Retrait en boutique possible.</span></div>
-        <div><span>💳</span><span><b>Paiement sécurisé</b>${esc(pays.join(', ')||'À la livraison')}</span></div>
+        <div><span>💳</span><span><b>Paiement sécurisé</b>${esc(pays.join(', ')||'À la livraison')}${payRow(false)}</span></div>
         ${p.warranty?`<div><span>🛡️</span><span><b>Garantie et retour</b>${esc(p.warranty)}</span></div>`:''}
         ${st.phone?`<div><span>📞</span><span><b>Une question ?</b><a href="tel:${esc(st.phone.replace(/\s/g,''))}" style="color:var(--indigo)">${esc(st.phone)}</a></span></div>`:''}</div>
       <div class="mini-codes">${qrSVG(payLink(p, hasVar(p)?selVariant(p):null), 64)}<div>${eanSVG(hasVar(p)&&selVariant(p)?vCode(p,selVariant(p)):pCode(p), 150, 50)}<span>Scannez le QR pour payer sur votre téléphone · code produit ${esc(hasVar(p)&&selVariant(p)?vCode(p,selVariant(p)):pCode(p))}</span></div></div>
@@ -2118,7 +2122,7 @@ function openCart(){
   $('#overlay').innerHTML = `<div class="drawer-wrap" data-a="closeAll"><aside class="drawer" role="dialog" aria-modal="true" aria-label="Panier">
     <div class="m-h"><h2>Panier</h2><button class="x" data-a="closeAll" aria-label="Fermer">×</button></div>
     <div class="m-b" id="drawer-body">${cartBody()}</div>
-    <div class="m-f"><button class="btn primary block" data-a="checkout" ${S.cart.length?'':'disabled'}>Passer la commande</button></div></aside></div>`;
+    <div class="m-f" style="flex-direction:column;align-items:stretch">${S.cart.length?`<div class="small muted" style="text-align:center">Payez avec</div><div style="display:flex;justify-content:center">${payRow(false)}</div>`:''}<button class="btn primary block" data-a="checkout" ${S.cart.length?'':'disabled'}>Passer la commande</button></div></aside></div>`;
 }
 async function validatePromo(code, subtotal){
   const c = code.trim().toUpperCase();
@@ -2145,6 +2149,10 @@ function procLogo(k, cls){ const P = PROCESSORS[k], lg = (S.settings.processors[
   return lg ? `<span class="${cls||'pay-logo'}" style="background:#fff;padding:3px;overflow:hidden"><img src="${esc(lg)}" alt="${esc(P.name)}" style="width:100%;height:100%;object-fit:contain"></span>` : `<span class="${cls||'pay-logo'}" style="background:${P.color}">${P.short}</span>`; }
 const logoFile = f => new Promise((ok,ko)=>{ if(!/image\/(png|jpeg|webp)/.test(f.type)) return ko(new Error('Choisissez une image PNG, JPEG ou WebP.'));
   const r = new FileReader(); r.onload = ()=>{ const im = new Image(); im.onload = ()=>{ const k = Math.min(1, 240/Math.max(im.width, im.height)), c = document.createElement('canvas'); c.width = Math.round(im.width*k); c.height = Math.round(im.height*k); c.getContext('2d').drawImage(im,0,0,c.width,c.height); ok(c.toDataURL('image/png')); }; im.onerror = ko; im.src = r.result; }; r.onerror = ko; r.readAsDataURL(f); });
+function payRow(big, withNames){ const ps = enabledProcs().slice().sort((a,b)=>['orange','wave','moov','card','paypal','cod'].indexOf(a[0])-['orange','wave','moov','card','paypal','cod'].indexOf(b[0]));
+  if(!ps.length) return '';
+  return `<div class="pay-row${big?' big':''}" aria-label="Moyens de paiement acceptés">${ps.map(([k])=>{ const P = PROCESSORS[k], lg = (S.settings.processors[k]||{}).logo;
+    return `<span class="pl" title="${esc(P.name)}" style="background:${lg?'#fff':P.color};${lg?'padding:3px':''}">${lg?`<img src="${esc(lg)}" alt="${esc(P.name)}">`:k==='cod'?'💵':esc(P.short)}</span>${withNames?`<span class="small" style="margin-right:8px">${esc(P.name)}</span>`:''}`; }).join('')}</div>`; }
 function enabledProcs(){ return Object.entries(S.settings.processors).filter(([k,v])=>v.enabled && PROCESSORS[k]); }
 function drawCheckout(){
   const t = computeTotals(S.cart, S.appliedPromo, CO.delivery);
