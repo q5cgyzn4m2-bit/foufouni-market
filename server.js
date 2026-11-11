@@ -1287,26 +1287,120 @@ var e=ttq._i[t]||[],n=0;n<ttq.methods.length;n++)ttq.setAndDefer(e,ttq.methods[n
 </script>
 <!-- TikTok Pixel Code End -->`;
 }
+/* ===================== Référencement (SEO) =====================
+   Adresses lisibles, plan du site, robots.txt, données structurées schema.org et contenu HTML lisible sans JavaScript. */
+const slugify = x => String(x || '').normalize('NFD').replace(/[\u0300-\u036f]/g, '').toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-+|-+$/g, '').slice(0, 60) || 'produit';
+const hasLandingS = p => !!(p.lpHook || p.lpProblem || p.lpVideo || (p.angleCaps || []).some(c => c && c.t) || (p.spin || []).length >= 4);
+const productPath = p => `/produit/${slugify(p.name)}--${p.id}`;
+const offerPath = p => `/offre/${slugify(p.name)}--${p.id}`;
+const canonPath = p => hasLandingS(p) ? offerPath(p) : productPath(p);
+const catPath = c => `/categorie/${slugify(c)}`;
+const liveProducts = () => allDocs('products').filter(p => p.active !== false && p.name);
+const pubReviewsS = id => allDocs('reviews').filter(r => r.productId === id && !r.hidden && r.rating);
+const condSchema = c => !c || c === 'neuf' ? 'https://schema.org/NewCondition' : c === 'reconditionne' ? 'https://schema.org/RefurbishedCondition' : 'https://schema.org/UsedCondition';
+const jsonLd = o => `<script type="application/ld+json">${JSON.stringify(o).replace(/</g, '\\u003c')}</script>`;
+const lines2 = t => String(t || '').split('\n').map(x => x.trim()).filter(Boolean);
+
+function seoPage(req) {
+  const s = settings(), q = req.query || {};
+  let kind = 'home', p = null, cat = '', redirect = '';
+  const m = /^\/(produit|offre)\/([^/]*)$/.exec(req.path), mc = /^\/categorie\/([a-z0-9-]+)$/.exec(req.path);
+  if (m) { const id = m[2].split('--').pop(); const f = validId(id) && getDoc('products', id); if (f && f.active !== false) { p = { ...f, id }; kind = m[1] === 'offre' ? 'offer' : 'product'; const good = m[1] === 'offre' ? offerPath(p) : productPath(p); if (req.path !== good) redirect = good; } else kind = 'notfound'; }
+  else if (mc) { const all = [...new Set(liveProducts().map(x => x.category).filter(Boolean))]; cat = all.find(c => slugify(c) === mc[1]) || ''; kind = cat ? 'category' : 'notfound'; }
+  else if (q.p || q.lp) { const id = String(q.lp || q.p), f = validId(id) && getDoc('products', id); if (f && f.active !== false) { p = { ...f, id }; kind = q.lp ? 'offer' : 'product'; } }
+  return { s, kind, p, cat, redirect };
+}
+function ssrMain(pg) {
+  const { s, kind, p, cat } = pg, live = liveProducts(), cats = [...new Set(live.map(x => x.category).filter(Boolean))].sort();
+  const li = x => `<li><a href="${escH(canonPath(x))}">${escH(x.name)}</a> — ${plain(x.price)} FCFA${x.stock > 0 ? '' : ' (rupture)'}</li>`;
+  const wrap = h => `<div class="seo-ssr" style="max-width:900px;margin:0 auto;padding:20px 16px;line-height:1.6">${h}</div>`;
+  if ((kind === 'product' || kind === 'offer') && p) {
+    const img = productImage(p.id, p), hl = lines2(p.highlights), specs = lines2(p.specs), rs = pubReviewsS(p.id);
+    return wrap(`<nav aria-label="Fil d’Ariane"><a href="/">${escH(s.shopName)}</a>${p.category ? ` › <a href="${escH(catPath(p.category))}">${escH(p.category)}</a>` : ''} › ${escH(p.name)}</nav>
+<article><h1>${escH(kind === 'offer' && p.lpHook ? p.lpHook : p.name)}</h1>${kind === 'offer' && p.lpHook ? `<p><strong>${escH(p.name)}</strong></p>` : ''}
+<img src="${escH(img)}" alt="${escH(p.name)}" width="400" height="400" style="max-width:100%;height:auto">
+<p><strong>${plain(p.price)} FCFA</strong>${p.comparePrice > p.price ? ` au lieu de ${plain(p.comparePrice)} FCFA` : ''} · ${p.stock > 0 ? 'En stock' : 'Rupture de stock'}</p>
+${p.description ? `<p>${escH(p.description)}</p>` : ''}${p.lpSub ? `<p>${escH(p.lpSub)}</p>` : ''}${p.lpProblem ? `<p>${escH(p.lpProblem)}</p>` : ''}${p.lpSolution ? `<p>${escH(p.lpSolution)}</p>` : ''}
+${hl.length ? `<h2>Points forts</h2><ul>${hl.map(x => `<li>${escH(x)}</li>`).join('')}</ul>` : ''}
+${lines2(p.details).length ? `<h2>En détail</h2>${lines2(p.details).map(x => `<p>${escH(x)}</p>`).join('')}` : ''}
+${specs.length ? `<h2>Caractéristiques</h2><ul>${specs.map(x => `<li>${escH(x)}</li>`).join('')}</ul>` : ''}
+${p.warranty ? `<p>Garantie : ${escH(p.warranty)}</p>` : ''}
+${rs.length ? `<h2>Avis clients</h2>${rs.slice(0, 5).map(r => `<blockquote>${'★'.repeat(r.rating)} ${escH(r.text || '')} — ${escH(r.name || 'Client')}</blockquote>`).join('')}` : ''}
+<p>Livraison à ${escH(s.city || 'Bamako')} et en Afrique de l’Ouest · Paiement Orange Money, Wave, Moov Money ou à la livraison.</p></article>`);
+  }
+  if (kind === 'category') {
+    const list = live.filter(x => x.category === cat);
+    return wrap(`<nav><a href="/">${escH(s.shopName)}</a> › ${escH(cat)}</nav><h1>${escH(cat)} — ${escH(s.shopName)}</h1>
+<p>${list.length} article${list.length > 1 ? 's' : ''} ${escH(cat.toLowerCase())} à commander en ligne, livrés à ${escH(s.city || 'Bamako')} : paiement mobile money ou à la livraison.</p><ul>${list.map(li).join('')}</ul>
+<p>Autres rayons : ${cats.filter(c => c !== cat).map(c => `<a href="${escH(catPath(c))}">${escH(c)}</a>`).join(' · ')}</p>`);
+  }
+  return wrap(`<h1>${escH(s.shopName)} — ${escH(s.tagline || 'Boutique en ligne')}</h1><p>${escH(s.intro || '')}</p>
+${cats.length ? `<h2>Nos rayons</h2><ul>${cats.map(c => `<li><a href="${escH(catPath(c))}">${escH(c)}</a></li>`).join('')}</ul>` : ''}
+<h2>Nos produits</h2><ul>${live.slice(0, 300).map(li).join('')}</ul>`);
+}
+function seoJson(pg) {
+  const { s, kind, p, cat } = pg, org = { '@type': 'OnlineStore', '@id': BASE_URL + '/#store', name: s.shopName, url: BASE_URL + '/', logo: BASE_URL + '/icon-512.png', image: BASE_URL + '/og-image.jpg',
+    ...(s.phone ? { telephone: s.phone } : {}), ...(s.email ? { email: s.email } : {}), ...(s.legalName ? { legalName: s.legalName } : {}),
+    address: { '@type': 'PostalAddress', ...(s.address ? { streetAddress: s.address } : {}), addressLocality: s.city || 'Bamako', addressCountry: 'ML' } };
+  const out = [];
+  if ((kind === 'product' || kind === 'offer') && p) {
+    const rs = pubReviewsS(p.id), url = BASE_URL + canonPath(p), brand = (lines2(p.specs).find(x => /^marque\s*:/i.test(x)) || '').replace(/^marque\s*:\s*/i, '');
+    const imgs = [productImage(p.id, p), ...(Array.isArray(p.gallery) ? p.gallery.slice(0, 5).map(g => `${BASE_URL}/img/pi/${encodeURIComponent(g)}`) : [])];
+    out.push({ '@context': 'https://schema.org', '@type': 'Product', name: p.name, image: imgs, description: String(p.description || p.lpSub || p.name).slice(0, 500), sku: p.sku || p.id,
+      ...(/^\d{13}$/.test(p.barcode || '') && !String(p.barcode).startsWith('2') ? { gtin13: p.barcode } : {}), ...(brand ? { brand: { '@type': 'Brand', name: brand } } : {}), ...(p.category ? { category: p.category } : {}),
+      offers: { '@type': 'Offer', url, priceCurrency: 'XOF', price: String(Math.round(p.price)), availability: p.stock > 0 ? 'https://schema.org/InStock' : 'https://schema.org/OutOfStock', itemCondition: condSchema(p.condition), seller: { '@id': BASE_URL + '/#store' } },
+      ...(rs.length ? { aggregateRating: { '@type': 'AggregateRating', ratingValue: (rs.reduce((t, r) => t + r.rating, 0) / rs.length).toFixed(1), reviewCount: rs.length },
+        review: rs.slice(0, 5).map(r => ({ '@type': 'Review', author: { '@type': 'Person', name: r.name || 'Client' }, reviewRating: { '@type': 'Rating', ratingValue: r.rating, bestRating: 5 }, ...(r.text ? { reviewBody: String(r.text).slice(0, 500) } : {}), ...(r.createdAt ? { datePublished: new Date(r.createdAt).toISOString().slice(0, 10) } : {}) })) } : {}) });
+    out.push({ '@context': 'https://schema.org', '@type': 'BreadcrumbList', itemListElement: [{ '@type': 'ListItem', position: 1, name: s.shopName, item: BASE_URL + '/' }, ...(p.category ? [{ '@type': 'ListItem', position: 2, name: p.category, item: BASE_URL + catPath(p.category) }] : []), { '@type': 'ListItem', position: p.category ? 3 : 2, name: p.name, item: url }] });
+  } else if (kind === 'category') {
+    const list = liveProducts().filter(x => x.category === cat);
+    out.push({ '@context': 'https://schema.org', '@type': 'CollectionPage', name: `${cat} — ${s.shopName}`, url: BASE_URL + catPath(cat), mainEntity: { '@type': 'ItemList', itemListElement: list.slice(0, 100).map((x, i) => ({ '@type': 'ListItem', position: i + 1, url: BASE_URL + canonPath(x), name: x.name })) } });
+  } else {
+    out.push({ '@context': 'https://schema.org', ...org });
+    out.push({ '@context': 'https://schema.org', '@type': 'WebSite', name: s.shopName, url: BASE_URL + '/', inLanguage: 'fr' });
+  }
+  return out.map(jsonLd).join('\n');
+}
 function sendPage(req, res) {
   if (!INDEX_HTML) return res.status(500).send('Page introuvable : le dossier public manque sur le serveur.');
-  const s = settings(), pid = String(req.query.p || req.query.lp || ''), isLp = !!req.query.lp;
-  const found = validId(pid) ? getDoc('products', pid) : null, p = found && found.active !== false ? found : null;
-  const title = p ? `${isLp && p.lpHook ? p.lpHook : p.name} — ${plain(p.price)} FCFA | ${s.shopName}` : `${s.shopName} — ${s.tagline || 'Boutique en ligne'}`;
-  const desc = p
-    ? `${p.condition && p.condition !== 'neuf' ? `Occasion · ${({ comme_neuf: 'Comme neuf', tres_bon: 'Très bon état', bon: 'Bon état', correct: 'État correct', reconditionne: 'Reconditionné' })[p.condition] || 'Occasion'}. ` : ''}${p.comparePrice > p.price ? `Promo : ${plain(p.price)} FCFA au lieu de ${plain(p.comparePrice)} FCFA. ` : ''}${p.description || p.category || ''} Commandez chez ${s.shopName} : mobile money ou paiement à la livraison.`.replace(/\s+/g, ' ').trim()
-    : (s.intro || 'Commandez en ligne, payez par mobile money ou à la livraison.');
-  const img = p ? productImage(pid, p) : `${BASE_URL}/og-image.jpg`, url = p ? `${BASE_URL}/?${isLp ? 'lp' : 'p'}=${encodeURIComponent(pid)}` : `${BASE_URL}/`;
+  const pg = seoPage(req);
+  if (pg.redirect) return res.redirect(301, pg.redirect + (req.originalUrl.includes('?') ? req.originalUrl.slice(req.originalUrl.indexOf('?')) : ''));
+  const { s, kind, p, cat } = pg, isLp = kind === 'offer';
+  const title = p ? `${isLp && p.lpHook ? p.lpHook : p.name} — ${plain(p.price)} FCFA | ${s.shopName}` : kind === 'category' ? `${cat} : achat en ligne à ${s.city || 'Bamako'} | ${s.shopName}` : kind === 'notfound' ? `Page introuvable | ${s.shopName}` : `${s.shopName} — ${s.tagline || 'Boutique en ligne'}`;
+  const desc = (p
+    ? `${p.condition && p.condition !== 'neuf' ? `Occasion · ${({ comme_neuf: 'Comme neuf', tres_bon: 'Très bon état', bon: 'Bon état', correct: 'État correct', reconditionne: 'Reconditionné' })[p.condition] || 'Occasion'}. ` : ''}${p.comparePrice > p.price ? `Promo : ${plain(p.price)} FCFA au lieu de ${plain(p.comparePrice)} FCFA. ` : `${plain(p.price)} FCFA. `}${p.lpSub || p.description || p.category || ''} Livraison à ${s.city || 'Bamako'}, paiement mobile money ou à la livraison.`
+    : kind === 'category' ? `Achetez ${cat.toLowerCase()} en ligne chez ${s.shopName} : livraison à ${s.city || 'Bamako'} et en Afrique de l’Ouest, paiement Orange Money, Wave ou à la livraison.`
+    : (s.intro || 'Commandez en ligne, payez par mobile money ou à la livraison.')).replace(/\s+/g, ' ').trim().slice(0, 300);
+  const img = p ? productImage(p.id, p) : `${BASE_URL}/og-image.jpg`;
+  const url = p ? BASE_URL + canonPath(p) : kind === 'category' ? BASE_URL + catPath(cat) : `${BASE_URL}/`;
+  const noindex = kind === 'notfound' || ['espace', 'livreur', 'payer', 'livre', 'installer', 'pay'].some(k => req.query[k]);
   const meta = [
-    ['name', 'description', desc], ['property', 'og:type', p ? 'product' : 'website'], ['property', 'og:site_name', s.shopName], ['property', 'og:locale', 'fr_FR'],
+    ...(/^[A-Za-z0-9_-]{20,80}$/.test(s.googleVerify || '') ? [['name', 'google-site-verification', s.googleVerify]] : []),
+    ['name', 'description', desc], ['name', 'robots', noindex ? 'noindex, follow' : 'index, follow, max-image-preview:large'], ['property', 'og:type', p ? 'product' : 'website'], ['property', 'og:site_name', s.shopName], ['property', 'og:locale', 'fr_FR'],
     ['property', 'og:title', title], ['property', 'og:description', desc], ['property', 'og:url', url], ['property', 'og:image', img],
     ...(img.endsWith('/og-image.jpg') ? [['property', 'og:image:width', '1200'], ['property', 'og:image:height', '630']] : []),
     ...(p ? [['property', 'product:price:amount', String(Math.round(p.price))], ['property', 'product:price:currency', 'XOF']] : []),
     ['name', 'twitter:card', 'summary_large_image'], ['name', 'twitter:title', title], ['name', 'twitter:description', desc], ['name', 'twitter:image', img]
   ].map(([k, n, v]) => `<meta ${k}="${n}" content="${escH(v)}">`).join('\n');
-  res.set({ 'Content-Type': 'text/html; charset=utf-8', 'Cache-Control': 'no-cache' })
-    .send(INDEX_HTML.replace(/<head>/i, '<head>\n' + gtmTag(s.gtmId)).replace(/<title>[^<]*<\/title>/, `<title>${escH(title)}</title>\n<link rel="canonical" href="${escH(url)}">\n${meta}\n${tiktokPixel(s.tiktokPixel)}\n${metaPixel(s.metaPixel)}`));
+  const html = INDEX_HTML.replace(/<head>/i, '<head>\n' + gtmTag(s.gtmId))
+    .replace(/<title>[^<]*<\/title>/, `<title>${escH(title)}</title>\n<link rel="canonical" href="${escH(url)}">\n${meta}\n${seoJson(pg)}\n${tiktokPixel(s.tiktokPixel)}\n${metaPixel(s.metaPixel)}`)
+    .replace(/<main id="main"([^>]*)>[\s\S]*?<\/main>/, (m0, attrs) => `<main id="main"${attrs}>${ssrMain(pg)}</main>`);
+  res.status(kind === 'notfound' ? 404 : 200).set({ 'Content-Type': 'text/html; charset=utf-8', 'Cache-Control': 'no-cache' }).send(html);
 }
 app.get(['/', '/index.html'], sendPage);
+app.get(['/produit/:slug', '/offre/:slug', '/categorie/:slug'], sendPage);
+app.get('/robots.txt', (req, res) => {
+  res.type('text/plain').set('Cache-Control', 'public, max-age=3600').send(`User-agent: *\nAllow: /\nDisallow: /api/\nDisallow: /*?espace=\nDisallow: /*?livreur=\nDisallow: /*?payer=\nDisallow: /*?livre=\nDisallow: /*?pay=\n\nSitemap: ${BASE_URL}/sitemap.xml\n`);
+});
+app.get('/sitemap.xml', (req, res) => {
+  const live = liveProducts(), cats = [...new Set(live.map(x => x.category).filter(Boolean))].sort();
+  const d = t => new Date(t || Date.now()).toISOString().slice(0, 10), x = v => String(v).replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;');
+  const last = live.reduce((t, p) => Math.max(t, p.updatedAt || p.createdAt || 0), 0);
+  const urls = [`<url><loc>${x(BASE_URL + '/')}</loc><lastmod>${d(last)}</lastmod><changefreq>daily</changefreq><priority>1.0</priority></url>`,
+    ...cats.map(c => `<url><loc>${x(BASE_URL + catPath(c))}</loc><lastmod>${d(last)}</lastmod><changefreq>daily</changefreq><priority>0.7</priority></url>`),
+    ...live.map(p => `<url><loc>${x(BASE_URL + canonPath(p))}</loc><lastmod>${d(p.updatedAt || p.createdAt)}</lastmod><changefreq>weekly</changefreq><priority>0.8</priority><image:image><image:loc>${x(productImage(p.id, p))}</image:loc><image:title>${x(p.name)}</image:title></image:image></url>`)];
+  res.type('application/xml').set('Cache-Control', 'public, max-age=900').send(`<?xml version="1.0" encoding="UTF-8"?>\n<urlset xmlns="http://www.sitemaps.org/schemas/sitemap/0.9" xmlns:image="http://www.google.com/schemas/sitemap-image/1.1">\n${urls.join('\n')}\n</urlset>\n`);
+});
 app.get('/img/p/:id', (req, res) => {
   const p = validId(req.params.id) && getDoc('products', req.params.id);
   const m = p && /^data:(image\/[a-z+.-]+);base64,(.+)$/i.exec(p.image || '');

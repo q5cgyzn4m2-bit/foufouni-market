@@ -763,9 +763,10 @@ function render(){
     else if(ord){ S._payDeep = true; const tk = q.get('t')||''; setTimeout(()=>openPayOrder(ord, tk), 80); }
     else if(q && q.get('livre')){ S._payDeep = true; const lid = q.get('livre'), tk = q.get('t')||''; try{ history.replaceState(null,'',location.pathname); }catch(e){}
       setTimeout(async ()=>{ let o = null; try{ o = window.orderStatus ? await window.orderStatus(lid, tk) : S.orders.find(x=>x.id===lid); }catch(e){} if(o){ o.token = o.token || tk; showReceipt(o); } else toast('Commande introuvable.'); }, 80); } }
-  if(!S._deep && S.ready && S.products.length){ let lid=''; try{ lid = new URLSearchParams(location.search).get('lp')||''; }catch(e){}
+  if(!S._deep && S.ready && S.products.length){ const ut = urlTarget(); if(ut.kind==='cat' && S.view==='shop'){ S.cat = ut.id; S._deep = true; setTimeout(()=>$('#catalogue')?.scrollIntoView(), 300); } }
+  if(!S._deep && S.ready && S.products.length){ let lid=''; const ut0 = urlTarget(); if(ut0.kind==='lp') lid = ut0.id;
     if(lid && S.products.some(x=>x.id===lid && x.active!==false) && S.view==='shop'){ S._deep = true; S.view='landing'; S.pid=lid; S.pqty=1; schedule(); } }
-  if(!S._deep && S.ready && S.products.length){ S._deep = true; let pid=''; try{ pid = new URLSearchParams(location.search).get('p')||''; }catch(e){}
+  if(!S._deep && S.ready && S.products.length){ S._deep = true; let pid=''; const ut1 = urlTarget(); if(ut1.kind==='p') pid = ut1.id;
     if(pid && S.products.some(x=>x.id===pid && x.active!==false) && S.view==='shop'){ S.view='product'; S.pid=pid; S.pqty=1; schedule(); } }
   if(S.isAdmin && !S._remShown){ const n = reminders().late.length; if(n){ S._remShown = true; toast(`${n} créance${n>1?'s':''} client arrivée${n>1?'s':''} à échéance : touchez la cloche pour relancer`); } }
   const dr = $('#drawer-body'); if(dr) dr.innerHTML = cartBody();
@@ -895,7 +896,7 @@ function viewShop(){
     ${S.cat==='Lots'?bundleBlock:''}${S.cat==='Lots'?'':list.length?`<div class="grid">${list.map(p=>`
       <article class="card">
         <button class="thumb" data-a="product" data-id="${p.id}" aria-label="Voir ${esc(p.name)}">${pImg(p)}${stockPill(p)}${isNew(p)?'<span class="new-band">Nouveau</span>':''}${p.lpVideo?'<span class="vid-badge">▶ Vidéo</span>':''}${photoOverlay(p)}</button>
-        <div class="card-b"><span class="cat">${esc(p.category)}${isUsed(p)?` · <b style="color:var(--indigo)">Occasion · ${esc(condLabel(p))}</b>`:''}</span><h3>${esc(p.name)}</h3>${p.lpHook?`<span class="hook">« ${esc(p.lpHook)} »</span>`:''}${(()=>{ const rt=productRating(p.id); return rt.n?`<span class="small">${starsHTML(rt.avg)} <span class="muted">(${rt.n})</span></span>`:''; })()}${soldCount(p)>=3?`<span class="sold">🔥 ${soldCount(p)} vendus ce mois-ci</span>`:''}${p.bulkMin>1&&p.bulkPrice>0?`<span class="bulk">Dès ${p.bulkMin} : ${fmt(p.bulkPrice)} l’unité</span>`:''}
+        <div class="card-b"><span class="cat">${esc(p.category)}${isUsed(p)?` · <b style="color:var(--indigo)">Occasion · ${esc(condLabel(p))}</b>`:''}</span><h3><a href="${esc(hasLanding(p)&&S.settings.lpFirst!==false ? offerPath(p) : productPath(p))}" data-a="product" data-id="${p.id}" style="color:inherit;text-decoration:none">${esc(p.name)}</a></h3>${p.lpHook?`<span class="hook">« ${esc(p.lpHook)} »</span>`:''}${(()=>{ const rt=productRating(p.id); return rt.n?`<span class="small">${starsHTML(rt.avg)} <span class="muted">(${rt.n})</span></span>`:''; })()}${soldCount(p)>=3?`<span class="sold">🔥 ${soldCount(p)} vendus ce mois-ci</span>`:''}${p.bulkMin>1&&p.bulkPrice>0?`<span class="bulk">Dès ${p.bulkMin} : ${fmt(p.bulkPrice)} l’unité</span>`:''}
           <div class="card-f"><span class="price">${hasVar(p)&&minPrice(p)<p.price?'<span class="muted small" style="font-family:var(--f-b)">Dès </span>'+fmt(minPrice(p)):fmt(p.price)}${p.comparePrice>p.price?`<span class="strike">${fmt(p.comparePrice)}</span>`:''}</span>
           <button class="add" data-a="add" data-id="${p.id}" ${p.stock<=0?'disabled':''} aria-label="Ajouter ${esc(p.name)} au panier">+</button></div>
           ${hasLanding(p)?`<button class="see-offer" data-a="openLanding" data-id="${p.id}">✨ Découvrir l’offre ›</button>`:''}
@@ -1489,7 +1490,20 @@ function installGuide(tab, popup){
 /* --- Partage et visuels --- */
 const productLink = p => shopUrl() + '?p=' + encodeURIComponent(p.id);
 const landingLink = (p, src) => shopUrl() + '?lp=' + encodeURIComponent(p.id) + (src ? '&src='+src : '');
-function openLanding(id){ closeAll(); S.view='landing'; S.pid=id; S.pqty=1; try{ history.pushState({lp:id}, '', '?lp='+encodeURIComponent(id)); }catch(e){} schedule(); window.scrollTo(0,0); }
+/* Adresses lisibles (version serveur) : /produit/nom--id, /offre/nom--id, /categorie/nom */
+const slugify = x => String(x||'').normalize('NFD').replace(/[\u0300-\u036f]/g,'').toLowerCase().replace(/[^a-z0-9]+/g,'-').replace(/^-+|-+$/g,'').slice(0,60) || 'produit';
+const prettyOn = () => isServer();
+const productPath = p => prettyOn() ? `/produit/${slugify(p.name)}--${p.id}` : '?p='+encodeURIComponent(p.id);
+const offerPath = p => prettyOn() ? `/offre/${slugify(p.name)}--${p.id}` : '?lp='+encodeURIComponent(p.id);
+const catPathC = c => prettyOn() ? `/categorie/${slugify(c)}` : location.pathname;
+const homePath = () => prettyOn() ? '/' : location.pathname;
+function urlTarget(){ let q = null; try{ q = new URLSearchParams(location.search); }catch(e){}
+  const m = /^\/(produit|offre)\/[^/]*--([A-Za-z0-9_-]+)\/?$/.exec(location.pathname), mc = /^\/categorie\/([a-z0-9-]+)\/?$/.exec(location.pathname);
+  if(m) return {kind: m[1]==='offre' ? 'lp' : 'p', id: m[2]};
+  if(q && q.get('lp')) return {kind:'lp', id:q.get('lp')}; if(q && q.get('p')) return {kind:'p', id:q.get('p')};
+  if(mc){ const c = [...new Set(S.products.map(x=>x.category).filter(Boolean))].find(x=>slugify(x)===mc[1]); if(c) return {kind:'cat', id:c}; }
+  return {}; }
+function openLanding(id){ closeAll(); S.view='landing'; S.pid=id; S.pqty=1; try{ const pp = S.products.find(x=>x.id===id); history.pushState({lp:id}, '', pp ? offerPath(pp) : '?lp='+encodeURIComponent(id)); }catch(e){} schedule(); window.scrollTo(0,0); }
 const lpBlocks = t => String(t||'').split(/\n\s*\n/).map(b=>b.trim()).filter(Boolean);
 function lpFaq(p){
   const own = lpBlocks(p.lpFaq).map(b=>{ const [q, ...r] = b.split('\n'); return [q.trim(), r.join(' ').trim()]; }).filter(x=>x[0]&&x[1]);
@@ -1903,10 +1917,10 @@ const lines = t => String(t||'').split(/\r?\n/).map(x=>x.trim()).filter(Boolean)
 function openProduct(id){
   const p = S.products.find(x=>x.id===id); if(!p) return;
   closeAll(); S.view = 'product'; S.pid = id; S.pqty = 1;
-  try{ history.pushState({p:id}, '', '?p='+encodeURIComponent(id)); }catch(e){}
+  try{ const pp = S.products.find(x=>x.id===id); history.pushState({p:id}, '', pp ? productPath(pp) : '?p='+encodeURIComponent(id)); }catch(e){}
   schedule(); window.scrollTo(0,0);
 }
-window.addEventListener('popstate', ()=>{ let pid='', lid=''; try{ const q = new URLSearchParams(location.search); pid = q.get('p')||''; lid = q.get('lp')||''; }catch(e){}
+window.addEventListener('popstate', ()=>{ const ut = urlTarget(); let pid = ut.kind==='p' ? ut.id : '', lid = ut.kind==='lp' ? ut.id : ''; if(ut.kind==='cat'){ S.cat = ut.id; }
   if(lid && S.products.some(x=>x.id===lid)){ S.view='landing'; S.pid=lid; S.pqty=1; }
   else if(pid && S.products.some(x=>x.id===pid)){ S.view='product'; S.pid=pid; S.pqty=1; } else if(S.view==='product' || S.view==='landing') S.view='shop';
   closeAll(); schedule(); });
@@ -3463,6 +3477,8 @@ function paneCompany(){
     <label style="display:flex;gap:8px;align-items:center"><input type="checkbox" id="co-showTrust" ${st.showTrust===false?'':'checked'}> Afficher les étoiles et les garanties sur les photos et les affiches</label>
     <label style="display:flex;gap:8px;align-items:center;margin-top:8px"><input type="checkbox" id="co-lpFirst" ${st.lpFirst===false?'':'checked'}> Au clic sur un produit, ouvrir directement sa page de vente (quand elle est remplie)</label></div>
    <div class="panel"><h3>Reçus</h3>${f('receiptNote')}</div>
+   <div class="panel"><h3>Référencement Google</h3><div class="field"><label for="co-googleVerify">Code de vérification Google Search Console</label><input class="input" id="co-googleVerify" data-co="googleVerify" value="${esc(st.googleVerify||'')}" placeholder="le code de la balise « google-site-verification »" style="font-family:monospace"></div>
+    <p class="muted small" style="margin:0">Dans Search Console, choisissez « Balise HTML » et copiez seulement le texte entre les guillemets de content="…". Plan du site à déclarer : <b>${esc(isServer()?location.origin:'votre-adresse')}/sitemap.xml</b></p></div>
    <div class="panel"><h3>Suivi publicitaire</h3><div class="field"><label for="co-gtmId">Google Tag Manager</label><input class="input" id="co-gtmId" data-co="gtmId" value="${esc(st.gtmId||'')}" placeholder="ex. GTM-WJVTWPWW" style="font-family:monospace"></div>
     <div class="field"><label for="co-metaPixel">Identifiant du pixel Meta (Facebook, Instagram)</label><input class="input" id="co-metaPixel" data-co="metaPixel" inputmode="numeric" value="${esc(st.metaPixel||'')}" placeholder="ex. 1784224236125858" style="font-family:monospace"></div>
     <div class="field"><label for="co-tiktokPixel">Identifiant du pixel TikTok</label><input class="input" id="co-tiktokPixel" data-co="tiktokPixel" value="${esc(st.tiktokPixel||'')}" placeholder="ex. DBOVIVRC77UASCMHBLD0" style="font-family:monospace"></div>
@@ -3483,6 +3499,7 @@ async function saveCompany(){
   if(!s2.shopName) return toast('Le nom commercial est obligatoire.');
   if($('#co-showTrust')) s2.showTrust = $('#co-showTrust').checked; if($('#co-lpFirst')) s2.lpFirst = $('#co-lpFirst').checked; s2.deliveryPromise = String(s2.deliveryPromise||'').slice(0,40); s2.returnPolicy = String(s2.returnPolicy||'').slice(0,40);
   s2.metaPixel = String(s2.metaPixel||'').replace(/\s/g,''); if(s2.metaPixel && !/^\d{10,20}$/.test(s2.metaPixel)) return toast('Identifiant de pixel Meta invalide (uniquement des chiffres).');
+  s2.googleVerify = String(s2.googleVerify||'').trim().replace(/^.*content=["']?([A-Za-z0-9_-]+).*$/,'$1'); if(s2.googleVerify && !/^[A-Za-z0-9_-]{20,80}$/.test(s2.googleVerify)) return toast('Code de vérification Google invalide.');
   s2.gtmId = String(s2.gtmId||'').toUpperCase().replace(/\s/g,''); if(s2.gtmId && !/^GTM-[A-Z0-9]{4,12}$/.test(s2.gtmId)) return toast('Identifiant Google Tag Manager invalide (format GTM-XXXXXXX).');
   s2.tiktokPixel = String(s2.tiktokPixel||'').toUpperCase().replace(/\s/g,''); if(s2.tiktokPixel && !/^[A-Z0-9]{10,30}$/.test(s2.tiktokPixel)) return toast('Identifiant de pixel TikTok invalide.');
   if(s2.email && !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(s2.email)) return toast('L’adresse e-mail ne semble pas valide.');
@@ -3576,14 +3593,15 @@ document.addEventListener('change', async e=>{
 });
 document.addEventListener('click', async e=>{
   const el = e.target.closest('[data-a]'); if(!el) return;
+  if(el.tagName==='A' && el.dataset.a && (el.getAttribute('href')||'').match(/^(\/|\?)/) && !e.metaKey && !e.ctrlKey) e.preventDefault();
   const a = el.dataset.a;
   if((a==='closeAll') && e.target!==el && el.classList.contains('scrim')) return;
   if(a==='closeAll' && el.classList.contains('drawer-wrap') && e.target!==el) return;
   const id = el.dataset.id;
   switch(a){
     case 'closeAll': closeAll(); break;
-    case 'go': if(S.view==='product' || S.view==='landing'){ try{ history.pushState({},'',location.pathname); }catch(e){} } S.view=el.dataset.v; S.aq=''; closeAll(); schedule(); window.scrollTo(0,0); break;
-    case 'cat': S.facets={}; S.grades=[]; S.cat=el.dataset.v; schedule(); if(el.closest('.sale')) setTimeout(()=>$('#catalogue')?.scrollIntoView({behavior:'smooth'}),60); break;
+    case 'go': if(S.view==='product' || S.view==='landing'){ try{ history.pushState({},'',homePath()); }catch(e){} } S.view=el.dataset.v; S.aq=''; closeAll(); schedule(); window.scrollTo(0,0); break;
+    case 'cat': S.facets={}; S.grades=[]; S.cat=el.dataset.v; if(prettyOn() && S.view==='shop'){ try{ history.replaceState({},'', S.products.some(p=>p.category===S.cat) ? catPathC(S.cat) : '/'); }catch(err){} } schedule(); if(el.closest('.sale')) setTimeout(()=>$('#catalogue')?.scrollIntoView({behavior:'smooth'}),60); break;
     case 'clearSearch': S.q=''; S.cat='Tout'; schedule(); break;
     case 'scroll': $('#catalogue').scrollIntoView({behavior:matchMedia('(prefers-reduced-motion:reduce)').matches?'auto':'smooth'}); break;
     case 'cart': openCart(); break;
@@ -3666,7 +3684,7 @@ document.addEventListener('click', async e=>{
       const added=S.cart.reduce((t,l)=>t+(same(l)?l.qty:0),0)-before; saveCart();
       if(added>0) toast(`${added} × ${p.name}${v?' — '+v:''} ajouté${added>1?'s':''} au panier`);
       if(a==='pdpBuy' && added>0){ if(!enabledProcs().length){ openCart(); break; } openCheckout(); } break; }
-    case 'pdpCat': S.cat=el.dataset.v; S.view='shop'; try{ history.pushState({},'',location.pathname); }catch(e){} schedule(); setTimeout(()=>$('#catalogue')?.scrollIntoView({behavior:'smooth'}),80); break;
+    case 'pdpCat': S.cat=el.dataset.v; S.view='shop'; try{ history.pushState({},'',catPathC(el.dataset.v)); }catch(e){} schedule(); setTimeout(()=>$('#catalogue')?.scrollIntoView({behavior:'smooth'}),80); break;
     case 'pushProduct': S.pushPre = id; S.view = 'admin'; S.tab = 'alerts'; closeAll(); schedule(); break;
     case 'visual': openVisual(id, false); break;
     case 'fbCatalog': fbCatalog(); break;

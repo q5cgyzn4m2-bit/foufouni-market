@@ -275,3 +275,12 @@ Sur les photos (cartes de la boutique, fiche produit, page de vente) et sur les 
 - Fiche produit : bannière « Découvrez ce produit en détail » vers la page de vente.
 - Réglage (Gestion › Société) : au clic sur un produit, ouvrir directement sa page de vente quand elle est remplie.
 - Mesure : visites des pages de vente (`/api/lp-view`, une par visiteur et par produit toutes les 6 h), commandes passées après une visite (`lpPids`), et tableau « Pages de vente · 30 derniers jours » (visites, commandes, taux de conversion, ventes) dans le tableau de bord.
+
+
+## Référencement (SEO)
+
+- Adresses lisibles : `/produit/nom--id`, `/offre/nom--id` (page de vente), `/categorie/nom`. Les anciennes adresses `?p=` et `?lp=` restent valides et pointent vers l'adresse canonique ; une adresse dont le nom a changé est redirigée en 301.
+- `/sitemap.xml` (accueil, catégories, produits avec leur photo) et `/robots.txt` (espaces privés et API exclus).
+- Données structurées schema.org : Product (prix en XOF, stock, état, code-barres GTIN quand il est réel, marque, note et avis), BreadcrumbList, CollectionPage pour les catégories, OnlineStore et WebSite pour l'accueil.
+- Contenu HTML rendu par le serveur (titre, description, prix, points forts, caractéristiques, avis, liens internes), lisible sans JavaScript ; balises title, description, robots et canonical par page ; page 404 en noindex.
+- Gestion › Société › Référencement Google : code de vérification Google Search Console.
