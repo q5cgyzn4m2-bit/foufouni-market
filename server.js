@@ -141,6 +141,7 @@ function publicSettings() {
     headerSub: s.headerSub || '', legalName: s.legalName || '', legalForm: s.legalForm || '', capital: s.capital || '', rccm: s.rccm || '', nif: s.nif || '', address: s.address || '', country: s.country || '', whatsapp: s.whatsapp || '', phone2: s.phone2 || '', email: s.email || '', hours: s.hours || '', receiptNote: s.receiptNote || '',
     affDays: s.affDays || 30, siteUrl: s.siteUrl || '',
     assistant: !!env.ANTHROPIC_API_KEY && s.assistantOn !== false, assistantName: s.assistantName || 'Fanta',
+    assistantPhoto: /^data:image\/(png|jpeg|webp);base64,/.test(s.assistantPhoto || '') && s.assistantPhoto.length < 200000 ? s.assistantPhoto : '',
     featuredPromo: s.featuredPromo && s.featuredPromo.code ? { code: s.featuredPromo.code, type: s.featuredPromo.type, value: s.featuredPromo.value, minOrder: s.featuredPromo.minOrder || 0, expiresAt: s.featuredPromo.expiresAt || '' } : null };
 }
 
