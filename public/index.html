@@ -1515,6 +1515,32 @@ async function openPayOrder(id, token){
     <div class="small" style="margin-bottom:12px">${(o.items||[]).map(i=>`${i.qty} × ${esc(i.name)}`).join('<br>')}</div>
     ${paid ? '<p style="text-align:center;font-weight:800;color:var(--kola);font-size:18px">✓ Déjà payé, merci !</p>' : `<div class="pay-opts">${procs.map(([k])=>`<button class="pay-opt" data-a="payOrder" data-id="${esc(id)}" data-v="${k}" data-t="${esc(token)}">${procLogo(k)}<span><b>${esc(PROCESSORS[k].name)}</b><br><span class="muted small">Confirmation sur votre téléphone</span></span></button>`).join('') || '<p class="muted">Aucun paiement mobile n’est activé : payez au comptoir.</p>'}</div>`}</div></div></div>`;
 }
+const LP_TPL = [
+  [/electr|t[ée]l[ée]phon|informat|audio|tv|ordinateur|accessoir/, {pb:'Un appareil qui lâche au mauvais moment, c’est du temps et de l’argent perdus.', so:'{nom} : un équipement choisi pour durer, livré vérifié chez vous.', us:['Au quotidien : pour rester connecté et efficace','Pour offrir : un cadeau utile qui fait plaisir','Pour le travail : un outil sur lequel compter'], faq:[['Le produit est-il neuf ?','{etat}']]}],
+  [/solaire|[ée]nergie|lampe|ventil|batter|onduleur/, {pb:'Avec les délestages et la chaleur, on a besoin de solutions qui ne nous laissent pas tomber.', so:'{nom} : une solution pratique pour le quotidien, même quand le courant est coupé.', us:['Délestage : gardez le confort pendant les coupures','Maison : pour toute la famille','Boutique : pour continuer à servir vos clients'], faq:[]}],
+  [/quincaill|outil|bricol|b[aâ]timent|plomb|[ée]lectricit/, {pb:'Sur un chantier, un matériel de mauvaise qualité coûte deux fois : à l’achat et à la réparation.', so:'{nom} : du matériel solide pour un travail bien fait, livré sur votre chantier.', us:['Chantier : pour les artisans et les maçons','Maison : pour vos travaux et réparations','Entreprise : pour équiper vos équipes'], faq:[]}],
+  [/beaut|cosm|soin|parfum|karit|cheveu|maquill/, {pb:'Entre le soleil, la poussière et les produits douteux, difficile de prendre soin de soi en confiance.', so:'{nom} : un soin choisi avec attention, pour vous sentir belle et bien dans votre peau.', us:['Au quotidien : votre routine beauté','Cérémonie : pour être rayonnante le grand jour','Cadeau : une attention qui fait plaisir'], faq:[]}],
+  [/mode|v[eê]tement|bazin|wax|boubou|pagne|chauss|sac|bijou/, {pb:'Trouver une belle tenue, bien finie et au juste prix, prend souvent des heures au marché.', so:'{nom} : une pièce élégante, livrée chez vous sans courir les boutiques.', us:['Fêtes : Tabaski, Korité, mariages et baptêmes','Au quotidien : pour être élégant chaque jour','Cadeau : une belle pièce à offrir'], faq:[['Quelles tailles sont disponibles ?','Les tailles disponibles sont indiquées dans le choix des options. Écrivez-nous en cas de doute.']]}],
+  [/[ée]picerie|aliment|riz|huile|boisson|th[ée]|sucre|lait|c[ée]r[ée]ale|fonio/, {pb:'Porter les courses depuis le marché, dans la chaleur et les embouteillages, épuise toute la famille.', so:'{nom} : la livraison directement chez vous, au juste prix.', us:['Famille : les essentiels de la maison','Fêtes : pour recevoir vos invités','Commerce : pour les boutiques et les restaurants'], faq:[['Le produit est-il frais ?','Nous vérifions les dates avant chaque livraison.']]}],
+  [/maison|cuisine|d[ée]co|literie|rangement|nettoy/, {pb:'Une maison mal équipée, c’est du temps perdu chaque jour.', so:'{nom} : pour une maison plus pratique et plus agréable à vivre.', us:['Cuisine : gagnez du temps chaque jour','Recevoir : faites honneur à vos invités','Cadeau : idéal pour une installation ou un mariage'], faq:[]}],
+  [/b[ée]b[ée]|enfant|jouet|pu[ée]ricult/, {pb:'Pour son enfant, on veut ce qu’il y a de mieux, sans perdre de temps à chercher.', so:'{nom} : un choix rassurant pour les parents, livré chez vous.', us:['Au quotidien : pour le confort de l’enfant','Baptême et anniversaire : un cadeau apprécié','Pour les grands-parents : une attention qui fait plaisir'], faq:[]}],
+];
+function autoLanding(p, nPhotos){
+  const st = S.settings, nom = (p.name||'Ce produit').trim(), cat = String(p.category||'').toLowerCase(), hl = lines(p.highlights), city = st.city||'Bamako';
+  const t = (LP_TPL.find(([re])=>re.test(cat+' '+nom.toLowerCase()))||[null,{pb:'Trouver un produit fiable, au bon prix et livré rapidement n’est pas toujours simple.', so:'{nom} : un produit sélectionné avec soin, livré chez vous.', us:['Au quotidien : pratique et utile','Pour offrir : un cadeau qui fait plaisir','Pour la famille : un achat malin'], faq:[]}])[1];
+  const f = x => x.replace(/\{nom\}/g, nom).replace(/\{etat\}/g, isUsed(p) ? 'C’est un produit d’occasion, en état « '+condLabel(p)+' », contrôlé avant la vente.' : 'Oui, le produit est neuf.');
+  const faq = t.faq.map(([q,a])=>({q:f(q), a:f(a)}));
+  if(p.warranty) faq.push({q:'Le produit est-il garanti ?', a:p.warranty});
+  const specs = lines(p.specs).slice(0,2).map(l=>l.replace(/\s*:\s*/, ' : '));
+  if(specs.length) faq.push({q:'Quelles sont ses caractéristiques ?', a:specs.join(' · ')+'. Tous les détails sont dans la description.'});
+  const angles = ['Vue d’ensemble','Le détail qui compte','Côté finitions','Vu de près','En situation','Le dernier regard'];
+  return {
+    hook: hl[0] ? `${nom} : ${hl[0].charAt(0).toLowerCase()+hl[0].slice(1)}` .slice(0,90) : `${nom} : livraison rapide à ${city}`.slice(0,90),
+    sub: (p.description || (hl.length ? hl.slice(0,3).join(' · ') : `Commandez en ligne, payez par mobile money ou à la livraison.`)).slice(0,200),
+    problem: t.pb, solution: f(t.so), usages: t.us, faq,
+    highlights: hl.length ? null : null,
+    captions: Array.from({length:nPhotos||0}, (_,i)=>({t:angles[i%angles.length], d: i===0 && hl[0] ? hl[0] : (hl[i] || '')})) };
+}
 function viewLanding(){
   const p = S.products.find(x=>x.id===S.pid && x.active!==false); if(!p){ S.view='shop'; return viewShop(); }
   const st = S.settings, imgs = galleryFor(p), caps = p.angleCaps||[], save = p.comparePrice>p.price ? p.comparePrice-p.price : 0, rt = productRating(p.id);
@@ -3082,7 +3108,7 @@ function productForm(p){
         <div class="field"><label for="pf-hl">Points forts (un par ligne)</label><textarea class="input" id="pf-hl" placeholder="Écran LED lisible de loin&#10;Fonctionne sur piles, sans fil&#10;Garantie 6 mois">${esc(p.highlights||'')}</textarea></div>
         <div class="field"><label for="pf-details">Description détaillée (paragraphes séparés par une ligne vide)</label><textarea class="input" id="pf-details" style="min-height:110px">${esc(p.details||'')}</textarea></div>
         <div class="field"><label for="pf-specs">Caractéristiques (une par ligne, ex. « Matière : Inox »)</label><textarea class="input" id="pf-specs" placeholder="Dimensions : 30 × 30 cm&#10;Couleur : Noir&#10;Alimentation : 2 piles AA">${esc(p.specs||'')}</textarea></div>
-        <div class="panel" style="padding:14px;margin-bottom:14px"><div class="row" style="align-items:center;margin-bottom:6px"><h3 style="font-size:19px;margin:0;flex:1">✨ Page de vente (publicités)</h3>${isServer()?`<button type="button" class="btn ghost sm" id="lp-ai" style="flex:0;white-space:nowrap">✨ Rédiger avec l’assistante</button>`:''}</div>
+        <div class="panel" style="padding:14px;margin-bottom:14px"><div class="row" style="align-items:center;margin-bottom:6px"><h3 style="font-size:19px;margin:0;flex:1">✨ Page de vente (publicités)</h3><button type="button" class="btn ghost sm" id="lp-ai" style="flex:0;white-space:nowrap">✨ Rédiger automatiquement</button></div>
           <p class="muted small" style="margin:0 0 10px">Tout est facultatif : les rubriques vides sont remplacées par le nom, la description et les points forts du produit.</p>
           <div class="field"><label for="lp-hook">Accroche (grand titre)</label><input class="input" id="lp-hook" maxlength="90" value="${esc(p.lpHook||'')}" placeholder="ex. Le boubou qui fait sensation à chaque fête"></div>
           <div class="field"><label for="lp-sub">Sous-titre</label><input class="input" id="lp-sub" maxlength="200" value="${esc(p.lpSub||'')}" placeholder="ex. Brodé à la main à Bamako, en coton bazin de qualité supérieure"></div>
@@ -3139,13 +3165,18 @@ function productForm(p){
   $('#pf-spinf').onchange = async e=>{ const fs = [...e.target.files].sort((a,b)=>a.name.localeCompare(b.name, undefined, {numeric:true})); e.target.value='';
     for(const f of fs){ if(spinItems.length>=36){ toast('36 photos maximum pour la vue 360°.'); break; } try{ spinItems.push({kind:'new', data:await shrink(await compress(f), 640, .74)}); drawSpin(); }catch(err){} } };
   $('#pf-spinx').onclick = e=>{ e.preventDefault(); spinItems.forEach(it=>{ if(it.kind==='old') spinRemoved.push(it.id); }); spinItems = []; drawSpin(); };
-  if($('#lp-ai')) $('#lp-ai').onclick = async e=>{ e.preventDefault(); if(!p.id){ toast('Enregistrez d’abord le produit.'); return; } if(!window.lpAI) return; const b = e.currentTarget; b.disabled = true; b.textContent = 'Rédaction…';
-    try{ const r = await window.lpAI(p.id); const setIf = (id, val)=>{ if(val && $(id) && !$(id).value.trim()) $(id).value = val; };
+  if($('#lp-ai')) $('#lp-ai').onclick = async e=>{ e.preventDefault(); const b = e.currentTarget; b.disabled = true; b.textContent = 'Rédaction…';
+    const cur = {...p, name:$('#pf-name').value.trim()||p.name, category:($('#pf-cat')||{}).value||p.category, description:($('#pf-desc')||{}).value||p.description, highlights:$('#pf-hl').value||p.highlights, warranty:($('#pf-war')||{}).value||p.warranty, specs:($('#pf-specs')||{}).value||p.specs};
+    let r = null, ai = false, aiErr = '';
+    if(window.lpAI && !p.id) aiErr = 'enregistrez d’abord le produit pour utiliser l’assistante';
+    if(window.lpAI && p.id){ try{ r = await window.lpAI(p.id); ai = true; }catch(err){ r = null; aiErr = err.message || 'pas de réponse'; } }
+    if(!r) r = autoLanding(cur, items.length);
+    try{ const setIf = (id, val)=>{ if(val && $(id) && !$(id).value.trim()) $(id).value = val; };
       setIf('#lp-hook', r.hook); setIf('#lp-sub', r.sub); setIf('#lp-pb', r.problem); setIf('#lp-so', r.solution); setIf('#lp-us', (r.usages||[]).join('\n')); setIf('#lp-faq', (r.faq||[]).map(f=>f.q+'\n'+f.a).join('\n\n'));
       if(!$('#pf-hl').value.trim() && r.highlights) $('#pf-hl').value = r.highlights.join('\n');
       (r.captions||[]).forEach((c,i)=>{ if(items[i] && !items[i].cap.t){ items[i].cap = {t:c.t||'', d:c.d||''}; } }); drawCaps();
-      toast('Textes proposés : relisez-les et ajustez-les avant d’enregistrer'); }
-    catch(err){ toast(err.message||'Rédaction impossible'); } b.disabled = false; b.textContent = '✨ Rédiger avec l’assistante'; };
+      toast(ai ? '✨ Textes rédigés par l’assistante IA : relisez-les avant d’enregistrer' : aiErr ? 'Assistante indisponible ('+aiErr+') : textes rédigés avec les modèles automatiques' : 'Textes rédigés automatiquement à partir de la fiche : relisez et personnalisez-les'); }
+    catch(err){ toast(err.message||'Rédaction impossible'); } b.disabled = false; b.textContent = '✨ Rédiger automatiquement'; };
   let vars = (p.variants||[]).map(v=>({...v}));
   const readOpts = ()=>[0,1,2].map(i=>({name:$('#vo-n'+i).value.trim(), values:[...new Set($('#vo-v'+i).value.split(',').map(x=>x.trim()).filter(Boolean))]})).filter(o=>o.name && o.values.length);
   const readVars = ()=>{ document.querySelectorAll('[data-vr]').forEach(r=>{ const v = vars[Number(r.dataset.vr)]; if(!v) return; v.stock = Math.max(0, parseInt(r.querySelector('[data-k="stock"]').value)||0); v.price = Number(r.querySelector('[data-k="price"]').value.replace(/\s/g,''))||''; v.sku = r.querySelector('[data-k="sku"]').value.trim(); }); };

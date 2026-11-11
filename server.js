@@ -147,14 +147,29 @@ function publicSettings() {
 /* ================= Assistant IA (Claude) ================= */
 const AI_URL = env.ANTHROPIC_API_URL || 'https://api.anthropic.com/v1/messages';
 const AI_MODEL = env.ANTHROPIC_MODEL || 'claude-haiku-5-5';
-async function askClaude(system, messages, maxTokens = 500) {
+async function askClaude(system, messages, maxTokens = 500, timeoutMs = 30000) {
   if (!env.ANTHROPIC_API_KEY) throw httpErr(503, 'Assistant non configuré.');
-  const r = await fetch(AI_URL, { method: 'POST', signal: AbortSignal.timeout(30000),
+  const r = await fetch(AI_URL, { method: 'POST', signal: AbortSignal.timeout(timeoutMs),
     headers: { 'x-api-key': env.ANTHROPIC_API_KEY, 'anthropic-version': '2023-06-01', 'content-type': 'application/json' },
     body: JSON.stringify({ model: AI_MODEL, max_tokens: maxTokens, system, messages }) });
   const j = await r.json().catch(() => ({}));
   if (!r.ok) { console.warn('Assistant IA :', r.status, j.error && j.error.message); throw httpErr(502, 'L’assistant est momentanément indisponible. Réessayez dans un instant.'); }
+  if (j.stop_reason === 'max_tokens') console.warn('Assistant IA : réponse coupée (max_tokens =', maxTokens, ')');
   return (j.content || []).filter(c => c.type === 'text').map(c => c.text).join('\n').trim();
+}
+/* Lecture tolérante du JSON renvoyé par l'assistante : enlève les balises ```json, et échappe les retours à la ligne laissés dans les textes */
+function parseAIJson(txt) {
+  let t = String(txt || '').replace(/```(?:json)?/gi, '').trim();
+  const a = t.indexOf('{'), b = t.lastIndexOf('}'); if (a < 0 || b < a) throw new Error('pas de JSON');
+  t = t.slice(a, b + 1);
+  try { return JSON.parse(t); } catch (e) {}
+  let out = '', inStr = false, esc = false;
+  for (const ch of t) {
+    if (inStr) { if (esc) { esc = false; out += ch; continue; } if (ch === '\\') { esc = true; out += ch; continue; } if (ch === '"') { inStr = false; out += ch; continue; }
+      if (ch === '\n') { out += '\\n'; continue; } if (ch === '\r') continue; if (ch === '\t') { out += '\\t'; continue; } out += ch; }
+    else { if (ch === '"') inStr = true; out += ch; }
+  }
+  return JSON.parse(out.replace(/,\s*([}\]])/g, '$1'));
 }
 const CONDITION_LABEL = { neuf: 'Neuf', comme_neuf: 'Occasion comme neuf', tres_bon: 'Occasion très bon état', bon: 'Occasion bon état', correct: 'Occasion état correct', reconditionne: 'Reconditionné' };
 function relaunchOffer() {
@@ -550,7 +565,7 @@ app.post('/api/admin/import-url', express.json({ limit: '50kb' }), requireStaff,
     const system = `Tu prépares la fiche d'un produit pour une boutique en ligne malienne, à partir des données publiques d'une autre boutique. Écris en français simple et vendeur, AVEC TES PROPRES MOTS : ne recopie aucune phrase du texte source, n'invente aucune caractéristique, garantie ou certification absente des données.
 Réponds UNIQUEMENT avec un objet JSON valide : {"name":"nom court en français (60 caractères max.)","category":"une catégorie parmi : Électronique, Maison, Cuisine, Mode, Beauté, Quincaillerie, Épicerie, Bébé, Sport, Auto-moto, Bureau, Jouets","description":"2 phrases","highlights":["4 points forts courts"],"specs":["Clé : valeur, seulement ce qui figure dans les données"],"options":[{"name":"Couleur, Taille…","values":["valeurs traduites"]}],"hook":"accroche de 6 à 10 mots","sub":"sous-titre d'une phrase","problem":"1 à 2 phrases","solution":"1 à 2 phrases","details":"2 courts paragraphes séparés par une ligne vide","usages":["3 usages « Titre : texte court » adaptés au Mali, seulement s'ils correspondent au produit"],"faq":[{"q":"question propre au produit","a":"réponse tirée des données"}],"weightKg":poids en kg s'il est indiqué (nombre, 0 sinon)}`;
     const data = JSON.stringify({ name: d.name, brand: d.brand, description: d.description.slice(0, 4000), options: d.options, sku: d.sku });
-    try { const txt = await askClaude(system, [{ role: 'user', content: data }], 2500); fr = JSON.parse(txt.replace(/^[^{]*/, '').replace(/[^}]*$/, '')); } catch (e) { fr = null; }
+    try { const txt = await askClaude(system, [{ role: 'user', content: data }], 2500); fr = parseAIJson(txt); } catch (e) { fr = null; }
   }
   const str = (v, n) => String(v || '').slice(0, n), num = v => { const n = Number(String(v ?? '').replace(/[^\d.,]/g, '').replace(',', '.')); return Number.isFinite(n) ? n : 0; };
   const cur = String(d.currency || '').toUpperCase().replace('XOF', 'FCFA');
@@ -584,7 +599,7 @@ captions : une entrée par photo produit fournie, dans l'ordre (aucune si aucune
   const content = [{ type: 'text', text: `Captures de la fiche (${shots.length}) :` }, ...shots.map(m => ({ type: 'image', source: { type: 'base64', media_type: m[1], data: m[3] } })),
     ...(photos.length ? [{ type: 'text', text: `Photos du produit à légender, dans l'ordre (${photos.length}) :` }, ...photos.map(m => ({ type: 'image', source: { type: 'base64', media_type: m[1], data: m[3] } }))] : [])];
   const txt = await askClaude(system, [{ role: 'user', content }], 3500);
-  let o; try { o = JSON.parse(txt.replace(/^[^{]*/, '').replace(/[^}]*$/, '')); } catch (e) { throw httpErr(502, 'Captures illisibles : essayez des captures plus nettes, sans zoom.'); }
+  let o; try { o = parseAIJson(txt); } catch (e) { throw httpErr(502, 'Captures illisibles : essayez des captures plus nettes, sans zoom.'); }
   const str = (v, n) => String(v || '').slice(0, n), num = v => { const n = Number(String(v ?? '').replace(/[^\d.,]/g, '').replace(',', '.')); return Number.isFinite(n) ? n : 0; };
   res.json({ title_cn: str(o.title_cn, 200), name: str(o.name, 80), category: str(o.category, 30), description: str(o.description, 400),
     highlights: (Array.isArray(o.highlights) ? o.highlights : []).slice(0, 6).map(x => str(x, 90)).filter(Boolean),
@@ -609,7 +624,7 @@ Extrais uniquement ce qui est écrit sur le document, sans rien inventer. Répon
 {"supplier":"nom du fournisseur","ref":"numéro de facture","date":"AAAA-MM-JJ","currency":"code devise (FCFA pour XOF/CFA, CNY pour RMB/¥, EUR, USD…)","lines":[{"name":"désignation de l'article en français si possible","qty":nombre,"unitPrice":prix unitaire hors frais (nombre),"total":total de la ligne (nombre),"barcode":"code EAN s'il est écrit, sinon vide"}],"fees":frais de transport ou de livraison facturés (nombre, 0 sinon),"total":total de la facture (nombre)}
 Les nombres sont écrits sans espace ni symbole (12500, pas « 12 500 F »). Si un champ est illisible, mets une chaîne vide ou 0. Ne mets pas les lignes de total, TVA ou remise dans "lines".`;
   const txt = await askClaude(system, [{ role: 'user', content: [block, { type: 'text', text: 'Voici la facture du fournisseur.' }] }], 2500);
-  let out; try { out = JSON.parse(txt.replace(/^[^{]*/, '').replace(/[^}]*$/, '')); } catch (e) { throw httpErr(502, 'Facture illisible : essayez une photo plus nette, bien à plat et éclairée.'); }
+  let out; try { out = parseAIJson(txt); } catch (e) { throw httpErr(502, 'Facture illisible : essayez une photo plus nette, bien à plat et éclairée.'); }
   const num = v => { const n = Number(String(v ?? '').replace(/[^\d.,-]/g, '').replace(/\s/g, '').replace(',', '.')); return Number.isFinite(n) ? n : 0; };
   const cur = String(out.currency || '').toUpperCase().replace(/XOF|CFA|F CFA|FCFA/, 'FCFA').slice(0, 6);
   res.json({ supplier: String(out.supplier || '').slice(0, 80), ref: String(out.ref || '').slice(0, 40), date: /^\d{4}-\d{2}-\d{2}$/.test(out.date || '') ? out.date : '', currency: cur,
@@ -692,8 +707,8 @@ N'invente AUCUNE caractéristique, matière, taille, garantie, délai ou chiffre
 Réponds UNIQUEMENT avec un objet JSON valide, sans texte autour, de la forme :
 {"hook":"accroche de 6 à 10 mots","sub":"sous-titre d'une phrase","problem":"le problème du client, 1 à 2 phrases","solution":"comment ce produit le résout, 1 à 2 phrases","usages":["Titre : texte court", "..."],"faq":[{"q":"question","a":"réponse"}],"highlights":["point fort court", "..."],"captions":[{"t":"titre de l'angle photo","d":"ce que le client doit remarquer"}]}
 usages : 3 éléments. faq : 3 questions propres au produit (pas sur le paiement ni la livraison). highlights : 4 éléments. captions : exactement ${Math.max(1, nPhotos)} éléments, dans l'ordre des photos (vue d'ensemble, détails, finitions…).`;
-  const txt = await askClaude(system, [{ role: 'user', content: info }], 1200);
-  let out; try { out = JSON.parse(txt.replace(/^[^{]*/, '').replace(/[^}]*$/, '')); } catch (e) { throw httpErr(502, 'Réponse de l’assistante illisible, réessayez.'); }
+  const txt = await askClaude(system + '\nSois concis : chaque texte tient en une ou deux phrases courtes. Écris tout le JSON sur une seule ligne.', [{ role: 'user', content: info }], 3000, 60000);
+  let out; try { out = parseAIJson(txt); } catch (e) { console.warn('Page de vente : JSON illisible', txt.slice(0, 300)); throw httpErr(502, 'Réponse de l’assistante illisible, réessayez.'); }
   const str = (v, n) => String(v || '').slice(0, n);
   res.json({ hook: str(out.hook, 90), sub: str(out.sub, 200), problem: str(out.problem, 400), solution: str(out.solution, 400),
     usages: (Array.isArray(out.usages) ? out.usages : []).slice(0, 5).map(x => str(x, 120)),
