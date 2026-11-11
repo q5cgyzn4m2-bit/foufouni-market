@@ -357,6 +357,12 @@ textarea.input{min-height:84px; resize:vertical}
 .pay-shake{animation:payshake .45s}@keyframes payshake{20%,60%{transform:translateX(-7px)}40%,80%{transform:translateX(7px)}}
 .pay-howto{margin-top:12px; padding:14px; border-radius:14px; border:1px dashed var(--pc,var(--line)); background:color-mix(in srgb,var(--pc,#888) 8%,transparent)}
 @media (prefers-reduced-motion:reduce){ .flag-track,.pay-card::after,.pay-pick .pay-card{animation:none} }
+.thumb,.gal-main>div{position:relative}
+.ov{position:absolute; left:8px; right:8px; bottom:8px; display:flex; flex-direction:column; align-items:flex-start; gap:4px; pointer-events:none}
+.ov span{background:rgba(16,14,11,.84); color:#F2EBDD; font:700 11.5px var(--f-b); padding:4px 9px; border-radius:999px; backdrop-filter:blur(4px); white-space:nowrap; max-width:100%; overflow:hidden; text-overflow:ellipsis; box-shadow:0 2px 8px rgba(0,0,0,.3)}
+.ov .rt{color:#F5C55B}
+.gal-main .ov{left:14px; bottom:14px; flex-direction:row; flex-wrap:wrap; right:auto; max-width:calc(100% - 28px)}
+.gal-main .ov span{font-size:13px; padding:6px 12px}
 .empty{border:2px dashed var(--line); border-radius:var(--r-m); padding:48px 20px; text-align:center; color:var(--muted)}
 .empty h3{color:var(--ink); margin-bottom:8px; font-size:20px}
 
@@ -523,6 +529,7 @@ const DEFAULT_SETTINGS = {
   currency:'FCFA', deliveryFee:1500, freeFrom:50000, city:'Bamako', phone:'',
   affDefaultPct:5, affDiscountPct:5, affDays:30, siteUrl:'',
   shipCountries:['ML','SN','CI','BF','GN','NE','BJ','TG','GH','NG','MR','GM','GW','SL','LR','CV'],
+  showTrust:true, deliveryPromise:'', returnPolicy:'',
   headerSub:'', legalName:'', legalForm:'', capital:'', rccm:'', nif:'', address:'', country:'Mali', whatsapp:'', phone2:'', email:'', hours:'', receiptNote:'Merci pour votre confiance !',
   testMode:true,
   processors:{
@@ -863,7 +870,7 @@ function viewShop(){
     ${S.cat==='Lots'?'':facetBar()}
     ${S.cat==='Lots'?bundleBlock:''}${S.cat==='Lots'?'':list.length?`<div class="grid">${list.map(p=>`
       <article class="card">
-        <button class="thumb" data-a="product" data-id="${p.id}" aria-label="Voir ${esc(p.name)}">${pImg(p)}${stockPill(p)}${isNew(p)?'<span class="new-band">Nouveau</span>':''}</button>
+        <button class="thumb" data-a="product" data-id="${p.id}" aria-label="Voir ${esc(p.name)}">${pImg(p)}${stockPill(p)}${isNew(p)?'<span class="new-band">Nouveau</span>':''}${photoOverlay(p)}</button>
         <div class="card-b"><span class="cat">${esc(p.category)}${isUsed(p)?` · <b style="color:var(--indigo)">Occasion · ${esc(condLabel(p))}</b>`:''}</span><h3>${esc(p.name)}</h3>${(()=>{ const rt=productRating(p.id); return rt.n?`<span class="small">${starsHTML(rt.avg)} <span class="muted">(${rt.n})</span></span>`:''; })()}${p.bulkMin>1&&p.bulkPrice>0?`<span class="bulk">Dès ${p.bulkMin} : ${fmt(p.bulkPrice)} l’unité</span>`:''}
           <div class="card-f"><span class="price">${hasVar(p)&&minPrice(p)<p.price?'<span class="muted small" style="font-family:var(--f-b)">Dès </span>'+fmt(minPrice(p)):fmt(p.price)}${p.comparePrice>p.price?`<span class="strike">${fmt(p.comparePrice)}</span>`:''}</span>
           <button class="add" data-a="add" data-id="${p.id}" ${p.stock<=0?'disabled':''} aria-label="Ajouter ${esc(p.name)} au panier">+</button></div>
@@ -887,6 +894,19 @@ function viewMyOrders(){
 S.rimg = {};
 const REVIEW_ST = ['livree','expediee'];
 const pubReviews = pid => S.reviews.filter(r=>r.productId===pid && r.status!=='hidden');
+/* Garanties réellement offertes : produit garanti, paiement à la livraison, délai de livraison, échange */
+function trustList(p){ const st = S.settings, out = [];
+  if(p && p.warranty){ const w = String(p.warranty).trim(); out.push('🛡️ '+(w.length<=24 ? w : 'Produit garanti')); }
+  if(enabledProcs().some(([k])=>k==='cod')) out.push('💵 Paiement à la livraison');
+  out.push('🚚 '+(st.deliveryPromise || 'Livraison à '+(st.city||'Bamako')));
+  if(st.returnPolicy) out.push('↩️ '+st.returnPolicy);
+  if(p && isUsed(p)) out.push('✅ Contrôlé avant vente');
+  return out; }
+function shopRating(){ const rs = (S.reviews||[]).filter(r=>!r.hidden); const n = rs.length; return {n, avg: n ? rs.reduce((t,r)=>t+r.rating,0)/n : 0}; }
+const rateTxt = (avg, n) => '★ '+(Math.round(avg*10)/10).toString().replace('.',',')+' · '+n+' avis';
+function photoOverlay(p, big){ if(S.settings.showTrust===false) return '';
+  const rt = productRating(p.id), t = trustList(p).slice(0, big?3:1);
+  return `<div class="ov" aria-hidden="true">${rt.n?`<span class="rt">${rateTxt(rt.avg, rt.n)}</span>`:''}${t.map(x=>`<span>${esc(x)}</span>`).join('')}</div>`; }
 function productRating(pid){ const rs = pubReviews(pid), dist=[0,0,0,0,0]; rs.forEach(r=>dist[Math.min(5,Math.max(1,r.rating))-1]++); const n = rs.length; return {n, avg: n ? rs.reduce((t,r)=>t+r.rating,0)/n : 0, dist}; }
 const starsHTML = v => { const k = Math.round(v); return `<span class="stars" aria-label="${(Math.round(v*10)/10).toString().replace('.',',')} sur 5">${'★'.repeat(k)}<s>${'★'.repeat(5-k)}</s></span>`; };
 const reviewImgSrc = id => isServer() ? '/img/rv/'+encodeURIComponent(id) : S.rimg[id];
@@ -1505,7 +1525,7 @@ function viewLanding(){
   const until = p.lpUntil && new Date(p.lpUntil+'T23:59:59') > new Date() ? p.lpUntil : '';
   const cta = (big)=> out ? '<span class="pill bad">Rupture de stock</span>' : `<div class="pdp-buy" style="${big?'justify-content:center':''}">${big?'':`<div class="qty big"><button data-a="pdpQty" data-d="-1" aria-label="Moins">−</button><span>${Math.max(1,S.pqty||1)}</span><button data-a="pdpQty" data-d="1" aria-label="Plus">+</button></div>`}<button class="btn primary" data-a="pdpBuy" style="${big?'flex:0 1 360px;font-size:17px;padding:17px 26px':''}">Commander maintenant</button>${big?'':'<button class="btn ghost" data-a="pdpAdd">Ajouter au panier</button>'}</div>`;
   const countdown = until ? `<div><div class="small muted" style="margin-top:14px">${esc(p.lpOffer||'Offre spéciale')} · se termine dans</div><div class="cd" data-until="${esc(until)}"><span data-cd="d">0<small>JOURS</small></span><span data-cd="h">0<small>HEURES</small></span><span data-cd="m">0<small>MIN</small></span><span data-cd="s">0<small>SEC</small></span></div></div>` : (p.lpOffer?`<p class="small" style="color:var(--indigo);font-weight:700;margin-top:12px">${esc(p.lpOffer)}</p>`:'');
-  const gal = imgs.length ? `<div class="gal-main" id="gal">${imgs.map((src,i)=>`<div data-a="lpZoom" data-v="${i}" style="cursor:zoom-in"><img src="${esc(src)}" alt="${esc(p.name)} — ${esc((caps[i]&&caps[i].t)||'photo '+(i+1))}" ${i?'loading="lazy"':''}></div>`).join('')}</div>
+  const gal = imgs.length ? `<div class="gal-main" id="gal">${imgs.map((src,i)=>`<div data-a="lpZoom" data-v="${i}" style="cursor:zoom-in"><img src="${esc(src)}" alt="${esc(p.name)} — ${esc((caps[i]&&caps[i].t)||'photo '+(i+1))}" ${i?'loading="lazy"':''}>${photoOverlay(p, true)}</div>`).join('')}</div>
       ${imgs.length>1?`<div class="gal-th">${imgs.map((src,i)=>`<button data-a="galGo" data-i="${i}" aria-current="${i===0}" aria-label="Photo ${i+1}"><img src="${esc(src)}" alt=""></button>`).join('')}</div>`:''}` : `<div class="gal-main emoji"><div>${esc(p.emoji||'📦')}</div></div>`;
   return `<div class="lp pdp-wrap">
   <nav class="crumb"><button data-a="go" data-v="shop">← ${esc(st.shopName)}</button><span>›</span><span>${esc(p.category||'')}</span></nav>
@@ -1621,7 +1641,7 @@ function subjectData(key){
   const pics = a => withImg(a).slice(0,4).map(p=>p.image||p.emoji||'📦');
   const [kind, id] = key.split(':');
   if(kind==='product'){ const p = S.products.find(x=>x.id===id); if(!p) return null; const off = p.comparePrice>p.price ? Math.round((1-p.price/p.comparePrice)*100) : 0;
-    return {kicker:(p.category||'')+(isUsed(p)?' · Occasion · '+condLabel(p):''), title:p.name, sub:p.description||lines(p.highlights).slice(0,2).join(' · '), price:hasVar(p)&&minPrice(p)<p.price?'Dès '+fmt(minPrice(p)):fmt(p.price), old:off?fmt(p.comparePrice):'', badge:off?`−${off}%`:isNew(p)?'NOUVEAU':'', imgs:[p.image||p.emoji||'📦', ...(p.gallery||[]).map(extraSrc).filter(Boolean)].slice(0,1), link:'lp='+encodeURIComponent(p.id), tag:p.category}; }
+    return {kicker:(p.category||'')+(isUsed(p)?' · Occasion · '+condLabel(p):''), title:p.name, sub:p.description||lines(p.highlights).slice(0,2).join(' · '), price:hasVar(p)&&minPrice(p)<p.price?'Dès '+fmt(minPrice(p)):fmt(p.price), old:off?fmt(p.comparePrice):'', badge:off?`−${off}%`:isNew(p)?'NOUVEAU':'', imgs:[p.image||p.emoji||'📦', ...(p.gallery||[]).map(extraSrc).filter(Boolean)].slice(0,1), link:'lp='+encodeURIComponent(p.id), tag:p.category, pid:p.id}; }
   if(kind==='bundle'){ const b = S.bundles.find(x=>x.id===id); if(!b) return null; const bi = bundleInfo(b); const off = bi.regular>b.price ? Math.round((1-b.price/bi.regular)*100) : 0;
     return {kicker:'Lot · Achat groupé', title:b.name, sub:bi.comps.map(c=>`${c.qty} × ${c.p.name}`).join(' · '), price:fmt(b.price), old:off?fmt(bi.regular):'', badge:off?`−${off}%`:'', imgs:bi.comps.slice(0,4).map(c=>c.p.image||c.p.emoji||'📦'), link:'cat=Lots', tag:'Lots'}; }
   if(kind==='promo'){ const pr = S.promos.find(x=>x.code===id); if(!pr) return null; const lab = pr.type==='percent'?`−${pr.value} %`:pr.type==='fixed'?`−${fmt(pr.value)}`:'Livraison offerte';
@@ -1633,6 +1653,16 @@ function subjectData(key){
   return {kicker:'Boutique en ligne · '+st.city, title:st.tagline||st.shopName, sub:st.intro||'', imgs:pics(live), link:'', tag:''};
 }
 function studioLink(d, net){ const q = [d.link, 'src='+net].filter(Boolean).join('&'); return shopUrl()+'?'+q; }
+function drawTrust(ctx, x, y, w, h, u, rating, chips){
+  const SANS = 'Manrope, "Segoe UI", Arial, sans-serif'; if(S.settings.showTrust===false || (!chips.length && !(rating&&rating.n))) return;
+  const bh = (rating&&rating.n ? 108 : 70)*u, g = ctx.createLinearGradient(0, y+h-bh-40*u, 0, y+h);
+  g.addColorStop(0,'rgba(16,14,11,0)'); g.addColorStop(.45,'rgba(16,14,11,.78)'); g.addColorStop(1,'rgba(16,14,11,.92)');
+  ctx.save(); ctx.fillStyle = g; ctx.fillRect(x, y+h-bh-40*u, w, bh+40*u); ctx.textAlign = 'left'; let ly = y+h-bh+22*u;
+  if(rating&&rating.n){ ctx.font = `800 ${Math.round(30*u)}px ${SANS}`; ctx.fillStyle = '#F5C55B'; const k = Math.round(rating.avg); const stars = '★'.repeat(k)+'☆'.repeat(5-k);
+    ctx.fillText(stars, x+24*u, ly+10*u); const sw = ctx.measureText(stars).width; ctx.fillStyle = '#F2EBDD'; ctx.font = `700 ${Math.round(26*u)}px ${SANS}`;
+    ctx.fillText(' '+(Math.round(rating.avg*10)/10).toString().replace('.',',')+' · '+rating.n+' avis vérifiés', x+24*u+sw, ly+8*u); ly += 46*u; }
+  let fs = 25*u; const txt = chips.map(c=>c.replace(/^\S+\s/,'✓ ')).join('    '); ctx.font = `700 ${fs}px ${SANS}`; while(ctx.measureText(txt).width > w-48*u && fs > 14*u){ fs -= 1; ctx.font = `700 ${fs}px ${SANS}`; }
+  ctx.fillStyle = '#F2EBDD'; ctx.fillText(txt, x+24*u, ly+10*u); ctx.restore(); }
 async function drawPoster(d, W, H, net){
   const c = document.createElement('canvas'); c.width=W; c.height=H; const ctx = c.getContext('2d');
   const SERIF='"Cormorant Garamond", Georgia, serif', SANS='Manrope, "Segoe UI", Arial, sans-serif';
@@ -1652,6 +1682,8 @@ async function drawPoster(d, W, H, net){
     if(src && /^(data:|blob:|\/|https?:)/.test(src)){ const im = await loadImg(src); if(im){ const k = Math.max(gw/im.width, gh/im.height); ctx.drawImage(im, gx+(gw-im.width*k)/2, gy+(gh-im.height*k)/2, im.width*k, im.height*k); } }
     else { ctx.fillStyle='#F6F1E7'; ctx.fillRect(gx,gy,gw,gh); ctx.font = `${Math.round(Math.min(gw,gh)*0.5)}px "Apple Color Emoji","Segoe UI Emoji","Noto Color Emoji",sans-serif`; ctx.textAlign='center'; ctx.textBaseline='middle'; ctx.fillText(src||'📦', gx+gw/2, gy+gh/2+6); ctx.textBaseline='alphabetic'; }
     if(n>1){ ctx.strokeStyle='rgba(16,14,11,.15)'; ctx.lineWidth=3; ctx.strokeRect(gx,gy,gw,gh); } }
+  { const pp = d.pid && S.products.find(x=>x.id===d.pid); const rt = pp ? productRating(pp.id) : shopRating(); ctx.save(); rrect(ctx, box.x, box.y, box.w, box.h, 34*u); ctx.clip();
+    drawTrust(ctx, box.x, box.y, box.w, box.h, u, rt.n>=(pp?1:3) ? rt : null, trustList(pp||null).slice(0, wide?2:3)); ctx.restore(); }
   ctx.restore(); ctx.strokeStyle='rgba(201,164,92,.6)'; ctx.lineWidth=3*u; rrect(ctx, box.x, box.y, box.w, box.h, 34*u); ctx.stroke();
   if(d.badge){ const r = 92*u, cx = box.x+box.w-r*0.75, cy = box.y+r*0.75; ctx.fillStyle=gold; ctx.beginPath(); ctx.arc(cx,cy,r,0,7); ctx.fill(); ctx.fillStyle='#14110D'; ctx.textAlign='center'; let fs = r*0.62; ctx.font=`800 ${fs}px ${SANS}`; while(ctx.measureText(d.badge).width > r*1.6 && fs>10){ fs-=2; ctx.font=`800 ${fs}px ${SANS}`; } ctx.fillText(d.badge, cx, cy+fs*0.35); }
   // zone texte : mise en page adaptative (le texte se réduit pour tenir au-dessus du bouton)
@@ -1762,6 +1794,7 @@ async function makeVisual(p, story){
   ctx.save(); rrect(ctx, ix, y, iw, ih, 36); ctx.fillStyle = '#1B1814'; ctx.fill(); ctx.clip();
   if(p.image){ await new Promise(ok=>{ const im = new Image(); im.onload = ()=>{ const k = Math.max(iw/im.width, ih/im.height), dw = im.width*k, dh = im.height*k; ctx.drawImage(im, ix+(iw-dw)/2, y+(ih-dh)/2, dw, dh); ok(); }; im.onerror = ok; im.src = p.image; }); }
   else { ctx.font = `${Math.round(ih*0.5)}px "Apple Color Emoji","Segoe UI Emoji","Noto Color Emoji",sans-serif`; ctx.textAlign = 'center'; ctx.textBaseline = 'middle'; ctx.fillText(p.emoji||'📦', ix+iw/2, y+ih/2+10); ctx.textBaseline = 'alphabetic'; }
+  { const rt = productRating(p.id); ctx.save(); rrect(ctx, ix, y, iw, ih, 36); ctx.clip(); drawTrust(ctx, ix, y, iw, ih, 1, rt.n ? rt : null, trustList(p).slice(0,3)); ctx.restore(); }
   ctx.restore(); ctx.strokeStyle = 'rgba(201,164,92,.55)'; ctx.lineWidth = 3; rrect(ctx, ix, y, iw, ih, 36); ctx.stroke();
   if(p.comparePrice > p.price){ const off = Math.round((1-p.price/p.comparePrice)*100), r = story ? 110 : 92, cx = ix+iw-r+20, cy = y+r-20;
     ctx.fillStyle = gold; ctx.beginPath(); ctx.arc(cx, cy, r, 0, 7); ctx.fill(); ctx.fillStyle = '#14110D'; ctx.textAlign = 'center'; ctx.font = `800 ${Math.round(r*0.62)}px ${SANS}`; ctx.fillText(`−${off}%`, cx, cy+r*0.22); }
@@ -1839,7 +1872,7 @@ function viewProduct(){
   const pays = enabledProcs().map(([k])=>PROCESSORS[k].name);
   const q = Math.max(1, S.pqty||1), out = p.stock<=0;
   const gal = imgs.length
-    ? `<div class="gal-main" id="gal">${imgs.map((src,i)=>`<div><img src="${esc(src)}" alt="${esc(p.name)} — photo ${i+1}" ${i?'loading="lazy"':''}></div>`).join('')}</div>
+    ? `<div class="gal-main" id="gal">${imgs.map((src,i)=>`<div><img src="${esc(src)}" alt="${esc(p.name)} — photo ${i+1}" ${i?'loading="lazy"':''}>${photoOverlay(p, true)}</div>`).join('')}</div>
        ${imgs.length>1?`<div class="gal-th" role="group" aria-label="Photos">${imgs.map((src,i)=>`<button data-a="galGo" data-i="${i}" aria-current="${i===0}" aria-label="Photo ${i+1}"><img src="${esc(src)}" alt=""></button>`).join('')}</div>`:''}`
     : `<div class="gal-main emoji"><div>${esc(p.emoji||'📦')}</div></div>`;
   return `<div class="pdp-wrap">
@@ -3343,6 +3376,11 @@ function paneCompany(){
    <div class="panel"><h3>Coordonnées</h3><div class="row">${f('address')}${f('city')}${f('country')}</div><div class="row">${f('phone')}${f('phone2')}</div><div class="row">${f('whatsapp')}${f('email')}</div>${f('hours')}</div>
    <div class="panel"><h3>Pays de livraison</h3><p class="muted small" style="margin:0 0 10px">Les drapeaux cochés s’affichent dans la boutique, et le client choisit son pays à la commande.</p>
     <div style="display:grid;grid-template-columns:repeat(auto-fill,minmax(150px,1fr));gap:8px">${Object.entries(WA).map(([c,n])=>`<label style="display:flex;align-items:center;gap:8px;padding:6px 8px;border:1px solid var(--line);border-radius:10px;font-size:14px"><input type="checkbox" data-ship="${c}" ${(st.shipCountries||[]).includes(c)?'checked':''}><span style="width:30px;display:inline-block">${flagSVG(c).replace('<svg ','<svg style="width:30px;height:20px;border-radius:3px;display:block" ')}</span>${esc(n)}</label>`).join('')}</div></div>
+   <div class="panel"><h3>Garanties affichées sur les photos et les affiches</h3>
+    <p class="muted small" style="margin:0 0 10px">N’indiquez que ce que vous offrez vraiment. La note en étoiles n’apparaît que s’il y a de vrais avis clients ; la garantie vient de la fiche de chaque produit ; « Paiement à la livraison » s’affiche s’il est activé.</p>
+    <div class="row"><div class="field"><label for="co-deliveryPromise">Délai de livraison</label><input class="input" id="co-deliveryPromise" data-co="deliveryPromise" value="${esc(st.deliveryPromise||'')}" placeholder="ex. Livré en 24 h à Bamako"></div>
+    <div class="field"><label for="co-returnPolicy">Échange ou retour</label><input class="input" id="co-returnPolicy" data-co="returnPolicy" value="${esc(st.returnPolicy||'')}" placeholder="ex. Échange sous 7 jours"></div></div>
+    <label style="display:flex;gap:8px;align-items:center"><input type="checkbox" id="co-showTrust" ${st.showTrust===false?'':'checked'}> Afficher les étoiles et les garanties sur les photos et les affiches</label></div>
    <div class="panel"><h3>Reçus</h3>${f('receiptNote')}</div>
    <div class="panel"><h3>Suivi publicitaire</h3><div class="field"><label for="co-gtmId">Google Tag Manager</label><input class="input" id="co-gtmId" data-co="gtmId" value="${esc(st.gtmId||'')}" placeholder="ex. GTM-WJVTWPWW" style="font-family:monospace"></div>
     <div class="field"><label for="co-metaPixel">Identifiant du pixel Meta (Facebook, Instagram)</label><input class="input" id="co-metaPixel" data-co="metaPixel" inputmode="numeric" value="${esc(st.metaPixel||'')}" placeholder="ex. 1784224236125858" style="font-family:monospace"></div>
@@ -3362,6 +3400,7 @@ async function saveCompany(){
   const s2 = structuredClone(S.settings); document.querySelectorAll('[data-co]').forEach(i=>s2[i.dataset.co]=i.value.trim());
   const ship = [...document.querySelectorAll('[data-ship]')].filter(i=>i.checked).map(i=>i.dataset.ship); if(document.querySelector('[data-ship]')) s2.shipCountries = ship.length ? ship : ['ML'];
   if(!s2.shopName) return toast('Le nom commercial est obligatoire.');
+  if($('#co-showTrust')) s2.showTrust = $('#co-showTrust').checked; s2.deliveryPromise = String(s2.deliveryPromise||'').slice(0,40); s2.returnPolicy = String(s2.returnPolicy||'').slice(0,40);
   s2.metaPixel = String(s2.metaPixel||'').replace(/\s/g,''); if(s2.metaPixel && !/^\d{10,20}$/.test(s2.metaPixel)) return toast('Identifiant de pixel Meta invalide (uniquement des chiffres).');
   s2.gtmId = String(s2.gtmId||'').toUpperCase().replace(/\s/g,''); if(s2.gtmId && !/^GTM-[A-Z0-9]{4,12}$/.test(s2.gtmId)) return toast('Identifiant Google Tag Manager invalide (format GTM-XXXXXXX).');
   s2.tiktokPixel = String(s2.tiktokPixel||'').toUpperCase().replace(/\s/g,''); if(s2.tiktokPixel && !/^[A-Z0-9]{10,30}$/.test(s2.tiktokPixel)) return toast('Identifiant de pixel TikTok invalide.');

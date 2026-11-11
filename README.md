@@ -261,3 +261,8 @@ Gestion › Produits › **🇨🇳 Importer un produit chinois** : plateforme e
 - Sécurité : seuls les sites publics sont lus (adresses privées refusées, y compris après redirection), le fichier `robots.txt` du site est respecté, et Amazon, Temu, Shein, Pinduoduo, 1688 et Taobao, qui l'interdisent, sont renvoyés vers l'import par captures d'écran.
 - **Devise** du prix d'achat : yuan, dollar, euro, livre, dirham ou FCFA, avec un taux mémorisé pour chaque devise.
 - `IMPORT_TEST_LOCAL=1` sert uniquement aux tests (lecture d'adresses locales) : ne jamais l'ajouter sur Render.
+
+
+## Étoiles et garanties sur les photos et les affiches
+
+Sur les photos (cartes de la boutique, fiche produit, page de vente) et sur les affiches (Studio réseaux, « Créer un visuel ») : la note en étoiles (uniquement avec de vrais avis publiés ; sur les affiches de la boutique, la note moyenne à partir de 3 avis) et les garanties réellement offertes : garantie du produit (fiche), paiement à la livraison (s'il est activé), délai de livraison et échange (Gestion › Société › Garanties affichées). Affichage désactivable.
