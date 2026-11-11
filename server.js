@@ -643,11 +643,18 @@ app.use('/api', (req, res, next) => {
 });
 
 /* --- Public --- */
+let soldCache = { at: 0, map: {} };
+function sold30(id) {
+  if (Date.now() - soldCache.at > 60e3) { const since = Date.now() - 30 * 864e5, m = {};
+    for (const o of allDocs('orders')) if (['payee', 'preparation', 'expediee', 'livree'].includes(o.status) && (o.createdAt || 0) >= since) for (const i of o.items || []) { if (i.id) m[i.id] = (m[i.id] || 0) + (i.qty || 0); for (const c of i.components || []) if (c.id) m[c.id] = (m[c.id] || 0) + (c.qty || 0) * (i.qty || 1); }
+    soldCache = { at: Date.now(), map: m }; }
+  return soldCache.map[id] || 0;
+}
 const publicProduct = p => ({ id: p.id, name: p.name, sku: p.sku, category: p.category, price: p.price, comparePrice: p.comparePrice, stock: p.stock, lowStock: p.lowStock, emoji: p.emoji, image: p.image, description: p.description, active: true, createdAt: p.createdAt, bulkMin: p.bulkMin || 0, bulkPrice: p.bulkPrice || 0, newUntil: p.newUntil || 0,
   condition: p.condition || 'neuf', conditionNote: p.conditionNote || '',
   lpHook: p.lpHook || '', lpSub: p.lpSub || '', lpProblem: p.lpProblem || '', lpSolution: p.lpSolution || '', lpUsages: p.lpUsages || '', lpFaq: p.lpFaq || '', lpOffer: p.lpOffer || '', lpUntil: p.lpUntil || '',
   angleCaps: Array.isArray(p.angleCaps) ? p.angleCaps : [], spin: Array.isArray(p.spin) ? p.spin : [],
-  lpVideo: p.lpVideo || '', lpVideoTitle: p.lpVideoTitle || '',
+  lpVideo: p.lpVideo || '', lpVideoTitle: p.lpVideoTitle || '', sold30: sold30(p.id),
   options: Array.isArray(p.options) ? p.options : [], variants: Array.isArray(p.variants) ? p.variants.map(v => ({ key: v.key, vals: v.vals, stock: v.stock, price: v.price, barcode: v.barcode || '' })) : [],
   barcode: p.barcode || '',
   gallery: Array.isArray(p.gallery) ? p.gallery : [], highlights: p.highlights || '', details: p.details || '', specs: p.specs || '', warranty: p.warranty || '' });
@@ -662,6 +669,17 @@ app.post('/api/promo/check', h((req, res) => {
   if (a) return res.json({ promo: { code: a.code, type: 'percent', value: Number(a.discountPct) || 0, affiliate: { id: a.id } } });
   const p = checkPromo(req.body?.code, Number(req.body?.subtotal) || 0);
   res.json({ promo: p });
+}));
+
+/* Visites des pages de vente (une par visiteur, produit et tranche de 6 heures) */
+app.post('/api/lp-view', h((req, res) => {
+  const pid = String(req.body?.pid || ''), p = validId(pid) && getDoc('products', pid);
+  if (p && !limited('lpv:' + req.ip + ':' + pid, 1, 6 * 3600e3)) {
+    const v = getDoc('lp-stats', pid) || { views: 0, days: {} }, d = today(), days = { ...(v.days || {}) };
+    days[d] = (days[d] || 0) + 1; for (const k of Object.keys(days)) if (k < addDays(d, -90)) delete days[k];
+    putDoc('lp-stats', pid, { views: (v.views || 0) + 1, days, lastAt: Date.now() });
+  }
+  res.json({ ok: true });
 }));
 
 /* Visites apportées par les liens suivis des réseaux sociaux (?src=facebook…) */
@@ -946,6 +964,7 @@ app.post('/api/orders', h(async (req, res) => {
   const order = {
     number: 'FM-' + new Date().toISOString().slice(2, 10).replace(/-/g, '') + '-' + rnd(4),
     items: t.lines, subtotal: t.subtotal, discount: t.discount, shipping: t.shipping, total: t.total, promoCode: t.promoCode, affiliate: t.affiliate,
+    lpPids: (Array.isArray(b.lpPids) ? b.lpPids : []).map(String).filter(x => validId(x) && t.lines.some(l => l.id === x)).slice(0, 20),
     source: String(b.source || '').toLowerCase().replace(/[^a-z0-9_-]/g, '').slice(0, 20), campaign: String(b.campaign || '').replace(/[^A-Za-z0-9_-]/g, '').slice(0, 30),
     customer, delivery, payment: { method, status: method === 'cod' ? 'à encaisser' : manual ? 'à vérifier' : 'en attente', ref: manual ? String(b.payRef || '').trim().slice(0, 60) : '', manual: !!manual, to: manual || '' },
     status: 'en_attente', channel: 'en ligne', stockApplied: false, createdAt: Date.now(), createdBy: 'web', token: randomToken()
@@ -1115,6 +1134,7 @@ app.get('/api/admin/state', requireStaff, (req, res) => {
     costs: allDocs('costs'), stockMoves: allDocs('stock-moves').sort((a, b) => b.createdAt - a.createdAt).slice(0, 1000),
     ai: !!env.ANTHROPIC_API_KEY,
     drivers: allDocs('drivers').sort((a, b) => a.name.localeCompare(b.name)),
+    lpStats: allDocs('lp-stats'),
     purchases: allDocs('purchases').sort((a, b) => b.createdAt - a.createdAt).slice(0, 500),
     campaigns: allDocs('campaigns').sort((a, b) => b.createdAt - a.createdAt).slice(0, 200), contactFlags: allDocs('contact-flags'),
     visits: allDocs('visits').map(v => ({ id: v.id, count: v.count || 0, count30: Object.entries(v.days || {}).filter(([k]) => k >= addDays(today(), -30)).reduce((t, [, n]) => t + n, 0) })),
@@ -1129,7 +1149,7 @@ app.get('/api/admin/state', requireStaff, (req, res) => {
     settings: s, users: store.users.list(), providers: providers(), configured: CONFIGURED, me: req.user
   });
 });
-const ADMIN_COLS = new Set(['products', 'product-images', 'costs', 'stock-moves', 'campaigns', 'contact-flags', 'drivers', 'delivery-photos', 'purchases', 'reviews', 'review-images', 'bundles', 'promos', 'orders', 'settings', 'affiliates', 'aff-payouts', 'aff-lookup', 'clients', 'suppliers', 'fin-moves', 'fin-ledger', 'fin-config']);
+const ADMIN_COLS = new Set(['products', 'product-images', 'costs', 'stock-moves', 'lp-stats', 'campaigns', 'contact-flags', 'drivers', 'delivery-photos', 'purchases', 'reviews', 'review-images', 'bundles', 'promos', 'orders', 'settings', 'affiliates', 'aff-payouts', 'aff-lookup', 'clients', 'suppliers', 'fin-moves', 'fin-ledger', 'fin-config']);
 function adminTarget(req) {
   const { col, id } = req.params;
   if (!ADMIN_COLS.has(col) || !validId(id)) throw httpErr(400, 'Requête invalide.');

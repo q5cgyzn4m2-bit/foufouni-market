@@ -266,3 +266,12 @@ Gestion › Produits › **🇨🇳 Importer un produit chinois** : plateforme e
 ## Étoiles et garanties sur les photos et les affiches
 
 Sur les photos (cartes de la boutique, fiche produit, page de vente) et sur les affiches (Studio réseaux, « Créer un visuel ») : la note en étoiles (uniquement avec de vrais avis publiés ; sur les affiches de la boutique, la note moyenne à partir de 3 avis) et les garanties réellement offertes : garantie du produit (fiche), paiement à la livraison (s'il est activé), délai de livraison et échange (Gestion › Société › Garanties affichées). Affichage désactivable.
+
+
+## Conversion vers les pages de vente
+
+- Cartes produits : accroche de la page de vente, badge « ▶ Vidéo », ventes réelles du mois (« 🔥 N vendus ce mois-ci », à partir de 3, calculées sur les commandes payées), bouton « ✨ Découvrir l'offre ».
+- Accueil : section « Nos coups de cœur » (4 produits avec page de vente, classés par ventes puis par avis).
+- Fiche produit : bannière « Découvrez ce produit en détail » vers la page de vente.
+- Réglage (Gestion › Société) : au clic sur un produit, ouvrir directement sa page de vente quand elle est remplie.
+- Mesure : visites des pages de vente (`/api/lp-view`, une par visiteur et par produit toutes les 6 h), commandes passées après une visite (`lpPids`), et tableau « Pages de vente · 30 derniers jours » (visites, commandes, taux de conversion, ventes) dans le tableau de bord.

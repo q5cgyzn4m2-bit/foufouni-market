@@ -367,6 +367,19 @@ textarea.input{min-height:84px; resize:vertical}
 .pay-row .pl{width:46px; height:32px; border-radius:8px; display:grid; place-items:center; font:800 11px/1 var(--f-b); color:#fff; flex:none; box-shadow:0 2px 6px rgba(0,0,0,.25)}
 .pay-row .pl img{width:100%; height:100%; object-fit:contain}
 .pay-row.big .pl{width:58px; height:40px; border-radius:10px; font-size:13px}
+.hook{display:block; font:600 italic 14px var(--f-d); color:var(--indigo); margin:2px 0 4px; line-height:1.25}
+.see-offer{display:inline-flex; align-items:center; gap:6px; margin-top:6px; padding:6px 12px; border-radius:999px; border:1px solid color-mix(in srgb,var(--indigo) 55%,var(--line)); background:var(--indigo-soft); color:var(--indigo); font:800 12.5px var(--f-b); cursor:pointer}
+.see-offer:hover{background:var(--indigo); color:var(--on-indigo)}
+.sold{display:inline-block; font:700 12px var(--f-b); color:#E8833A; margin-top:2px}
+.vid-badge{position:absolute; top:10px; right:10px; background:rgba(16,14,11,.82); color:#fff; font:800 11px var(--f-b); padding:5px 9px; border-radius:999px}
+.fav{display:grid; grid-template-columns:repeat(auto-fill,minmax(min(260px,100%),1fr)); gap:16px; margin:0 0 40px}
+.fav-c{position:relative; display:grid; grid-template-columns:120px 1fr; gap:14px; align-items:center; padding:12px; border-radius:20px; background:var(--surface); border:1px solid color-mix(in srgb,var(--indigo) 35%,var(--line)); cursor:pointer; text-align:left; color:inherit; font:inherit}
+.fav-c:hover{transform:translateY(-2px); box-shadow:var(--shadow)}
+.fav-c .im{width:120px; height:120px; border-radius:14px; overflow:hidden; background:#fff; display:grid; place-items:center; font-size:52px}
+.fav-c .im img{width:100%; height:100%; object-fit:cover}
+.fav-c b{display:block; font:700 18px/1.15 var(--f-d)}
+.lp-banner{display:flex; gap:12px; align-items:center; margin:14px 0 0; padding:12px 14px; border-radius:16px; background:linear-gradient(135deg,var(--indigo-soft),transparent); border:1px solid color-mix(in srgb,var(--indigo) 50%,var(--line)); cursor:pointer; text-align:left; width:100%; color:inherit; font:inherit}
+.lp-banner b{display:block}
 .empty{border:2px dashed var(--line); border-radius:var(--r-m); padding:48px 20px; text-align:center; color:var(--muted)}
 .empty h3{color:var(--ink); margin-bottom:8px; font-size:20px}
 
@@ -533,7 +546,7 @@ const DEFAULT_SETTINGS = {
   currency:'FCFA', deliveryFee:1500, freeFrom:50000, city:'Bamako', phone:'',
   affDefaultPct:5, affDiscountPct:5, affDays:30, siteUrl:'',
   shipCountries:['ML','SN','CI','BF','GN','NE','BJ','TG','GH','NG','MR','GM','GW','SL','LR','CV'],
-  showTrust:true, deliveryPromise:'', returnPolicy:'',
+  showTrust:true, deliveryPromise:'', returnPolicy:'', lpFirst:true,
   headerSub:'', legalName:'', legalForm:'', capital:'', rccm:'', nif:'', address:'', country:'Mali', whatsapp:'', phone2:'', email:'', hours:'', receiptNote:'Merci pour votre confiance !',
   testMode:true,
   processors:{
@@ -561,7 +574,7 @@ const ROLES = ['Gérant','Vendeur','Caissier','Livreur','Gestionnaire de stock']
 /* ============ état ============ */
 const S = {
   ready:false, live:false, isAdmin:false, uid:null, myName:'',
-  products:[], bundles:[], clients:[], suppliers:[], reviews:[], drivers:[], purchases:[], dphoto:{}, campaigns:[], contactFlags:{}, audCarts:null, audSeg:'abandon_new', audSel:{}, costs:{}, stockMoves:[], inv:{}, topDays:30, topSort:'revenue', stFilter:'all', stCat:'', affiliates:[], affPayouts:[], moves:[], ledger:[], finConfig:{}, posTab:'vente', trAcc:'all', trType:'all', pq:'', promos:[], orders:[], settings:structuredClone(DEFAULT_SETTINGS), team:{members:[]},
+  products:[], bundles:[], clients:[], suppliers:[], reviews:[], drivers:[], purchases:[], lpStats:[], dphoto:{}, campaigns:[], contactFlags:{}, audCarts:null, audSeg:'abandon_new', audSel:{}, costs:{}, stockMoves:[], inv:{}, topDays:30, topSort:'revenue', stFilter:'all', stCat:'', affiliates:[], affPayouts:[], moves:[], ledger:[], finConfig:{}, posTab:'vente', trAcc:'all', trType:'all', pq:'', promos:[], orders:[], settings:structuredClone(DEFAULT_SETTINGS), team:{members:[]},
   cart:[], pos:[], posPromo:null, appliedPromo:null,
   view:'shop', tab:'dash', cat:'Tout', q:'', aq:'', orderFilter:'all', selPromos:new Set(), names:{}
 };
@@ -734,6 +747,7 @@ function render(){
   if(S.view==='admin' && S.tab==='team') resolveNames();
   if(S.view==='admin' && S.tab==='studio') setTimeout(studioRender, 0);
   if(!S._deep && S.ready && S.products.length && window.__ffmCat){ const c = window.__ffmCat; if(['Tout','Soldes','Nouveautés','Occasion','Lots'].includes(c) || S.products.some(p=>p.category===c)){ S.cat = c; setTimeout(()=>$('#catalogue')?.scrollIntoView({behavior:'smooth'}), 400); } window.__ffmCat = null; }
+  if(S.view==='landing' && S._vc !== S.view+S.pid){ try{ const seen = JSON.parse(sessionStorage.getItem('ffm-lp')||'[]'); if(!seen.includes(S.pid)){ seen.push(S.pid); sessionStorage.setItem('ffm-lp', JSON.stringify(seen)); if(window.lpView && !S.isAdmin) window.lpView(S.pid); } }catch(e){} }
   if((S.view==='product' || S.view==='landing') && S._vc !== S.view+S.pid){ S._vc = S.view+S.pid; const pp = S.products.find(x=>x.id===S.pid); if(pp) ttTrack('ViewContent', {contents:[ttItem(pp)], value:Math.round(pp.price)}); }
   if(S.view!=='product' && S.view!=='landing') S._vc = '';
   if(S.view==='landing') setTimeout(lpAfterRender, 0);
@@ -868,16 +882,23 @@ function viewShop(){
     ? `<div class="empty"><h3>La boutique est vide</h3><p>${S.isAdmin?'Ajoutez votre premier produit pour ouvrir la vente.':'Les produits arrivent bientôt.'}</p>${S.isAdmin?'<button class="btn primary" data-a="newProduct">Ajouter un produit</button>':''}</div>`
     : `<div class="empty"><h3>Aucun produit trouvé</h3><p>Essayez un autre mot ou une autre catégorie.</p><button class="btn ghost" data-a="clearSearch">Afficher tout le catalogue</button></div>`;
   const instBar = !isStandalone() && !S.instHide && !S.isAdmin ? `<div class="inst-bar"><span style="font-size:26px">📲</span><div style="flex:1"><b>Installez l’application ${esc(S.settings.shopName)}</b><div class="muted small">Plus rapide, en plein écran, avec les alertes de commande. Gratuit.</div></div><button class="btn primary sm" data-a="install" style="border-radius:999px;white-space:nowrap">Comment faire ?</button><button class="btn ghost sm" data-a="instHide" aria-label="Masquer" style="flex:0">×</button></div>` : '';
-  return `${instBar}${ribbon}${hero}${S.cat==='Tout'&&!S.q?flagsBand():''}${saleBlock}${usedBlock}${S.cat==='Tout'?bundleBlock:''}
+  const favs = S.cat==='Tout' && !S.q ? shopBase().filter(p=>p.stock>0 && hasLanding(p)).sort((a,b)=>soldCount(b)-soldCount(a) || (productRating(b.id).n-productRating(a.id).n)).slice(0,4) : [];
+  const favBlock = favs.length ? `<div class="sec-h"><h2>Nos coups de cœur</h2><span class="muted small">Découvrez-les en détail</span></div><div class="fav">${favs.map(p=>{ const rt = productRating(p.id), sd = soldCount(p);
+    return `<button class="fav-c" data-a="openLanding" data-id="${p.id}"><span class="im">${p.image?`<img src="${esc(p.image)}" alt="" loading="lazy">`:esc(p.emoji||'📦')}</span><span><span class="cat">${esc(p.category||'')}</span><b>${esc(p.lpHook||p.name)}</b>${p.lpHook?`<span class="muted small">${esc(p.name)}</span>`:''}
+      <span style="display:block;margin-top:6px"><span class="price" style="font-size:20px">${fmt(p.price)}</span>${p.comparePrice>p.price?` <span class="strike">${fmt(p.comparePrice)}</span>`:''}</span>
+      ${rt.n?`<span class="small">${starsHTML(rt.avg)} <span class="muted">(${rt.n})</span></span>`:sd>=3?`<span class="sold">🔥 ${sd} vendus ce mois-ci</span>`:''}
+      <span class="see-offer" style="margin-top:8px">${p.lpVideo?'▶ Voir la vidéo et l’offre ›':'✨ Découvrir l’offre ›'}</span></span></button>`; }).join('')}</div>` : '';
+  return `${instBar}${ribbon}${hero}${favBlock}${S.cat==='Tout'&&!S.q?flagsBand():''}${saleBlock}${usedBlock}${S.cat==='Tout'?bundleBlock:''}
     <div class="sec-h" id="catalogue"><h2>${S.q?`Résultats pour « ${esc(S.q)} »`:S.cat==='Tout'?'La collection':esc(S.cat)}</h2><span class="muted small">${S.cat==='Lots'?bundles.length+' lot'+(bundles.length>1?'s':''):list.length+' produit'+(list.length>1?'s':'')}</span></div>
     <div class="cats" role="group" aria-label="Catégories">${cats.map(c=>`<button aria-pressed="${S.cat===c}" data-a="cat" data-v="${esc(c)}">${esc(c)}</button>`).join('')}</div>
     ${S.cat==='Lots'?'':facetBar()}
     ${S.cat==='Lots'?bundleBlock:''}${S.cat==='Lots'?'':list.length?`<div class="grid">${list.map(p=>`
       <article class="card">
-        <button class="thumb" data-a="product" data-id="${p.id}" aria-label="Voir ${esc(p.name)}">${pImg(p)}${stockPill(p)}${isNew(p)?'<span class="new-band">Nouveau</span>':''}${photoOverlay(p)}</button>
-        <div class="card-b"><span class="cat">${esc(p.category)}${isUsed(p)?` · <b style="color:var(--indigo)">Occasion · ${esc(condLabel(p))}</b>`:''}</span><h3>${esc(p.name)}</h3>${(()=>{ const rt=productRating(p.id); return rt.n?`<span class="small">${starsHTML(rt.avg)} <span class="muted">(${rt.n})</span></span>`:''; })()}${p.bulkMin>1&&p.bulkPrice>0?`<span class="bulk">Dès ${p.bulkMin} : ${fmt(p.bulkPrice)} l’unité</span>`:''}
+        <button class="thumb" data-a="product" data-id="${p.id}" aria-label="Voir ${esc(p.name)}">${pImg(p)}${stockPill(p)}${isNew(p)?'<span class="new-band">Nouveau</span>':''}${p.lpVideo?'<span class="vid-badge">▶ Vidéo</span>':''}${photoOverlay(p)}</button>
+        <div class="card-b"><span class="cat">${esc(p.category)}${isUsed(p)?` · <b style="color:var(--indigo)">Occasion · ${esc(condLabel(p))}</b>`:''}</span><h3>${esc(p.name)}</h3>${p.lpHook?`<span class="hook">« ${esc(p.lpHook)} »</span>`:''}${(()=>{ const rt=productRating(p.id); return rt.n?`<span class="small">${starsHTML(rt.avg)} <span class="muted">(${rt.n})</span></span>`:''; })()}${soldCount(p)>=3?`<span class="sold">🔥 ${soldCount(p)} vendus ce mois-ci</span>`:''}${p.bulkMin>1&&p.bulkPrice>0?`<span class="bulk">Dès ${p.bulkMin} : ${fmt(p.bulkPrice)} l’unité</span>`:''}
           <div class="card-f"><span class="price">${hasVar(p)&&minPrice(p)<p.price?'<span class="muted small" style="font-family:var(--f-b)">Dès </span>'+fmt(minPrice(p)):fmt(p.price)}${p.comparePrice>p.price?`<span class="strike">${fmt(p.comparePrice)}</span>`:''}</span>
           <button class="add" data-a="add" data-id="${p.id}" ${p.stock<=0?'disabled':''} aria-label="Ajouter ${esc(p.name)} au panier">+</button></div>
+          ${hasLanding(p)?`<button class="see-offer" data-a="openLanding" data-id="${p.id}">✨ Découvrir l’offre ›</button>`:''}
         </div>
       </article>`).join('')}</div>`:empty}
     <footer class="shop-foot"><div><span class="fb">${esc(st.shopName)}</span><p style="margin-top:10px">${esc(st.intro)}</p></div>
@@ -911,6 +932,12 @@ const rateTxt = (avg, n) => '★ '+(Math.round(avg*10)/10).toString().replace('.
 function photoOverlay(p, big){ if(S.settings.showTrust===false) return '';
   const rt = productRating(p.id), t = trustList(p).slice(0, big?3:1);
   return `<div class="ov" aria-hidden="true">${rt.n?`<span class="rt">${rateTxt(rt.avg, rt.n)}</span>`:''}${t.map(x=>`<span>${esc(x)}</span>`).join('')}</div>`; }
+/* Page de vente « riche » : accroche, angles, vidéo… */
+const hasLanding = p => !!(p && (p.lpHook || p.lpProblem || p.lpVideo || (p.angleCaps||[]).some(c=>c&&c.t) || (p.spin||[]).length>=4));
+/* Ventes réelles des 30 derniers jours (calculées par le serveur, ou à partir des commandes en mode local) */
+function soldCount(p){ if(typeof p.sold30==='number') return p.sold30;
+  const since = Date.now()-30*864e5; let n = 0; (S.orders||[]).forEach(o=>{ if(['payee','preparation','expediee','livree'].includes(o.status) && (o.createdAt||0)>=since) (o.items||[]).forEach(i=>{ if(i.id===p.id) n += i.qty||0; }); }); return n; }
+function openBest(id){ const p = S.products.find(x=>x.id===id); if(p && S.settings.lpFirst!==false && hasLanding(p)) openLanding(id); else openProduct(id); }
 function productRating(pid){ const rs = pubReviews(pid), dist=[0,0,0,0,0]; rs.forEach(r=>dist[Math.min(5,Math.max(1,r.rating))-1]++); const n = rs.length; return {n, avg: n ? rs.reduce((t,r)=>t+r.rating,0)/n : 0, dist}; }
 const starsHTML = v => { const k = Math.round(v); return `<span class="stars" aria-label="${(Math.round(v*10)/10).toString().replace('.',',')} sur 5">${'★'.repeat(k)}<s>${'★'.repeat(5-k)}</s></span>`; };
 const reviewImgSrc = id => isServer() ? '/img/rv/'+encodeURIComponent(id) : S.rimg[id];
@@ -1925,6 +1952,7 @@ function viewProduct(){
         ${p.warranty?`<div><span>🛡️</span><span><b>Garantie et retour</b>${esc(p.warranty)}</span></div>`:''}
         ${st.phone?`<div><span>📞</span><span><b>Une question ?</b><a href="tel:${esc(st.phone.replace(/\s/g,''))}" style="color:var(--indigo)">${esc(st.phone)}</a></span></div>`:''}</div>
       <div class="mini-codes">${qrSVG(payLink(p, hasVar(p)?selVariant(p):null), 64)}<div>${eanSVG(hasVar(p)&&selVariant(p)?vCode(p,selVariant(p)):pCode(p), 150, 50)}<span>Scannez le QR pour payer sur votre téléphone · code produit ${esc(hasVar(p)&&selVariant(p)?vCode(p,selVariant(p)):pCode(p))}</span></div></div>
+      ${hasLanding(p)?`<button class="lp-banner" data-a="openLanding" data-id="${p.id}"><span style="font-size:26px">✨</span><span style="flex:1"><b>Découvrez ce produit en détail</b><span class="muted small">${[(p.angleCaps||[]).some(c=>c&&c.t)?'photos sous tous les angles':'', p.lpVideo?'vidéo':'', (p.spin||[]).length>=4?'vue à 360°':'', productRating(p.id).n?'avis clients':'', 'questions fréquentes'].filter(Boolean).join(' · ')}</span></span><span style="font-weight:800;color:var(--indigo)">Voir ›</span></button>`:''}
       <div class="row" style="gap:8px;margin-top:14px;flex-wrap:wrap"><button class="btn ghost sm" data-a="openLanding" data-id="${p.id}" style="flex:0;white-space:nowrap">✨ Page de vente</button><button class="btn ghost sm" data-a="shareProduct" data-id="${p.id}" style="flex:0">↗ Partager</button>${S.isAdmin?`<button class="btn ghost sm" data-a="visual" data-id="${p.id}" style="flex:0">🖼 Visuel</button><button class="btn ghost sm" data-a="editProduct" data-id="${p.id}" style="flex:0">✏️ Modifier</button>`:''}</div>
       ${inBundles.length?`<div style="margin-top:14px">${inBundles.map(b=>`<button class="btn ghost block" style="margin-top:8px" data-a="addBundle" data-id="${b.id}">Aussi en lot : ${esc(b.name)} · ${fmt(b.price)}</button>`).join('')}</div>`:''}
     </div></div>
@@ -2216,7 +2244,7 @@ async function coNext(){
       items:orderItems(t.lines),
       subtotal:t.subtotal, discount:t.discount, shipping:t.shipping, total:t.total,
       promoCode:S.appliedPromo?S.appliedPromo.code:'',
-      source:srcCode(), campaign:cmpCode(),
+      source:srcCode(), campaign:cmpCode(), lpPids:lpSeen().filter(id=>S.cart.some(l=>l.id===id)),
       affiliate:S.appliedPromo&&S.appliedPromo.affiliate?{id:S.appliedPromo.affiliate.id, code:S.appliedPromo.code, discountPct:S.appliedPromo.value, commission:affCommission(t.lines, S.appliedPromo.value)}:null,
       customer:{name:CO.name, phone:CO.phone, address:CO.address, city:CO.city, note:CO.note, country:CO.country||'ML'},
       delivery:CO.delivery, payment:{method:CO.method, ref, status:CO.method==='cod'?'à encaisser':'réussi'+(S.settings.testMode?' (test)':'')},
@@ -2985,7 +3013,20 @@ function viewAdmin(){
   return `<div class="admin"><nav class="side" aria-label="Gestion">${TABS.filter(([k])=>!['alerts','carts'].includes(k)||isServer()).map(([k,l])=>`<button data-a="tab" data-v="${k}" ${S.tab===k?'aria-current="page"':''}>${l}${k==='orders'&&pending?`<span class="pill warn">${pending}</span>`:''}</button>`).join('')}</nav>
     <section>${panes[S.tab]()}</section></div>`;
 }
-function paneDash(){
+function lpStatsPanel(){
+  const since = Date.now()-30*864e5, d30 = new Date(since).toISOString().slice(0,10);
+  const rows = S.products.filter(hasLanding).map(p=>{ const st = S.lpStats.find(x=>x.id===p.id)||{}; const views = Object.entries(st.days||{}).filter(([k])=>k>=d30).reduce((t,[,n])=>t+n,0);
+    const os = S.orders.filter(o=>(o.createdAt||0)>=since && o.status!=='annulee' && (o.lpPids||[]).includes(p.id)); const rev = os.reduce((t,o)=>t+(o.items||[]).filter(i=>i.id===p.id).reduce((a,i)=>a+i.price*i.qty,0),0);
+    return {p, views, orders:os.length, rate: views ? os.length/views*100 : 0, rev}; }).sort((a,b)=>b.views-a.views);
+  if(!rows.length) return `<div class="panel"><h3>Pages de vente</h3><p class="muted" style="margin:0">Remplissez la page de vente de vos produits (fiche produit › Page de vente) pour suivre ici leurs visites et leur taux de conversion.</p></div>`;
+  const tv = rows.reduce((t,r)=>t+r.views,0), to = rows.reduce((t,r)=>t+r.orders,0);
+  return `<div class="panel tbl-wrap"><h3>Pages de vente · 30 derniers jours</h3><p class="muted small" style="margin:-4px 0 10px">${isServer()?`${tv} visite${tv>1?'s':''}, ${to} commande${to>1?'s':''} après une visite de la page, soit un taux de conversion de <b>${tv?(to/tv*100).toFixed(1).replace('.',','):'0'} %</b>.`:'Les visites sont comptées sur la version Render.'}</p>
+    <table><thead><tr><th>Produit</th><th style="text-align:right">Visites</th><th style="text-align:right">Commandes</th><th style="text-align:right">Conversion</th><th style="text-align:right">Ventes</th><th></th></tr></thead><tbody>
+    ${rows.map(r=>`<tr><td><b>${esc(r.p.name)}</b>${r.p.lpHook?`<div class="muted small">« ${esc(r.p.lpHook)} »</div>`:''}</td><td style="text-align:right">${r.views}</td><td style="text-align:right">${r.orders}</td><td style="text-align:right"><b style="color:${r.rate>=3?'var(--kola)':r.views>=20&&r.rate<1?'var(--danger)':'inherit'}">${r.rate.toFixed(1).replace('.',',')} %</b></td><td style="text-align:right">${fmt(r.rev)}</td><td><button class="btn ghost sm" data-a="openLanding" data-id="${r.p.id}">Voir</button></td></tr>`).join('')}</tbody></table>
+    <p class="muted small" style="margin:10px 0 0">Repère : au-delà de 3 % de conversion, la page fonctionne bien. Une page très visitée mais qui convertit peu mérite une meilleure accroche, de meilleures photos, une vidéo ou une offre.</p></div>`;
+}
+function paneDash(){ return paneDashBase() + lpStatsPanel(); }
+function paneDashBase(){
   const valid = S.orders.filter(o=>o.status!=='annulee' && o.status!=='en_attente');
   const revenue = valid.reduce((s,o)=>s+o.total,0);
   const avg = valid.length ? revenue/valid.length : 0;
@@ -3419,7 +3460,8 @@ function paneCompany(){
     <p class="muted small" style="margin:0 0 10px">N’indiquez que ce que vous offrez vraiment. La note en étoiles n’apparaît que s’il y a de vrais avis clients ; la garantie vient de la fiche de chaque produit ; « Paiement à la livraison » s’affiche s’il est activé.</p>
     <div class="row"><div class="field"><label for="co-deliveryPromise">Délai de livraison</label><input class="input" id="co-deliveryPromise" data-co="deliveryPromise" value="${esc(st.deliveryPromise||'')}" placeholder="ex. Livré en 24 h à Bamako"></div>
     <div class="field"><label for="co-returnPolicy">Échange ou retour</label><input class="input" id="co-returnPolicy" data-co="returnPolicy" value="${esc(st.returnPolicy||'')}" placeholder="ex. Échange sous 7 jours"></div></div>
-    <label style="display:flex;gap:8px;align-items:center"><input type="checkbox" id="co-showTrust" ${st.showTrust===false?'':'checked'}> Afficher les étoiles et les garanties sur les photos et les affiches</label></div>
+    <label style="display:flex;gap:8px;align-items:center"><input type="checkbox" id="co-showTrust" ${st.showTrust===false?'':'checked'}> Afficher les étoiles et les garanties sur les photos et les affiches</label>
+    <label style="display:flex;gap:8px;align-items:center;margin-top:8px"><input type="checkbox" id="co-lpFirst" ${st.lpFirst===false?'':'checked'}> Au clic sur un produit, ouvrir directement sa page de vente (quand elle est remplie)</label></div>
    <div class="panel"><h3>Reçus</h3>${f('receiptNote')}</div>
    <div class="panel"><h3>Suivi publicitaire</h3><div class="field"><label for="co-gtmId">Google Tag Manager</label><input class="input" id="co-gtmId" data-co="gtmId" value="${esc(st.gtmId||'')}" placeholder="ex. GTM-WJVTWPWW" style="font-family:monospace"></div>
     <div class="field"><label for="co-metaPixel">Identifiant du pixel Meta (Facebook, Instagram)</label><input class="input" id="co-metaPixel" data-co="metaPixel" inputmode="numeric" value="${esc(st.metaPixel||'')}" placeholder="ex. 1784224236125858" style="font-family:monospace"></div>
@@ -3439,7 +3481,7 @@ async function saveCompany(){
   const s2 = structuredClone(S.settings); document.querySelectorAll('[data-co]').forEach(i=>s2[i.dataset.co]=i.value.trim());
   const ship = [...document.querySelectorAll('[data-ship]')].filter(i=>i.checked).map(i=>i.dataset.ship); if(document.querySelector('[data-ship]')) s2.shipCountries = ship.length ? ship : ['ML'];
   if(!s2.shopName) return toast('Le nom commercial est obligatoire.');
-  if($('#co-showTrust')) s2.showTrust = $('#co-showTrust').checked; s2.deliveryPromise = String(s2.deliveryPromise||'').slice(0,40); s2.returnPolicy = String(s2.returnPolicy||'').slice(0,40);
+  if($('#co-showTrust')) s2.showTrust = $('#co-showTrust').checked; if($('#co-lpFirst')) s2.lpFirst = $('#co-lpFirst').checked; s2.deliveryPromise = String(s2.deliveryPromise||'').slice(0,40); s2.returnPolicy = String(s2.returnPolicy||'').slice(0,40);
   s2.metaPixel = String(s2.metaPixel||'').replace(/\s/g,''); if(s2.metaPixel && !/^\d{10,20}$/.test(s2.metaPixel)) return toast('Identifiant de pixel Meta invalide (uniquement des chiffres).');
   s2.gtmId = String(s2.gtmId||'').toUpperCase().replace(/\s/g,''); if(s2.gtmId && !/^GTM-[A-Z0-9]{4,12}$/.test(s2.gtmId)) return toast('Identifiant Google Tag Manager invalide (format GTM-XXXXXXX).');
   s2.tiktokPixel = String(s2.tiktokPixel||'').toUpperCase().replace(/\s/g,''); if(s2.tiktokPixel && !/^[A-Z0-9]{10,30}$/.test(s2.tiktokPixel)) return toast('Identifiant de pixel TikTok invalide.');
@@ -3546,7 +3588,7 @@ document.addEventListener('click', async e=>{
     case 'scroll': $('#catalogue').scrollIntoView({behavior:matchMedia('(prefers-reduced-motion:reduce)').matches?'auto':'smooth'}); break;
     case 'cart': openCart(); break;
     case 'add': addToCart(id); break;
-    case 'product': openProduct(id); break;
+    case 'product': openBest(id); break;
     case 'addClose': addToCart(id); closeAll(); break;
     case 'qty': changeQty('cart', id, Number(el.dataset.d)); if(!S.cart.length) openCart(); break;
     case 'addBundle': addBundle(id); break;
@@ -3696,6 +3738,7 @@ function captureSrc(){
     const cat = q.get('cat'); if(cat) window.__ffmCat = cat;
     const cm = (q.get('cmp')||'').replace(/[^A-Za-z0-9_-]/g,'').slice(0,30); if(cm) localStorage.setItem('ffm-cmp', JSON.stringify({c:cm, at:Date.now()})); }catch(e){}
 }
+function lpSeen(){ try{ return JSON.parse(sessionStorage.getItem('ffm-lp')||'[]'); }catch(e){ return []; } }
 function cmpCode(){ try{ const r = JSON.parse(localStorage.getItem('ffm-cmp')||'null'); if(r && Date.now()-r.at < 30*864e5) return r.c; }catch(e){} return ''; }
 function srcCode(){ try{ const r = JSON.parse(localStorage.getItem('ffm-src')||'null'); if(r && Date.now()-r.at < 30*864e5) return r.src; }catch(e){} return ''; }
 captureSrc();
