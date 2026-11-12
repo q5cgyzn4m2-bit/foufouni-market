@@ -569,8 +569,8 @@ const DEFAULT_SETTINGS = {
   }
 };
 const PROCESSORS = {
-  orange:{name:'Orange Money', kind:'momo', color:'#FF7900', short:'OM', field:'Numéro marchand'},
-  moov:{name:'Moov Money', kind:'momo', color:'#0066B3', short:'Moov', field:'Numéro marchand'},
+  orange:{name:'Orange Money', kind:'momo', color:'#FF7900', short:'OM', field:'Code marchand ou numéro'},
+  moov:{name:'Moov Money', kind:'momo', color:'#0066B3', short:'Moov', field:'Code marchand ou numéro'},
   wave:{name:'Wave', kind:'momo', color:'#1DC8F2', short:'W', field:'Identifiant marchand'},
   card:{name:'Carte bancaire (Stripe)', kind:'card', color:'#635BFF', short:'CB', field:'Clé publique (pk_…)'},
   paypal:{name:'PayPal', kind:'card', color:'#003087', short:'PP', field:'Client ID'},
@@ -1578,14 +1578,18 @@ function parseVideo(url){
   if(/^https?:\/\/(v\.douyin\.com|b23\.tv|v\.kuaishou\.com|m\.tb\.cn|e\.tb\.cn|qr\.1688\.com|a\.aliexpress\.com|youtube\.com\/shorts\/?$)\//.test(u)) return {kind:'short', short:true};
   return null;
 }
+function warmVideo(kind){ const hosts = {YouTube:['https://www.youtube-nocookie.com','https://i.ytimg.com'], TikTok:['https://www.tiktok.com'], Instagram:['https://www.instagram.com'], Facebook:['https://www.facebook.com']}[kind]||[];
+  hosts.forEach(h=>{ if(document.querySelector(`link[rel=preconnect][href="${h}"]`)) return; const l = document.createElement('link'); l.rel = 'preconnect'; l.href = h; document.head.appendChild(l); }); }
+document.addEventListener('pointerover', e=>{ const b = e.target.closest && e.target.closest('[data-a="lpPlay"]'); if(b) warmVideo(b.dataset.k); }, {passive:true});
+document.addEventListener('touchstart', e=>{ const b = e.target.closest && e.target.closest('[data-a="lpPlay"]'); if(b) warmVideo(b.dataset.k); }, {passive:true});
 function videoBlock(p){
   const v = parseVideo(p.lpVideo); if(!v || v.short) return '';
   const poster = v.thumb || (galleryFor(p)[0] || '');
-  const direct = !v.file && !v.link && v.kind!=='YouTube' && v.kind!=='Vimeo';
+  const direct = false; // toujours une image d’abord : page plus rapide, et moins de demandes au lecteur de la plateforme
   const inner = v.file ? `<video src="${esc(v.file)}" controls playsinline preload="metadata" ${poster?`poster="${esc(poster)}"`:''}></video>`
     : direct ? `<iframe src="${esc(v.embed.replace(/([?&])autoplay=(1|true)/,'$1autoplay=0'))}" title="${esc(p.lpVideoTitle||'Vidéo du produit')}" allow="encrypted-media; picture-in-picture; fullscreen; clipboard-write" allowfullscreen referrerpolicy="strict-origin-when-cross-origin" loading="lazy"></iframe>`
     : v.link ? `<a class="face" href="${esc(v.link)}" target="_blank" rel="noopener" style="background-image:url('${esc(poster)}')"><span class="play">▶</span><span class="vt">${esc(p.lpVideoTitle||'Voir la vidéo')} · sur ${esc(v.kind)} ↗</span></a>`
-    : `<button class="face" data-a="lpPlay" data-v="${esc(v.embed)}" style="background-image:url('${esc(poster)}')" aria-label="Lire la vidéo"><span class="play">▶</span><span class="vt">${esc(p.lpVideoTitle||'Voir '+p.name+' en vidéo')}</span></button>`;
+    : `<button class="face" data-a="lpPlay" data-v="${esc(v.kind==='YouTube'||v.kind==='Vimeo' ? v.embed : v.embed.replace(/([?&])autoplay=(0|false)/,'$1autoplay=1'))}" data-k="${esc(v.kind)}" style="background-image:url('${esc(poster)}')" aria-label="Lire la vidéo"><span class="play">▶</span><span class="vt">${esc(p.lpVideoTitle||'Voir '+p.name+' en vidéo')}</span></button>`;
   const fallback = v.link || v.file ? '' : `<p class="small muted" style="text-align:center;margin:10px 0 0">La vidéo ne s’affiche pas ? <a href="${esc(p.lpVideo)}" target="_blank" rel="noopener" style="color:var(--indigo);font-weight:700">L’ouvrir sur ${esc(v.kind)} ↗</a></p>`;
   return `<section class="lp-sec" id="lp-video"><h2>${esc(p.lpVideoTitle||'Découvrez-le en vidéo')}</h2><div class="vid${v.tall?' tall':''}">${inner}</div>${fallback}</section>`;
 }
@@ -2233,7 +2237,9 @@ function procLogo(k, cls){ const P = PROCESSORS[k], lg = (S.settings.processors[
   return lg ? `<span class="${cls||'pay-logo'}" style="background:#fff;padding:3px;overflow:hidden"><img src="${esc(lg)}" alt="${esc(P.name)}" style="width:100%;height:100%;object-fit:contain"></span>` : `<span class="${cls||'pay-logo'}" style="background:${P.color}">${P.short}</span>`; }
 const logoFile = f => new Promise((ok,ko)=>{ if(!/image\/(png|jpeg|webp)/.test(f.type)) return ko(new Error('Choisissez une image PNG, JPEG ou WebP.'));
   const r = new FileReader(); r.onload = ()=>{ const im = new Image(); im.onload = ()=>{ const k = Math.min(1, 240/Math.max(im.width, im.height)), c = document.createElement('canvas'); c.width = Math.round(im.width*k); c.height = Math.round(im.height*k); c.getContext('2d').drawImage(im,0,0,c.width,c.height); ok(c.toDataURL('image/png')); }; im.onerror = ko; im.src = r.result; }; r.onerror = ko; r.readAsDataURL(f); });
-function payRow(big, withNames){ const ps = enabledProcs().slice().sort((a,b)=>['orange','wave','moov','card','paypal','cod'].indexOf(a[0])-['orange','wave','moov','card','paypal','cod'].indexOf(b[0]));
+function shownProcs(){ const pay = new Set(enabledProcs().map(([k])=>k));
+  return Object.entries(PROCESSORS).filter(([k])=>{ const v = S.settings.processors[k]||{}; return pay.has(k) || (v.showLogo===true) || (v.logo && v.showLogo!==false); }); }
+function payRow(big, withNames){ const ps = shownProcs().slice().sort((a,b)=>['orange','wave','moov','card','paypal','cod'].indexOf(a[0])-['orange','wave','moov','card','paypal','cod'].indexOf(b[0]));
   if(!ps.length) return '';
   return `<div class="pay-row${big?' big':''}" aria-label="Moyens de paiement acceptés">${ps.map(([k])=>{ const P = PROCESSORS[k], lg = (S.settings.processors[k]||{}).logo;
     return `<span class="pl" title="${esc(P.name)}" style="background:${lg?'#fff':P.color};${lg?'padding:3px':''}">${lg?`<img src="${esc(lg)}" alt="${esc(P.name)}">`:k==='cod'?'💵':esc(P.short)}</span>${withNames?`<span class="small" style="margin-right:8px">${esc(P.name)}</span>`:''}`; }).join('')}</div>`; }
@@ -2290,7 +2296,10 @@ function drawCheckout(){
       return `<p style="margin:-6px 0 12px;font-weight:700">${sel?'✓ '+esc(PROCESSORS[sel].name)+' sélectionné':'👇 Choisissez comment vous voulez payer'}</p>
       <div class="pay-grid ${sel?'':'pay-pick'}" id="pay-grid">${ps.map(([k])=>`<button class="pay-card" data-a="coMethod" data-v="${k}" aria-pressed="${CO.method===k}" style="--pc:${PROCESSORS[k].color}">${(S.settings.processors[k]||{}).logo?`<span class="lg" style="background:#fff;padding:5px;overflow:hidden"><img src="${esc(S.settings.processors[k].logo)}" alt="" style="width:100%;height:100%;object-fit:contain"></span>`:`<span class="lg">${PROCESSORS[k].short}</span>`}<b>${esc(PROCESSORS[k].name)}</b><span class="sub">${sub(k)}</span>${k===firstMomo?'<span class="badge">⚡ Rapide</span>':''}<span class="tick" aria-hidden="true">✓</span></button>`).join('')}</div>
       ${sel && PROCESSORS[sel].kind==='momo' ? `<div class="pay-howto" style="--pc:${pc}">${man[sel] ? `<b>Comment payer par ${esc(PROCESSORS[sel].name)}</b><ol class="small" style="padding-left:18px;margin:8px 0">
-          <li>Depuis votre application ou le menu ${esc(PROCESSORS[sel].name)}, envoyez <b>${fmt(t.total)}</b> au numéro <b style="font-size:16px;white-space:nowrap">${esc(man[sel])}</b> <button class="btn ghost sm" data-a="copyPayNum" data-v="${esc(man[sel])}" style="padding:2px 10px">Copier</button></li>
+          ${String(man[sel]).replace(/\D/g,'').length < 8
+            ? `<li>Ouvrez ${esc(PROCESSORS[sel].name)} (application ou menu sur votre téléphone) et choisissez <b>Paiement marchand</b>.</li>
+               <li>Saisissez le <b>code marchand</b> <b style="font-size:16px;white-space:nowrap">${esc(man[sel])}</b> <button class="btn ghost sm" data-a="copyPayNum" data-v="${esc(man[sel])}" style="padding:2px 10px">Copier</button>, puis le montant <b>${fmt(t.total)}</b>, et validez avec votre code secret.</li>`
+            : `<li>Depuis votre application ou le menu ${esc(PROCESSORS[sel].name)}, envoyez <b>${fmt(t.total)}</b> au numéro <b style="font-size:16px;white-space:nowrap">${esc(man[sel])}</b> <button class="btn ghost sm" data-a="copyPayNum" data-v="${esc(man[sel])}" style="padding:2px 10px">Copier</button></li>`}
           <li>Notez la <b>référence (ID) de la transaction</b> reçue par SMS.</li><li>Collez-la ci-dessous : nous validons votre commande dès réception.</li></ol>
           <div class="field" style="margin:0"><label for="co-payref">Référence de la transaction</label><input class="input" id="co-payref" value="${esc(CO.payRef||'')}" placeholder="ex. CI241105.1234.A56789" autocomplete="off"></div>`
         : `<b>${esc(PROCESSORS[sel].name)}</b><p class="small" style="margin:6px 0 0">En touchant « Payer », vous confirmez le paiement de <b>${fmt(t.total)}</b> sur votre téléphone en quelques secondes.</p>`}</div>` : sel==='cod' ? `<div class="pay-howto" style="--pc:${pc}"><b>Paiement à la livraison</b><p class="small" style="margin:6px 0 0">Préparez <b>${fmt(t.total)}</b> en espèces, ou payez par mobile money au livreur.</p></div>` : ''}`; })()
@@ -3522,7 +3531,9 @@ function panePayments(){
     ${Object.entries(PROCESSORS).map(([k,P])=>{ const v = st.processors[k]||{}; return `<div class="proc">${procLogo(k)}
       <div><b>${P.name}</b>${P.field?`<div style="margin-top:6px"><label class="sr" for="acc-${k}">${P.field}</label><input class="input" id="acc-${k}" data-proc="${k}" placeholder="${P.field}" value="${esc(v.account||'')}"></div>`:'<div class="muted small">Le livreur ou le caissier encaisse à la remise.</div>'}</div>
       ${P.kind!=='cod'?`<div style="display:flex;gap:6px;flex-direction:column;align-items:flex-end"><label class="btn ghost sm" style="white-space:nowrap">${v.logo?'Changer le logo':'Ajouter le logo officiel'}<input type="file" accept="image/png,image/jpeg,image/webp" class="sr" data-proclogo="${k}"></label>${v.logo?`<button class="btn ghost sm" data-a="procLogoDel" data-v="${k}">Retirer</button>`:''}</div>`:''}
-      <label class="switch"><input type="checkbox" data-proc-on="${k}" ${v.enabled?'checked':''} aria-label="Activer ${P.name}"><span></span></label></div>`; }).join('')}
+      <div style="display:flex;flex-direction:column;align-items:flex-end;gap:6px"><label class="switch" title="Paiement en ligne"><input type="checkbox" data-proc-on="${k}" ${v.enabled?'checked':''} aria-label="Activer ${P.name}"><span></span></label>
+        <label class="small" style="display:flex;gap:6px;align-items:center;white-space:nowrap"><input type="checkbox" data-proc-show="${k}" ${(v.showLogo===true || (v.logo && v.showLogo!==false) || v.enabled)?'checked':''}> Logo visible</label></div></div>`; }).join('')}
+    <p class="muted small" style="margin:6px 0 0">« Logo visible » : le logo apparaît dans la boutique (accueil, fiches, panier, pied de page) pour montrer que vous acceptez ce moyen de paiement, même s’il n’est pas encore proposé au paiement en ligne. Le client le règle alors à la livraison ou sur WhatsApp.</p>
     <label class="row" style="align-items:center;gap:10px;margin-top:14px"><span class="switch" style="flex:0 0 42px"><input type="checkbox" id="st-test" ${st.testMode?'checked':''}><span></span></span><span><b>Mode test</b> <span class="muted small">— les paiements sont simulés, rien n’est débité</span></span></label>
     <div class="test-note">Les clés secrètes Wave et Orange Money sont stockées dans le fichier .env du serveur, jamais ici. Les champs ci-dessus servent seulement de mémo interne.</div></div>
   <div class="panel"><h3>Boutique et livraison</h3>
@@ -3595,6 +3606,7 @@ async function saveSettings(){
   s.deliveryFee=Number(v('#st-fee'))||0; s.freeFrom=Number(v('#st-free'))||0; s.testMode=$('#st-test').checked;
   document.querySelectorAll('[data-proc]').forEach(i=>{ s.processors[i.dataset.proc].account=i.value.trim(); });
   document.querySelectorAll('[data-proc-on]').forEach(i=>{ s.processors[i.dataset.procOn].enabled=i.checked; });
+  document.querySelectorAll('[data-proc-show]').forEach(i=>{ const k = i.dataset.procShow; s.processors[k] = {...(s.processors[k]||{}), showLogo:i.checked}; });
   try{ await put('settings','main',s); toast('Réglages enregistrés'); }catch(e){ dbErr(e); toast('Enregistrement impossible : réservé aux gérants.'); }
 }
 
@@ -3725,7 +3737,8 @@ document.addEventListener('click', async e=>{
     case 'qrCancel': clearInterval(S._qrPoll); closeAll(); try{ if(window.cancelQrOrder) await window.cancelQrOrder(id); else await patch('orders', id, {status:'annulee'}); }catch(err){} toast('Paiement par QR annulé'); break;
     case 'qrSim': { const o = S.orders.find(x=>x.id===id); if(o){ await setOrderStatus(o, 'payee'); } break; }
     case 'payOrder': { el.disabled = true; try{ if(window.payExistingOrder){ const r = await window.payExistingOrder(id, el.dataset.t, el.dataset.v); if(r && r.redirect) location.href = r.redirect; } else { const o = S.orders.find(x=>x.id===id); if(o) await setOrderStatus(o,'payee'); closeAll(); toast('Paiement simulé (mode démo) ✓'); } }catch(err){ toast(err.message||'Paiement impossible'); el.disabled = false; } break; }
-    case 'lpPlay': { const box = el.closest('.vid'); if(box) box.innerHTML = `<iframe src="${esc(el.dataset.v)}" title="Vidéo du produit" allow="autoplay; encrypted-media; picture-in-picture; fullscreen; clipboard-write" allowfullscreen referrerpolicy="strict-origin-when-cross-origin"></iframe>`; break; }
+    case 'lpPlay': { const box = el.closest('.vid'); if(box){ box.innerHTML = `<div class="spinner" style="position:absolute;top:50%;left:50%;margin:-14px 0 0 -14px"></div><iframe src="${esc(el.dataset.v)}" title="Vidéo du produit" allow="autoplay; encrypted-media; picture-in-picture; fullscreen; clipboard-write" allowfullscreen referrerpolicy="strict-origin-when-cross-origin" style="opacity:0;transition:opacity .3s" onload="this.style.opacity=1;this.previousElementSibling&&this.previousElementSibling.remove()"></iframe>`;
+        if(el.dataset.k && el.dataset.k!=='YouTube' && el.dataset.k!=='Vimeo') setTimeout(()=>{ const n = box.parentElement && box.parentElement.querySelector('.vid-hint'); if(!n) box.insertAdjacentHTML('afterend','<p class="small muted vid-hint" style="text-align:center;margin:8px 0 0">Si la vidéo ne démarre pas, touchez ▶ dans le lecteur.</p>'); }, 2500); } break; }
     case 'lpVideoGo': $('#lp-video')?.scrollIntoView({behavior:'smooth', block:'center'}); break;
     case 'lpZoom': { const p = S.products.find(x=>x.id===S.pid); const src = p && galleryFor(p)[Number(el.dataset.v)]; if(src) zoomBox(src); break; }
     case 'sdNet': S.studio.net = el.dataset.v; schedule(); break;

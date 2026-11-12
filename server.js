@@ -130,11 +130,11 @@ const CONFIGURED = {
   cod: true
 };
 /* Mobile money « manuel » : sans clé API, le client transfère au numéro marchand indiqué dans Gestion › Paiements et donne la référence */
-const manualPay = () => { const s = settings(), out = {}; for (const k of ['orange', 'wave', 'moov']) { const pr = s.processors?.[k]; if (!CONFIGURED[k] && pr && pr.enabled !== false && String(pr.account || '').replace(/\D/g, '').length >= 8) out[k] = String(pr.account).trim(); } return out; };
+const manualPay = () => { const s = settings(), out = {}; for (const k of ['orange', 'wave', 'moov']) { const pr = s.processors?.[k]; if (!CONFIGURED[k] && pr && pr.enabled !== false && String(pr.account || '').replace(/\D/g, '').length >= 4) out[k] = String(pr.account).trim(); } return out; };
 const providers = () => { const s = settings(); return [...Object.keys(CONFIGURED).filter(k => CONFIGURED[k] && s.processors?.[k]?.enabled !== false), ...Object.keys(manualPay())]; };
 function publicSettings() {
   const s = settings();
-  const procs = {}; for (const [k, v] of Object.entries(s.processors || {})) procs[k] = { enabled: !!v.enabled, ...(/^data:image\/(png|jpeg|webp);base64,/.test(v.logo || '') && v.logo.length < 250000 ? { logo: v.logo } : {}) }; // jamais d'identifiants côté public, seulement le logo
+  const procs = {}; for (const [k, v] of Object.entries(s.processors || {})) procs[k] = { enabled: !!v.enabled, ...(typeof v.showLogo === 'boolean' ? { showLogo: v.showLogo } : {}), ...(/^data:image\/(png|jpeg|webp);base64,/.test(v.logo || '') && v.logo.length < 250000 ? { logo: v.logo } : {}) }; // jamais d'identifiants côté public, seulement le logo
   return { shopName: s.shopName, tagline: s.tagline, intro: s.intro, currency: s.currency, deliveryFee: s.deliveryFee, freeFrom: s.freeFrom, city: s.city, phone: s.phone, processors: procs,
     showTrust: s.showTrust !== false, deliveryPromise: String(s.deliveryPromise || '').slice(0, 40), returnPolicy: String(s.returnPolicy || '').slice(0, 40),
     manualPay: manualPay(), shipCountries: Array.isArray(s.shipCountries) ? s.shipCountries : ['ML'],
