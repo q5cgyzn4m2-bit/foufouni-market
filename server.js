@@ -852,6 +852,14 @@ app.get('/api/aff/me', h((req, res) => {
 }));
 
 /* Paniers : enregistrés pendant la visite pour signaler les paniers abandonnés */
+/* Panier envoyé sur WhatsApp : il n'est plus considéré comme abandonné (pas de relance automatique) */
+app.post('/api/carts/:id/whatsapp', h(async (req, res) => {
+  const id = String(req.params.id || ''); if (!/^[a-z0-9]{8,40}$/.test(id)) throw httpErr(400, 'Panier invalide.');
+  if (limited('cartwa:' + req.ip, 20, 600e3)) throw httpErr(429, 'Trop de requêtes.');
+  const c = getDoc('carts', id); if (c) patchDoc('carts', id, { converted: true, via: 'whatsapp', waAt: Date.now() });
+  res.json({ ok: true });
+  notify({ title: 'Commande envoyée sur WhatsApp', message: `${c && c.count ? c.count + ' article(s) · ' + money(c.value || 0) : 'Un client'} vous écrit sur WhatsApp pour commander.`, tags: ['speech_balloon'], click: BASE_URL + '/' });
+}));
 app.post('/api/carts', h(async (req, res) => {
   if (limited('cart:' + req.ip, 60, 600e3)) throw httpErr(429, 'Trop de requêtes.');
   const b = req.body || {}, id = String(b.id || '');

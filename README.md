@@ -297,3 +297,8 @@ Sur les photos (cartes de la boutique, fiche produit, page de vente) et sur les 
 - Bouton « ★ Donner mon avis » sur chaque fiche produit et page de vente : ouvre directement le formulaire si la commande livrée est sur ce téléphone, sinon le client retrouve sa commande avec son numéro et son téléphone (`/api/orders/find`, 10 essais par heure).
 - Gestion › Commandes : « ⭐ Demander un avis » envoie au client, sur WhatsApp, un lien personnel (`/?avis=ID&t=…`) qui ouvre le formulaire sur n'importe quel téléphone.
 - Le message « Votre commande a bien été livrée » (avec la photo du colis) contient aussi ce lien.
+
+
+## Commander sur WhatsApp
+
+Boutons « Commander sur WhatsApp » dans le panier, sur la fiche produit (avec la variante et la quantité choisies) et au début de la commande (« Commander ici » ou « Commander sur WhatsApp »). Le message part vers le WhatsApp de la boutique (Gestion › Société › WhatsApp, sinon le téléphone principal) avec chaque article, sa quantité, son prix, son lien, le total, le code promo et le nom du client. Le panier est alors marqué « envoyé sur WhatsApp » (pas de relance automatique) et la boutique reçoit une notification. Événements Contact (Meta, TikTok) et `whatsapp_order` (Google Tag Manager).
