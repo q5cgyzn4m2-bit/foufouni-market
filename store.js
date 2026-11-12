@@ -30,8 +30,9 @@ function createStore({ pool, connectionString } = {}) {
     await q(`CREATE TABLE IF NOT EXISTS ffm_docs (col TEXT NOT NULL, id TEXT NOT NULL, data JSONB NOT NULL, updated BIGINT, PRIMARY KEY (col, id))`);
     await q(`CREATE TABLE IF NOT EXISTS ffm_users (id TEXT PRIMARY KEY, email TEXT UNIQUE NOT NULL, name TEXT, role TEXT NOT NULL, hash TEXT NOT NULL, created BIGINT)`);
     await q(`CREATE TABLE IF NOT EXISTS ffm_events (id TEXT PRIMARY KEY, at BIGINT)`);
+    await q(`CREATE TABLE IF NOT EXISTS ffm_files (id TEXT PRIMARY KEY, mime TEXT NOT NULL, size INTEGER NOT NULL, data BYTEA NOT NULL, created BIGINT)`);
     // Bloque l'accès public via l'API Supabase : seul le serveur (propriétaire des tables) peut lire et écrire.
-    for (const t of ['ffm_docs', 'ffm_users', 'ffm_events']) {
+    for (const t of ['ffm_docs', 'ffm_users', 'ffm_events', 'ffm_files']) {
       try { await q(`ALTER TABLE ${t} ENABLE ROW LEVEL SECURITY`); } catch (e) { /* non pris en charge : sans effet */ }
     }
     for (const r of (await q('SELECT col, id, data FROM ffm_docs')).rows) colMap(r.col).set(r.id, parse(r.data));
@@ -42,8 +43,19 @@ function createStore({ pool, connectionString } = {}) {
     console.log(`Supabase connecté : ${n} enregistrements, ${users.size} compte(s) équipe.`);
   }
 
+  /* Fichiers lourds (vidéos) : rangés à part, non chargés au démarrage, gardés en cache pour les plus regardés */
+  const fcache = new Map(); let fbytes = 0; const FMAX = 120 * 1024 * 1024;
+  const fkeep = (id, f) => { if (f.data.length > 40 * 1024 * 1024) return; fcache.delete(id); fcache.set(id, f); fbytes += f.data.length;
+    while (fbytes > FMAX && fcache.size) { const [k, v] = fcache.entries().next().value; fcache.delete(k); fbytes -= v.data.length; } };
   return {
     init,
+    files: {
+      async save(id, mime, buf) { await q('INSERT INTO ffm_files (id, mime, size, data, created) VALUES ($1, $2, $3, $4, $5) ON CONFLICT (id) DO UPDATE SET mime = EXCLUDED.mime, size = EXCLUDED.size, data = EXCLUDED.data', [id, mime, buf.length, buf, Date.now()]); fkeep(id, { mime, data: buf }); },
+      async get(id) { if (fcache.has(id)) { const f = fcache.get(id); fcache.delete(id); fcache.set(id, f); return f; }
+        const r = (await q('SELECT mime, data FROM ffm_files WHERE id = $1', [id])).rows[0]; if (!r) return null; const f = { mime: r.mime, data: r.data }; fkeep(id, f); return f; },
+      async del(id) { const f = fcache.get(id); if (f) { fbytes -= f.data.length; fcache.delete(id); } await q('DELETE FROM ffm_files WHERE id = $1', [id]); },
+      async usage() { const r = (await q('SELECT COUNT(*)::int AS n, COALESCE(SUM(size),0)::bigint AS b FROM ffm_files')).rows[0]; return { count: r.n, bytes: Number(r.b) }; }
+    },
     get: (c, i) => clone(docs.get(c)?.get(i) ?? null),
     all: c => [...(docs.get(c) || new Map())].map(([id, d]) => ({ id, ...clone(d) })),
     put(c, i, d) {

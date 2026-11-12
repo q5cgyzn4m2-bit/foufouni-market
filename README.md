@@ -302,3 +302,15 @@ Sur les photos (cartes de la boutique, fiche produit, page de vente) et sur les 
 ## Commander sur WhatsApp
 
 Boutons « Commander sur WhatsApp » dans le panier, sur la fiche produit (avec la variante et la quantité choisies) et au début de la commande (« Commander ici » ou « Commander sur WhatsApp »). Le message part vers le WhatsApp de la boutique (Gestion › Société › WhatsApp, sinon le téléphone principal) avec chaque article, sa quantité, son prix, son lien, le total, le code promo et le nom du client. Le panier est alors marqué « envoyé sur WhatsApp » (pas de relance automatique) et la boutique reçoit une notification. Événements Contact (Meta, TikTok) et `whatsapp_order` (Google Tag Manager).
+
+
+## Vidéos hébergées par la boutique
+
+Fiche produit › Page de vente › « 📤 Envoyer une vidéo » (MP4, MOV ou WebM, 30 Mo max.) : la vidéo est stockée dans Supabase (table `ffm_files`, à part des autres données, avec un cache en mémoire) et lue par morceaux (`/media/…`, requêtes Range) pour un démarrage immédiat, sans dépendre de TikTok ou YouTube. Espace total : 350 Mo. Une vidéo remplacée est supprimée. Le lecteur TikTok intégré passe au lecteur classique (`embed/v2`).
+
+
+## Vidéo : lien et fichier ; WhatsApp sur la page de vente
+
+- Deux champs vidéo par produit : un lien (TikTok, YouTube…, sans espace utilisé) et un fichier MP4 hébergé (`lpVideoFile`). Le fichier est lu en priorité ; le lien est alors proposé en complément (« Voir aussi sur… »). « Retirer » supprime le fichier hébergé.
+- Page de vente : bouton « Commander sur WhatsApp » à côté de « Commander maintenant » (en haut et en bas de page), et dans la barre fixe sur téléphone. Boutons de commande, de panier et WhatsApp animés (pulsation et reflet, désactivés si l'appareil demande moins d'animations).
+- Logo WhatsApp devant le numéro WhatsApp (pied de page, encadré « À votre écoute »).

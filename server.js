@@ -580,6 +580,35 @@ Réponds UNIQUEMENT avec un objet JSON valide : {"name":"nom court en français 
     captions: [], images, translated: !!fr });
 }));
 
+/* Vidéos hébergées par la boutique : envoi (équipe) et lecture par morceaux (Range) pour un démarrage immédiat */
+const VIDEO_TYPES = { 'video/mp4': 'mp4', 'video/quicktime': 'mov', 'video/webm': 'webm' };
+app.post('/api/admin/video', requireStaff, express.raw({ type: ['video/*', 'application/octet-stream'], limit: '30mb' }), h(async (req, res) => {
+  const mime = String(req.headers['content-type'] || '').split(';')[0].trim();
+  if (!VIDEO_TYPES[mime]) throw httpErr(400, 'Format non pris en charge : envoyez une vidéo MP4, MOV ou WebM.');
+  const buf = req.body; if (!Buffer.isBuffer(buf) || buf.length < 1000) throw httpErr(400, 'Vidéo vide ou illisible.');
+  const u = await store.files.usage(); if (u.bytes + buf.length > 350 * 1024 * 1024) throw httpErr(413, 'Espace vidéo plein (350 Mo) : supprimez d’anciennes vidéos ou utilisez YouTube.');
+  const id = 'v' + Date.now().toString(36) + rnd(6).toLowerCase();
+  await store.files.save(id, mime, buf);
+  res.json({ id, url: `/media/${id}.${VIDEO_TYPES[mime]}`, size: buf.length });
+}));
+app.delete('/api/admin/video/:id', requireStaff, h(async (req, res) => {
+  const id = String(req.params.id || '').replace(/\.\w+$/, ''); if (!/^v[a-z0-9]{6,30}$/.test(id)) throw httpErr(400, 'Vidéo invalide.');
+  await store.files.del(id); res.json({ ok: true });
+}));
+app.get('/media/:file', h(async (req, res) => {
+  const id = String(req.params.file || '').replace(/\.\w+$/, ''); if (!/^v[a-z0-9]{6,30}$/.test(id)) return res.status(404).end();
+  const f = await store.files.get(id); if (!f) return res.status(404).end();
+  const size = f.data.length, range = /bytes=(\d*)-(\d*)/.exec(req.headers.range || '');
+  res.set({ 'Content-Type': f.mime, 'Accept-Ranges': 'bytes', 'Cache-Control': 'public, max-age=604800, immutable' });
+  if (range) {
+    let start = range[1] === '' ? Math.max(0, size - Number(range[2] || 0)) : Number(range[1]), end = range[1] !== '' && range[2] !== '' ? Number(range[2]) : size - 1;
+    end = Math.min(end, size - 1, start + 4 * 1024 * 1024 - 1);
+    if (start >= size || start > end) return res.status(416).set('Content-Range', `bytes */${size}`).end();
+    return res.status(206).set({ 'Content-Range': `bytes ${start}-${end}/${size}`, 'Content-Length': end - start + 1 }).send(f.data.subarray(start, end + 1));
+  }
+  res.set('Content-Length', size).send(f.data);
+}));
+
 /* Lecture et traduction d'une fiche produit chinoise (Pinduoduo, 1688, Taobao…) à partir de captures d'écran */
 app.post('/api/admin/ai/cn-product', express.json({ limit: '24mb' }), requireStaff, h(async (req, res) => {
   if (!env.ANTHROPIC_API_KEY) throw httpErr(503, 'Ajoutez la clé ANTHROPIC_API_KEY sur Render pour lire et traduire les fiches automatiquement.');
@@ -654,7 +683,7 @@ const publicProduct = p => ({ id: p.id, name: p.name, sku: p.sku, category: p.ca
   condition: p.condition || 'neuf', conditionNote: p.conditionNote || '',
   lpHook: p.lpHook || '', lpSub: p.lpSub || '', lpProblem: p.lpProblem || '', lpSolution: p.lpSolution || '', lpUsages: p.lpUsages || '', lpFaq: p.lpFaq || '', lpOffer: p.lpOffer || '', lpUntil: p.lpUntil || '',
   angleCaps: Array.isArray(p.angleCaps) ? p.angleCaps : [], spin: Array.isArray(p.spin) ? p.spin : [],
-  lpVideo: p.lpVideo || '', lpVideoTitle: p.lpVideoTitle || '', sold30: sold30(p.id),
+  lpVideo: p.lpVideo || '', lpVideoFile: /^(https?:\/\/[^/]+)?\/media\/v[a-z0-9]{6,30}\.(mp4|mov|webm)$/i.test(p.lpVideoFile || '') ? p.lpVideoFile : '', lpVideoTitle: p.lpVideoTitle || '', sold30: sold30(p.id),
   options: Array.isArray(p.options) ? p.options : [], variants: Array.isArray(p.variants) ? p.variants.map(v => ({ key: v.key, vals: v.vals, stock: v.stock, price: v.price, barcode: v.barcode || '' })) : [],
   barcode: p.barcode || '',
   gallery: Array.isArray(p.gallery) ? p.gallery : [], highlights: p.highlights || '', details: p.details || '', specs: p.specs || '', warranty: p.warranty || '' });
@@ -1308,7 +1337,7 @@ var e=ttq._i[t]||[],n=0;n<ttq.methods.length;n++)ttq.setAndDefer(e,ttq.methods[n
 /* ===================== Référencement (SEO) =====================
    Adresses lisibles, plan du site, robots.txt, données structurées schema.org et contenu HTML lisible sans JavaScript. */
 const slugify = x => String(x || '').normalize('NFD').replace(/[\u0300-\u036f]/g, '').toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-+|-+$/g, '').slice(0, 60) || 'produit';
-const hasLandingS = p => !!(p.lpHook || p.lpProblem || p.lpVideo || (p.angleCaps || []).some(c => c && c.t) || (p.spin || []).length >= 4);
+const hasLandingS = p => !!(p.lpHook || p.lpProblem || p.lpVideo || p.lpVideoFile || (p.angleCaps || []).some(c => c && c.t) || (p.spin || []).length >= 4);
 const productPath = p => `/produit/${slugify(p.name)}--${p.id}`;
 const offerPath = p => `/offre/${slugify(p.name)}--${p.id}`;
 const canonPath = p => hasLandingS(p) ? offerPath(p) : productPath(p);

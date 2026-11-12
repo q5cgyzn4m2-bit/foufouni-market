@@ -395,6 +395,16 @@ textarea.input{min-height:84px; resize:vertical}
 .how button[aria-pressed="true"]{border-color:var(--indigo); background:var(--indigo-soft)}
 .how button.waopt[aria-pressed="true"]{border-color:#25D366; background:color-mix(in srgb,#25D366 12%,transparent)}
 .how b{display:block; margin-bottom:3px}
+.btn-live{position:relative; overflow:hidden; animation:btnpulse 2.4s ease-in-out infinite}
+.btn-live::after{content:''; position:absolute; inset:0; background:linear-gradient(110deg,transparent 35%,rgba(255,255,255,.35) 50%,transparent 65%); transform:translateX(-120%); animation:btnshine 3s ease-in-out infinite; pointer-events:none}
+.btn.wa.btn-live{animation-name:btnpulsewa}
+@keyframes btnpulse{0%,100%{box-shadow:0 0 0 0 color-mix(in srgb,var(--indigo) 0%,transparent)}50%{box-shadow:0 0 0 7px color-mix(in srgb,var(--indigo) 25%,transparent)}}
+@keyframes btnpulsewa{0%,100%{box-shadow:0 0 0 0 rgba(37,211,102,0)}50%{box-shadow:0 0 0 7px rgba(37,211,102,.28)}}
+@keyframes btnshine{0%,60%{transform:translateX(-120%)}90%,100%{transform:translateX(120%)}}
+.btn-live:active{transform:scale(.97)}
+.cta-wa{display:flex; gap:10px; flex-wrap:wrap; align-items:stretch}
+.cta-wa .btn{flex:1 1 180px; display:inline-flex; align-items:center; justify-content:center; gap:4px}
+@media (prefers-reduced-motion:reduce){ .btn-live,.btn-live::after{animation:none} }
 .empty{border:2px dashed var(--line); border-radius:var(--r-m); padding:48px 20px; text-align:center; color:var(--muted)}
 .empty h3{color:var(--ink); margin-bottom:8px; font-size:20px}
 
@@ -906,14 +916,14 @@ function viewShop(){
     return `<button class="fav-c" data-a="openLanding" data-id="${p.id}"><span class="im">${p.image?`<img src="${esc(p.image)}" alt="" loading="lazy">`:esc(p.emoji||'📦')}</span><span><span class="cat">${esc(p.category||'')}</span><b>${esc(p.lpHook||p.name)}</b>${p.lpHook?`<span class="muted small">${esc(p.name)}</span>`:''}
       <span style="display:block;margin-top:6px"><span class="price" style="font-size:20px">${fmt(p.price)}</span>${p.comparePrice>p.price?` <span class="strike">${fmt(p.comparePrice)}</span>`:''}</span>
       ${rt.n?`<span class="small">${starsHTML(rt.avg)} <span class="muted">(${rt.n})</span></span>`:sd>=3?`<span class="sold">🔥 ${sd} vendus ce mois-ci</span>`:''}
-      <span class="see-offer" style="margin-top:8px">${p.lpVideo?'▶ Voir la vidéo et l’offre ›':'✨ Découvrir l’offre ›'}</span></span></button>`; }).join('')}</div>` : '';
+      <span class="see-offer" style="margin-top:8px">${(p.lpVideo||p.lpVideoFile)?'▶ Voir la vidéo et l’offre ›':'✨ Découvrir l’offre ›'}</span></span></button>`; }).join('')}</div>` : '';
   return `${instBar}${ribbon}${hero}${favBlock}${S.cat==='Tout'&&!S.q?flagsBand():''}${saleBlock}${usedBlock}${S.cat==='Tout'?bundleBlock:''}
     <div class="sec-h" id="catalogue"><h2>${S.q?`Résultats pour « ${esc(S.q)} »`:S.cat==='Tout'?'La collection':esc(S.cat)}</h2><span class="muted small">${S.cat==='Lots'?bundles.length+' lot'+(bundles.length>1?'s':''):list.length+' produit'+(list.length>1?'s':'')}</span></div>
     <div class="cats" role="group" aria-label="Catégories">${cats.map(c=>`<button aria-pressed="${S.cat===c}" data-a="cat" data-v="${esc(c)}">${esc(c)}</button>`).join('')}</div>
     ${S.cat==='Lots'?'':facetBar()}
     ${S.cat==='Lots'?bundleBlock:''}${S.cat==='Lots'?'':list.length?`<div class="grid">${list.map(p=>`
       <article class="card">
-        <button class="thumb" data-a="product" data-id="${p.id}" aria-label="Voir ${esc(p.name)}">${pImg(p)}${stockPill(p)}${isNew(p)?'<span class="new-band">Nouveau</span>':''}${p.lpVideo?'<span class="vid-badge">▶ Vidéo</span>':''}${photoOverlay(p)}</button>
+        <button class="thumb" data-a="product" data-id="${p.id}" aria-label="Voir ${esc(p.name)}">${pImg(p)}${stockPill(p)}${isNew(p)?'<span class="new-band">Nouveau</span>':''}${(p.lpVideo||p.lpVideoFile)?'<span class="vid-badge">▶ Vidéo</span>':''}${photoOverlay(p)}</button>
         <div class="card-b"><span class="cat">${esc(p.category)}${isUsed(p)?` · <b style="color:var(--indigo)">Occasion · ${esc(condLabel(p))}</b>`:''}</span><h3><a href="${esc(hasLanding(p)&&S.settings.lpFirst!==false ? offerPath(p) : productPath(p))}" data-a="product" data-id="${p.id}" style="color:inherit;text-decoration:none">${esc(p.name)}</a></h3>${p.lpHook?`<span class="hook">« ${esc(p.lpHook)} »</span>`:''}${(()=>{ const rt=productRating(p.id); return rt.n?`<span class="small">${starsHTML(rt.avg)} <span class="muted">(${rt.n})</span></span>`:''; })()}${soldCount(p)>=3?`<span class="sold">🔥 ${soldCount(p)} vendus ce mois-ci</span>`:''}${p.bulkMin>1&&p.bulkPrice>0?`<span class="bulk">Dès ${p.bulkMin} : ${fmt(p.bulkPrice)} l’unité</span>`:''}
           <div class="card-f"><span class="price">${hasVar(p)&&minPrice(p)<p.price?'<span class="muted small" style="font-family:var(--f-b)">Dès </span>'+fmt(minPrice(p)):fmt(p.price)}${p.comparePrice>p.price?`<span class="strike">${fmt(p.comparePrice)}</span>`:''}</span>
           <button class="add" data-a="add" data-id="${p.id}" ${p.stock<=0?'disabled':''} aria-label="Ajouter ${esc(p.name)} au panier">+</button></div>
@@ -923,7 +933,7 @@ function viewShop(){
     <footer class="shop-foot"><div><span class="fb">${esc(st.shopName)}</span><p style="margin-top:10px">${esc(st.intro)}</p></div>
       <div><h4>Paiement sécurisé</h4><p>${esc(enabledProcs().map(([k])=>PROCESSORS[k].name).join(', ')||'En espèces à la réception')}.</p>${payRow(false)}</div>
       <div><h4>Livraison</h4><p>À ${esc(st.city)}, offerte dès ${fmt(st.freeFrom)} d’achat, et partout en Afrique de l’Ouest. Retrait en boutique possible.</p><button class="btn ghost sm" data-a="install" style="margin-top:10px">📲 Installer l’application</button></div>
-      <div><h4>Nous contacter</h4><p>${st.phone?`📞 <a href="tel:${esc(st.phone.replace(/\s/g,''))}" style="color:var(--indigo)">${esc(st.phone)}</a>${st.phone2?` · <a href="tel:${esc(st.phone2.replace(/\s/g,''))}" style="color:var(--indigo)">${esc(st.phone2)}</a>`:''}<br>`:''}${st.whatsapp?`💬 <a href="https://wa.me/${waNumber(st.whatsapp)}" target="_blank" rel="noopener" style="color:var(--indigo)">WhatsApp ${esc(st.whatsapp)}</a><br>`:''}${st.email?`✉️ <a href="mailto:${esc(st.email)}" style="color:var(--indigo)">${esc(st.email)}</a><br>`:''}${st.address?`📍 ${esc(st.address)}${st.city?', '+esc(st.city):''}<br>`:''}${st.hours?`🕘 ${esc(st.hours)}`:''}${!st.phone&&!st.whatsapp&&!st.email&&!st.address?'Notre équipe vous répond à la livraison et en boutique.':''}</p></div></footer>
+      <div><h4>Nous contacter</h4><p>${st.phone?`📞 <a href="tel:${esc(st.phone.replace(/\s/g,''))}" style="color:var(--indigo)">${esc(st.phone)}</a>${st.phone2?` · <a href="tel:${esc(st.phone2.replace(/\s/g,''))}" style="color:var(--indigo)">${esc(st.phone2)}</a>`:''}<br>`:''}${st.whatsapp?`<a href="https://wa.me/${waNumber(st.whatsapp)}" target="_blank" rel="noopener" style="color:#25D366;font-weight:700;display:inline-flex;align-items:center">${WA_ICON}WhatsApp ${esc(st.whatsapp)}</a><br>`:''}${st.email?`✉️ <a href="mailto:${esc(st.email)}" style="color:var(--indigo)">${esc(st.email)}</a><br>`:''}${st.address?`📍 ${esc(st.address)}${st.city?', '+esc(st.city):''}<br>`:''}${st.hours?`🕘 ${esc(st.hours)}`:''}${!st.phone&&!st.whatsapp&&!st.email&&!st.address?'Notre équipe vous répond à la livraison et en boutique.':''}</p></div></footer>
     <p class="foot-note">© ${new Date().getFullYear()} ${esc(st.legalName||st.shopName)}${st.legalForm?' · '+esc(st.legalForm):''}${st.capital?' au capital de '+esc(st.capital):''}${st.rccm?' · RCCM '+esc(st.rccm):''}${st.nif?' · NIF '+esc(st.nif):''}${st.address?' · '+esc(st.address)+(st.city?', '+esc(st.city):''):''}${st.country?' · '+esc(st.country):''}</p>`;
 }
 function viewMyOrders(){
@@ -952,7 +962,7 @@ function photoOverlay(p, big){ if(S.settings.showTrust===false) return '';
   const rt = productRating(p.id), t = trustList(p).slice(0, big?3:1);
   return `<div class="ov" aria-hidden="true">${rt.n?`<span class="rt">${rateTxt(rt.avg, rt.n)}</span>`:''}${t.map(x=>`<span>${esc(x)}</span>`).join('')}</div>`; }
 /* Page de vente « riche » : accroche, angles, vidéo… */
-const hasLanding = p => !!(p && (p.lpHook || p.lpProblem || p.lpVideo || (p.angleCaps||[]).some(c=>c&&c.t) || (p.spin||[]).length>=4));
+const hasLanding = p => !!(p && (p.lpHook || p.lpProblem || p.lpVideo || p.lpVideoFile || (p.angleCaps||[]).some(c=>c&&c.t) || (p.spin||[]).length>=4));
 /* Ventes réelles des 30 derniers jours (calculées par le serveur, ou à partir des commandes en mode local) */
 function soldCount(p){ if(typeof p.sold30==='number') return p.sold30;
   const since = Date.now()-30*864e5; let n = 0; (S.orders||[]).forEach(o=>{ if(['payee','preparation','expediee','livree'].includes(o.status) && (o.createdAt||0)>=since) (o.items||[]).forEach(i=>{ if(i.id===p.id) n += i.qty||0; }); }); return n; }
@@ -1559,9 +1569,10 @@ function lpFaq(p){
 }
 function parseVideo(url){
   const u = String(url||'').trim(); if(!u) return null; let m;
+  if(/^(https?:\/\/[^/]+)?\/media\/v[a-z0-9]{6,30}\.(mp4|mov|webm)$/i.test(u)) return {kind:'hébergée par la boutique', tall:false, file:u, own:true};
   if((m = u.match(/(?:youtube\.com\/(?:watch\?(?:.*&)?v=|shorts\/|embed\/|live\/)|youtu\.be\/)([A-Za-z0-9_-]{11})/))) { const tall = /shorts\//.test(u);
     return {kind:'YouTube', tall, thumb:`https://i.ytimg.com/vi/${m[1]}/hqdefault.jpg`, embed:`https://www.youtube-nocookie.com/embed/${m[1]}?autoplay=1&rel=0&playsinline=1&modestbranding=1`}; }
-  if((m = u.match(/tiktok\.com\/.*\/video\/(\d+)/))) return {kind:'TikTok', tall:true, embed:`https://www.tiktok.com/player/v1/${m[1]}?autoplay=0&controls=1&progress_bar=1&play_button=1&volume_control=1&fullscreen_button=1&music_info=0&description=0&rel=0&native_context_menu=0&closed_caption=0`};
+  if((m = u.match(/tiktok\.com\/.*\/video\/(\d+)/))) return {kind:'TikTok', tall:true, embed:`https://www.tiktok.com/embed/v2/${m[1]}?lang=fr`};
   if((m = u.match(/instagram\.com\/(?:reel|reels|p|tv)\/([A-Za-z0-9_-]+)/))) return {kind:'Instagram', tall:true, embed:`https://www.instagram.com/reel/${m[1]}/embed`};
   if(/^https?:\/\/((vm|vt)\.tiktok\.com|(www\.)?tiktok\.com\/t\/|fb\.watch|(www\.|m\.|web\.)?facebook\.com\/share\/)/.test(u)) return {kind:'short', short:true};
   if(/facebook\.com\/.+\/(videos|reel)\/|facebook\.com\/(watch|reel)/.test(u)) return {kind:'Facebook', tall:/reel/.test(u), embed:`https://www.facebook.com/plugins/video.php?href=${encodeURIComponent(u)}&show_text=false&autoplay=false`};
@@ -1584,15 +1595,16 @@ function warmVideo(kind){ const hosts = {YouTube:['https://www.youtube-nocookie.
 document.addEventListener('pointerover', e=>{ const b = e.target.closest && e.target.closest('[data-a="lpPlay"]'); if(b) warmVideo(b.dataset.k); }, {passive:true});
 document.addEventListener('touchstart', e=>{ const b = e.target.closest && e.target.closest('[data-a="lpPlay"]'); if(b) warmVideo(b.dataset.k); }, {passive:true});
 function videoBlock(p){
-  const v = parseVideo(p.lpVideo); if(!v || v.short) return '';
+  const vf = parseVideo(p.lpVideoFile), vl = parseVideo(p.lpVideo), v = (vf && !vf.short) ? vf : vl; if(!v || v.short) return '';
+  const alsoLink = vf && vl && !vl.short && !vl.file ? `<p class="small muted" style="text-align:center;margin:10px 0 0">Voir aussi sur <a href="${esc(p.lpVideo)}" target="_blank" rel="noopener" style="color:var(--indigo);font-weight:700">${esc(vl.kind)} ↗</a></p>` : '';
   const poster = v.thumb || (galleryFor(p)[0] || '');
   const direct = false; // toujours une image d’abord : page plus rapide, et moins de demandes au lecteur de la plateforme
   const inner = v.file ? `<video src="${esc(v.file)}" controls playsinline preload="metadata" ${poster?`poster="${esc(poster)}"`:''}></video>`
     : direct ? `<iframe src="${esc(v.embed.replace(/([?&])autoplay=(1|true)/,'$1autoplay=0'))}" title="${esc(p.lpVideoTitle||'Vidéo du produit')}" allow="encrypted-media; picture-in-picture; fullscreen; clipboard-write" allowfullscreen referrerpolicy="strict-origin-when-cross-origin" loading="lazy"></iframe>`
     : v.link ? `<a class="face" href="${esc(v.link)}" target="_blank" rel="noopener" style="background-image:url('${esc(poster)}')"><span class="play">▶</span><span class="vt">${esc(p.lpVideoTitle||'Voir la vidéo')} · sur ${esc(v.kind)} ↗</span></a>`
     : `<button class="face" data-a="lpPlay" data-v="${esc(v.kind==='YouTube'||v.kind==='Vimeo' ? v.embed : v.embed.replace(/([?&])autoplay=(0|false)/,'$1autoplay=1'))}" data-k="${esc(v.kind)}" style="background-image:url('${esc(poster)}')" aria-label="Lire la vidéo"><span class="play">▶</span><span class="vt">${esc(p.lpVideoTitle||'Voir '+p.name+' en vidéo')}</span></button>`;
-  const fallback = v.link || v.file ? '' : `<p class="small muted" style="text-align:center;margin:10px 0 0">La vidéo ne s’affiche pas ? <a href="${esc(p.lpVideo)}" target="_blank" rel="noopener" style="color:var(--indigo);font-weight:700">L’ouvrir sur ${esc(v.kind)} ↗</a></p>`;
-  return `<section class="lp-sec" id="lp-video"><h2>${esc(p.lpVideoTitle||'Découvrez-le en vidéo')}</h2><div class="vid${v.tall?' tall':''}">${inner}</div>${fallback}</section>`;
+  const fallback = v.link || v.file ? '' : `<p class="small muted" style="text-align:center;margin:10px 0 0">La vidéo ne s’affiche pas ? <a href="${esc(p.lpVideo||'')}" target="_blank" rel="noopener" style="color:var(--indigo);font-weight:700">L’ouvrir sur ${esc(v.kind)} ↗</a></p>`;
+  return `<section class="lp-sec" id="lp-video"><h2>${esc(p.lpVideoTitle||'Découvrez-le en vidéo')}</h2><div class="vid${v.tall?' tall':''}">${inner}</div>${alsoLink}${fallback}</section>`;
 }
 /* Page de paiement d'une commande créée à la caisse (QR affiché par le terminal) */
 async function openPayOrder(id, token){
@@ -1640,7 +1652,7 @@ function viewLanding(){
   const specs = lines(p.specs).map(l=>{ const k=l.indexOf(':'); return k>0 ? [l.slice(0,k).trim(), l.slice(k+1).trim()] : ['', l]; });
   const paras = lpBlocks(p.details), spin = (p.spin||[]).map(extraSrc).filter(Boolean); loadExtras(p.spin);
   const until = p.lpUntil && new Date(p.lpUntil+'T23:59:59') > new Date() ? p.lpUntil : '';
-  const cta = (big)=> out ? '<span class="pill bad">Rupture de stock</span>' : `<div class="pdp-buy" style="${big?'justify-content:center':''}">${big?'':`<div class="qty big"><button data-a="pdpQty" data-d="-1" aria-label="Moins">−</button><span>${Math.max(1,S.pqty||1)}</span><button data-a="pdpQty" data-d="1" aria-label="Plus">+</button></div>`}<button class="btn primary" data-a="pdpBuy" style="${big?'flex:0 1 360px;font-size:17px;padding:17px 26px':''}">Commander maintenant</button>${big?'':'<button class="btn ghost" data-a="pdpAdd">Ajouter au panier</button>'}</div>`;
+  const cta = (big)=> out ? '<span class="pill bad">Rupture de stock</span>' : `<div class="pdp-buy" style="${big?'justify-content:center':''}">${big?'':`<div class="qty big"><button data-a="pdpQty" data-d="-1" aria-label="Moins">−</button><span>${Math.max(1,S.pqty||1)}</span><button data-a="pdpQty" data-d="1" aria-label="Plus">+</button></div>`}<div class="cta-wa" style="${big?'justify-content:center;max-width:620px;margin:0 auto':'flex:1 1 100%'}"><button class="btn primary btn-live" data-a="pdpBuy" style="${big?'font-size:17px;padding:17px 26px':''}">Commander maintenant</button>${shopWa()?`<button class="btn wa btn-live" data-a="waProduct" data-id="${p.id}" style="${big?'font-size:17px;padding:17px 26px':''}">${WA_ICON}Commander sur WhatsApp</button>`:''}</div>${big?'':'<button class="btn ghost" data-a="pdpAdd" style="flex:1 1 100%">🛒 Ajouter au panier</button>'}</div>`;
   const countdown = until ? `<div><div class="small muted" style="margin-top:14px">${esc(p.lpOffer||'Offre spéciale')} · se termine dans</div><div class="cd" data-until="${esc(until)}"><span data-cd="d">0<small>JOURS</small></span><span data-cd="h">0<small>HEURES</small></span><span data-cd="m">0<small>MIN</small></span><span data-cd="s">0<small>SEC</small></span></div></div>` : (p.lpOffer?`<p class="small" style="color:var(--indigo);font-weight:700;margin-top:12px">${esc(p.lpOffer)}</p>`:'');
   const gal = imgs.length ? `<div class="gal-main" id="gal">${imgs.map((src,i)=>`<div data-a="lpZoom" data-v="${i}" style="cursor:zoom-in"><img src="${esc(src)}" alt="${esc(p.name)} — ${esc((caps[i]&&caps[i].t)||'photo '+(i+1))}" ${i?'loading="lazy"':''}>${photoOverlay(p, true)}</div>`).join('')}</div>
       ${imgs.length>1?`<div class="gal-th">${imgs.map((src,i)=>`<button data-a="galGo" data-i="${i}" aria-current="${i===0}" aria-label="Photo ${i+1}"><img src="${esc(src)}" alt=""></button>`).join('')}</div>`:''}` : `<div class="gal-main emoji"><div>${esc(p.emoji||'📦')}</div></div>`;
@@ -1656,7 +1668,7 @@ function viewLanding(){
     ${save?`<div class="save">Vous économisez ${fmt(save)} (−${Math.round(save/p.comparePrice*100)} %)</div>`:''}
     ${hasVar(p)?optionPicker(p):''}
     ${p.stock>0&&p.stock<=(p.lowStock||5)?`<p class="small" style="color:var(--danger);font-weight:700;margin:12px 0 0">Plus que ${p.stock} en stock</p>`:''}
-    ${cta(false)}${parseVideo(p.lpVideo)?'<button class="btn ghost sm" data-a="lpVideoGo" style="margin-top:10px">▶ Voir la vidéo</button>':''}${countdown}
+    ${cta(false)}${parseVideo(p.lpVideo)||parseVideo(p.lpVideoFile)?'<button class="btn ghost sm" data-a="lpVideoGo" style="margin-top:10px">▶ Voir la vidéo</button>':''}${countdown}
     <div class="trust-box"><div><span>🚚</span><span><b>Livraison à ${esc(st.city)}</b>${st.freeFrom?`Offerte dès ${fmt(st.freeFrom)}`:fmt(st.deliveryFee)} · retrait en boutique possible</span></div><div><span>💳</span><span><b>Paiement sécurisé</b>${esc(enabledProcs().map(([k])=>PROCESSORS[k].name).join(', ')||'À la livraison')}${payRow(false)}</span></div>${p.warranty?`<div><span>🛡️</span><span><b>Garantie</b>${esc(p.warranty)}</span></div>`:''}</div>
    </div></section>
   ${videoBlock(p)}
@@ -1672,12 +1684,12 @@ function viewLanding(){
     <div><i>🚚</i><b>Livraison rapide</b><div class="muted small">Partout à ${esc(st.city)}, ou retrait en boutique</div></div>
     <div><i>💳</i><b>Paiement au choix</b><div class="muted small">Mobile money ou à la livraison</div></div>
     <div><i>🛡️</i><b>${p.warranty?'Garantie':'Satisfaction'}</b><div class="muted small">${esc(p.warranty||'Un problème ? Nous trouvons une solution')}</div></div>
-    <div><i>💬</i><b>À votre écoute</b><div class="muted small">${st.phone?esc(st.phone)+' · WhatsApp':'Par téléphone et WhatsApp'}</div></div></div></section>
+    <div><i>💬</i><b>À votre écoute</b><div class="muted small">${shopWa()?`<a href="https://wa.me/${shopWa()}" target="_blank" rel="noopener" style="color:#25D366;font-weight:700;display:inline-flex;align-items:center">${WA_ICON}${esc(st.whatsapp||st.phone)}</a>`:'Par téléphone et WhatsApp'}</div></div></div></section>
   <section class="lp-sec faq"><h2>Questions fréquentes</h2><div style="max-width:760px;margin:18px auto 0">${lpFaq(p).map(([q,a])=>`<details><summary>${esc(q)}</summary><p>${esc(a)}</p></details>`).join('')}</div></section>
   <section class="lp-final"><div class="lp-kicker">${esc(st.shopName)}</div><h2 style="font-size:clamp(30px,3.6vw,46px);margin:8px 0">${esc(p.lpHook||p.name)}</h2>
     <div class="pdp-price" style="justify-content:center"><span class="price">${fmt(price)}</span>${save?`<span class="strike">${fmt(p.comparePrice)}</span>`:''}</div>${countdown}${cta(true)}
     <p class="muted small" style="margin:14px 0 0">${hasVar(p)&&!sv?'Choisissez d’abord vos options en haut de la page.':'Livraison à '+esc(st.city)+' · paiement mobile money ou à la livraison'}</p></section>
-  ${out?'':`<div class="buybar"><span class="price">${fmt(price)}</span><button class="btn primary" data-a="pdpBuy">Commander</button></div>`}
+  ${out?'':`<div class="buybar"><span class="price">${fmt(price)}</span><span style="display:flex;gap:8px">${shopWa()?`<button class="btn wa" data-a="waProduct" data-id="${p.id}" aria-label="Commander sur WhatsApp" style="padding:12px 14px">${WA_ICON.replace('margin-right:6px','margin:0')}</button>`:''}<button class="btn primary btn-live" data-a="pdpBuy">Commander</button></span></div>`}
   </div>`;
 }
 let lpTimer = null;
@@ -2006,14 +2018,14 @@ function viewProduct(){
       ${hasVar(p)?optionPicker(p):''}
       <p style="margin:14px 0 0">${out?'<span class="pill bad">Rupture de stock</span>':hasVar(p)&&selVariant(p)?`<span class="pill ${selVariant(p).stock>0?'ok':'bad'}">${selVariant(p).stock>0?`En stock · ${selVariant(p).stock}`:'Cette variante est épuisée'}</span>`:`<span class="pill ok">En stock</span>`}</p>
       ${out?'':`<div class="pdp-buy"><div class="qty big"><button data-a="pdpQty" data-d="-1" aria-label="Moins">−</button><span>${q}</span><button data-a="pdpQty" data-d="1" aria-label="Plus">+</button></div>
-        <button class="btn primary" data-a="pdpAdd">Ajouter au panier</button><button class="btn ghost" data-a="pdpBuy">Acheter maintenant</button></div>
-        ${shopWa()?`<button class="btn wa" data-a="waProduct" data-id="${p.id}" style="margin-top:10px;width:100%">${WA_ICON}Commander ce produit sur WhatsApp</button>`:''}`}
+        <button class="btn primary btn-live" data-a="pdpAdd">Ajouter au panier</button><button class="btn ghost" data-a="pdpBuy">Acheter maintenant</button></div>
+        ${shopWa()?`<button class="btn wa btn-live" data-a="waProduct" data-id="${p.id}" style="margin-top:10px;width:100%">${WA_ICON}Commander ce produit sur WhatsApp</button>`:''}`}
       <div class="trust-box"><div><span>🚚</span><span><b>Livraison à ${esc(st.city)}</b>${st.freeFrom?`Offerte dès ${fmt(st.freeFrom)} d’achat, sinon ${fmt(st.deliveryFee)}. `:''}Retrait en boutique possible.</span></div>
         <div><span>💳</span><span><b>Paiement sécurisé</b>${esc(pays.join(', ')||'À la livraison')}${payRow(false)}</span></div>
         ${p.warranty?`<div><span>🛡️</span><span><b>Garantie et retour</b>${esc(p.warranty)}</span></div>`:''}
         ${st.phone?`<div><span>📞</span><span><b>Une question ?</b><a href="tel:${esc(st.phone.replace(/\s/g,''))}" style="color:var(--indigo)">${esc(st.phone)}</a></span></div>`:''}</div>
       <div class="mini-codes">${qrSVG(payLink(p, hasVar(p)?selVariant(p):null), 64)}<div>${eanSVG(hasVar(p)&&selVariant(p)?vCode(p,selVariant(p)):pCode(p), 150, 50)}<span>Scannez le QR pour payer sur votre téléphone · code produit ${esc(hasVar(p)&&selVariant(p)?vCode(p,selVariant(p)):pCode(p))}</span></div></div>
-      ${hasLanding(p)?`<button class="lp-banner" data-a="openLanding" data-id="${p.id}"><span style="font-size:26px">✨</span><span style="flex:1"><b>Découvrez ce produit en détail</b><span class="muted small">${[(p.angleCaps||[]).some(c=>c&&c.t)?'photos sous tous les angles':'', p.lpVideo?'vidéo':'', (p.spin||[]).length>=4?'vue à 360°':'', productRating(p.id).n?'avis clients':'', 'questions fréquentes'].filter(Boolean).join(' · ')}</span></span><span style="font-weight:800;color:var(--indigo)">Voir ›</span></button>`:''}
+      ${hasLanding(p)?`<button class="lp-banner" data-a="openLanding" data-id="${p.id}"><span style="font-size:26px">✨</span><span style="flex:1"><b>Découvrez ce produit en détail</b><span class="muted small">${[(p.angleCaps||[]).some(c=>c&&c.t)?'photos sous tous les angles':'', (p.lpVideo||p.lpVideoFile)?'vidéo':'', (p.spin||[]).length>=4?'vue à 360°':'', productRating(p.id).n?'avis clients':'', 'questions fréquentes'].filter(Boolean).join(' · ')}</span></span><span style="font-weight:800;color:var(--indigo)">Voir ›</span></button>`:''}
       <div class="row" style="gap:8px;margin-top:14px;flex-wrap:wrap"><button class="btn ghost sm" data-a="openLanding" data-id="${p.id}" style="flex:0;white-space:nowrap">✨ Page de vente</button><button class="btn ghost sm" data-a="shareProduct" data-id="${p.id}" style="flex:0">↗ Partager</button>${S.isAdmin?`<button class="btn ghost sm" data-a="visual" data-id="${p.id}" style="flex:0">🖼 Visuel</button><button class="btn ghost sm" data-a="editProduct" data-id="${p.id}" style="flex:0">✏️ Modifier</button>`:''}</div>
       ${inBundles.length?`<div style="margin-top:14px">${inBundles.map(b=>`<button class="btn ghost block" style="margin-top:8px" data-a="addBundle" data-id="${b.id}">Aussi en lot : ${esc(b.name)} · ${fmt(b.price)}</button>`).join('')}</div>`:''}
     </div></div>
@@ -2211,7 +2223,7 @@ function openCart(){
   $('#overlay').innerHTML = `<div class="drawer-wrap" data-a="closeAll"><aside class="drawer" role="dialog" aria-modal="true" aria-label="Panier">
     <div class="m-h"><h2>Panier</h2><button class="x" data-a="closeAll" aria-label="Fermer">×</button></div>
     <div class="m-b" id="drawer-body">${cartBody()}</div>
-    <div class="m-f" style="flex-direction:column;align-items:stretch">${S.cart.length?`<div class="small muted" style="text-align:center">Payez avec</div><div style="display:flex;justify-content:center">${payRow(false)}</div>`:''}<button class="btn primary block" data-a="checkout" ${S.cart.length?'':'disabled'}>Passer la commande</button>${S.cart.length&&shopWa()?`<button class="btn wa block" data-a="waOrder" style="margin-top:8px">${WA_ICON}Commander sur WhatsApp</button><div class="muted small" style="text-align:center">Votre panier part sur WhatsApp : nous confirmons le prix, le paiement et la livraison.</div>`:''}</div></aside></div>`;
+    <div class="m-f" style="flex-direction:column;align-items:stretch">${S.cart.length?`<div class="small muted" style="text-align:center">Payez avec</div><div style="display:flex;justify-content:center">${payRow(false)}</div>`:''}<button class="btn primary block ${S.cart.length?'btn-live':''}" data-a="checkout" ${S.cart.length?'':'disabled'}>Passer la commande</button>${S.cart.length&&shopWa()?`<button class="btn wa block btn-live" data-a="waOrder" style="margin-top:8px">${WA_ICON}Commander sur WhatsApp</button><div class="muted small" style="text-align:center">Votre panier part sur WhatsApp : nous confirmons le prix, le paiement et la livraison.</div>`:''}</div></aside></div>`;
 }
 async function validatePromo(code, subtotal){
   const c = code.trim().toUpperCase();
@@ -3281,7 +3293,9 @@ function productForm(p){
           <div class="field"><label for="lp-us">Idéal pour… (une idée par ligne, « Titre : texte »)</label><textarea class="input" id="lp-us" placeholder="Tabaski : soyez le plus élégant de la famille&#10;Mariage : une tenue digne de l’événement&#10;Cadeau : un présent qui marque">${esc(p.lpUsages||'')}</textarea></div>
           <div class="field"><label for="lp-faq">Questions fréquentes (question sur la 1re ligne, réponse dessous, une ligne vide entre deux)</label><textarea class="input" id="lp-faq" style="min-height:90px" placeholder="Quelles tailles sont disponibles ?&#10;Du M au XL. Écrivez-nous pour une taille sur mesure.">${esc(p.lpFaq||'')}</textarea></div>
           <div class="row"><div class="field"><label for="lp-off">Offre spéciale (facultatif)</label><input class="input" id="lp-off" maxlength="80" value="${esc(p.lpOffer||'')}" placeholder="ex. Prix de lancement"></div><div class="field"><label for="lp-until">Fin de l’offre (compte à rebours)</label><input class="input" type="date" id="lp-until" value="${esc(p.lpUntil||'')}"></div></div>
-          <div class="row"><div class="field" style="flex:2 1 280px"><label for="lp-vid">Vidéo (YouTube, TikTok, Facebook, Instagram, Douyin, Bilibili, Youku, Kuaishou, 1688…)</label><input class="input" id="lp-vid" value="${esc(p.lpVideo||'')}" placeholder="ex. https://youtube.com/shorts/…"><div class="small" id="lp-vid-ok" style="margin-top:4px"></div></div>
+          <div class="row"><div class="field" style="flex:2 1 280px"><label for="lp-vid">Vidéo (YouTube, TikTok, Facebook, Instagram, Douyin, Bilibili, Youku, Kuaishou, 1688…)</label><input class="input" id="lp-vid" value="${esc(p.lpVideo||'')}" placeholder="ex. https://youtube.com/shorts/…"><div class="small" id="lp-vid-ok" style="margin-top:4px"></div>
+          ${isServer()?`<div class="row" style="gap:8px;margin-top:8px;align-items:center"><label class="btn primary sm" style="flex:0;white-space:nowrap">📤 Envoyer une vidéo (MP4, 30 Mo max.)<input type="file" accept="video/mp4,video/quicktime,video/webm" class="sr" id="lp-vfile"></label><span class="small muted" id="lp-vprog">${p.lpVideoFile?'':'Fichier hébergé par la boutique : lecture rapide et fiable.'}</span></div>
+          <input type="hidden" id="lp-vfile-url" value="${esc(p.lpVideoFile||(/\/media\/v/.test(p.lpVideo||'')?p.lpVideo:''))}"><div id="lp-vfile-box" class="small" style="margin-top:6px"></div>`:''}</div>
           <div class="field"><label for="lp-vidt">Titre de la vidéo</label><input class="input" id="lp-vidt" maxlength="70" value="${esc(p.lpVideoTitle||'')}" placeholder="ex. Le boubou porté"></div></div>
           <div class="field"><label>Légende de chaque angle (photos)</label><div id="pf-caps"></div></div>
           <div class="field" style="margin:0"><label>Vue à 360° (facultatif)</label><p class="muted small" style="margin:0 0 6px">Prenez 12 à 24 photos en tournant autour du produit (posé au même endroit, même distance), puis ajoutez-les dans l’ordre.</p>
@@ -3321,6 +3335,20 @@ function productForm(p){
     $('#pf-bcgen').onclick = e=>{ e.preventDefault(); $('#pf-bc').value = makeEan((p.id||'')+Date.now()); draw(); };
     $('#pf-bcscan').onclick = e=>{ e.preventDefault(); const keep = document.createElement('div'); keep.append(...$('#overlay').childNodes); window.__keepForm = keep;
       openScanner(code=>{ restoreForm(); $('#pf-bc').value = code.replace(/\s/g,''); draw(); beep(true); return false; }, 'Scanner le code du fabricant'); }; }
+  const drawVfile = ()=>{ const box = $('#lp-vfile-box'); if(!box) return; const u = $('#lp-vfile-url').value;
+    box.innerHTML = u ? `<span style="color:var(--kola);font-weight:700">🎬 Vidéo hébergée sur la boutique</span> · <a href="${esc(u)}" target="_blank" rel="noopener" style="color:var(--indigo)">voir</a> · <button type="button" class="btn ghost sm" id="lp-vfile-del" style="padding:2px 10px">Retirer</button>${$('#lp-vid').value.trim()?'<div class="muted">Le lien ci-dessus reste proposé en complément (« Voir aussi sur… »).</div>':''}` : '';
+    if($('#lp-vfile-del')) $('#lp-vfile-del').onclick = ev=>{ ev.preventDefault(); const cur = $('#lp-vfile-url').value; if(cur && cur!==p.lpVideoFile && window.deleteVideo) window.deleteVideo(cur.split('/media/')[1]); $('#lp-vfile-url').value = ''; drawVfile(); }; };
+  if($('#lp-vfile-url') && /\/media\/v/.test($('#lp-vid').value)) $('#lp-vid').value = '';
+  drawVfile();
+  if($('#lp-vfile')) $('#lp-vfile').onchange = e=>{ const f = e.target.files[0]; if(!f) return; const pr = $('#lp-vprog');
+    if(f.size > 30*1024*1024){ pr.textContent = 'Vidéo trop lourde (30 Mo max.) : raccourcissez-la ou réduisez sa qualité (720p suffit).'; pr.style.color='var(--danger)'; return; }
+    const x = new XMLHttpRequest(); x.open('POST','/api/admin/video'); x.setRequestHeader('Content-Type', f.type || 'video/mp4');
+    x.upload.onprogress = ev=>{ if(ev.lengthComputable){ pr.textContent = 'Envoi… '+Math.round(ev.loaded/ev.total*100)+' %'; pr.style.color='var(--muted)'; } };
+    x.onload = ()=>{ let r = {}; try{ r = JSON.parse(x.responseText); }catch(err){}
+      if(x.status>=200 && x.status<300 && r.url){ const prev = $('#lp-vfile-url').value; if(prev && prev!==p.lpVideoFile && window.deleteVideo) window.deleteVideo(prev.split('/media/')[1]); $('#lp-vfile-url').value = location.origin + r.url; drawVfile(); pr.textContent = '✓ Vidéo envoyée ('+(r.size/1048576).toFixed(1).replace('.',',')+' Mo) : enregistrez le produit.'; pr.style.color='var(--kola)'; }
+      else { pr.textContent = r.error || 'Envoi impossible, réessayez.'; pr.style.color='var(--danger)'; } };
+    x.onerror = ()=>{ pr.textContent = 'Connexion interrompue : réessayez.'; pr.style.color='var(--danger)'; };
+    x.send(f); e.target.value=''; };
   // vue 360°
   let spinItems = (p.spin||[]).map(id=>({kind:'old', id})), spinRemoved = [];
   const drawSpin = ()=>{ const b = $('#pf-spin'); if(b) b.textContent = spinItems.length ? `${spinItems.length} photo${spinItems.length>1?'s':''} pour la vue 360°${spinItems.length<4?' (4 minimum pour l’afficher)':''}` : 'Aucune vue 360° pour l’instant.'; };
@@ -3380,6 +3408,8 @@ function productForm(p){
       for(const gid of removed) await del('product-images', gid).catch(()=>{});
       if(items[0] && items[0].kind==='old') await del('product-images', items[0].id).catch(()=>{});
       data.gallery = gallery;
+      if($('#lp-vfile-url')){ data.lpVideoFile = $('#lp-vfile-url').value || ''; if(/\/media\/v/.test(data.lpVideo||'')) data.lpVideo = '';
+        for(const old of [p.lpVideoFile||'', /\/media\/v/.test(p.lpVideo||'')?p.lpVideo:'']) if(/\/media\/v/.test(old) && old!==data.lpVideoFile && window.deleteVideo) window.deleteVideo(old.split('/media/')[1]); }
       data.angleCaps = items.map(it=>({t:(it.cap&&it.cap.t||'').trim(), d:(it.cap&&it.cap.d||'').trim()}));
       const spin = [];
       for(const it of spinItems){ if(it.kind==='old'){ spin.push(it.id); continue; } const sid = newId('i'); await put('product-images', sid, {productId:pid, data:it.data, role:'spin', createdAt:Date.now()}); spin.push(sid); }

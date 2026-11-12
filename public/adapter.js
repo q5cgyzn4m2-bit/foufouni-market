@@ -307,6 +307,7 @@
   window.lpView = pid => api('POST', '/api/lp-view', { pid }).catch(() => {});
   window.readInvoice = file => api('POST', '/api/admin/ai/invoice', { file });
   window.markWaCart = () => { clearTimeout(syncT); api('POST', `/api/carts/${encodeURIComponent(cartId)}/whatsapp`, {}).catch(() => {}); };
+  window.deleteVideo = file => api('DELETE', '/api/admin/video/' + encodeURIComponent(file)).catch(() => {});
   window.findOrder = (number, phone) => api('POST', '/api/orders/find', { number, phone });
   window.attachOrder = async (id, t) => { if (!id || !t) return; addMine(id, t); if (!me) await load(); };
   window.orderToken = id => { const m = myOrders().find(x => x.id === id); return m ? m.t : ''; };
