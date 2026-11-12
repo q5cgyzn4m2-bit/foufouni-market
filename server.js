@@ -952,7 +952,8 @@ app.post('/api/orders', h(async (req, res) => {
   const delivery = b.delivery === 'retrait' ? 'retrait' : 'livraison';
   const c = b.customer || {};
   const customer = { name: String(c.name || '').trim().slice(0, 80), phone: String(c.phone || '').trim().slice(0, 30),
-    address: String(c.address || '').trim().slice(0, 200), city: String(c.city || '').trim().slice(0, 60), note: String(c.note || '').trim().slice(0, 300), country: /^[A-Z]{2}$/.test(String(c.country || '')) ? c.country : 'ML' };
+    address: String(c.address || '').trim().slice(0, 200), city: String(c.city || '').trim().slice(0, 60), note: String(c.note || '').trim().slice(0, 300), country: /^[A-Z]{2}$/.test(String(c.country || '')) ? c.country : 'ML',
+    ...(c.geo && Number.isFinite(+c.geo.lat) && Number.isFinite(+c.geo.lng) && Math.abs(+c.geo.lat) <= 90 && Math.abs(+c.geo.lng) <= 180 ? { geo: { lat: Math.round(+c.geo.lat * 1e6) / 1e6, lng: Math.round(+c.geo.lng * 1e6) / 1e6, acc: Math.min(100000, Math.max(0, Math.round(+c.geo.acc || 0))) } } : {}) };
   const manual = manualPay()[method];
   if (manual && !String(b.payRef || '').trim()) throw httpErr(400, 'Indiquez la référence de la transaction.');
   if (!customer.name || customer.phone.replace(/\D/g, '').length < 8) throw httpErr(400, 'Nom et numéro de téléphone valides requis.');
@@ -1018,7 +1019,7 @@ app.get('/api/driver/me', h((req, res) => {
   const d = driverByToken(req.query.t); if (!d) throw httpErr(404, 'Espace livreur introuvable. Demandez votre lien à la boutique.');
   const since = Date.now() - 30 * 864e5;
   const orders = allDocs('orders').filter(o => o.driver && o.driver.id === d.id && o.status !== 'annulee' && (o.createdAt || 0) >= since).sort((a, b) => (a.status === 'livree') - (b.status === 'livree') || b.createdAt - a.createdAt)
-    .map(o => ({ id: o.id, number: o.number, status: o.status, createdAt: o.createdAt, customer: { name: o.customer?.name || '', phone: o.customer?.phone || '', address: o.customer?.address || '', city: o.customer?.city || '', note: o.customer?.note || '' },
+    .map(o => ({ id: o.id, number: o.number, status: o.status, createdAt: o.createdAt, customer: { name: o.customer?.name || '', phone: o.customer?.phone || '', address: o.customer?.address || '', city: o.customer?.city || '', note: o.customer?.note || '', country: o.customer?.country || 'ML', geo: o.customer?.geo || null },
       items: (o.items || []).map(i => ({ name: i.name, qty: i.qty })), total: o.total, toCollect: (o.payment?.method === 'cod' && !['payee'].includes(o.status) && !/encaissé|réussi/.test(o.payment?.status || '')) ? o.total : 0, proof: o.proof ? { at: o.proof.at } : null }));
   res.json({ driver: { name: d.name }, shop: settings().shopName, orders });
 }));

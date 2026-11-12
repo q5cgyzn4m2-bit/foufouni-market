@@ -251,9 +251,9 @@
     let d; try { d = await api('GET', '/api/driver/me?t=' + encodeURIComponent(t)); } catch (e) { $('#overlay').innerHTML = `<div class="scrim"><div class="modal"><div class="m-b"><h2>Espace livreur</h2><p>${esc(e.message)}</p></div></div></div>`; return; }
     const todo = d.orders.filter(o => o.status !== 'livree'), done = d.orders.filter(o => o.status === 'livree');
     const card = o => `<div class="panel" style="margin-bottom:12px"><div style="display:flex;justify-content:space-between;gap:10px;align-items:baseline"><b style="font-size:17px">${esc(o.number)}</b>${o.status === 'livree' ? '<span class="pill ok">Livrée ✓</span>' : o.toCollect ? `<span class="pill warn">À encaisser ${fmt(o.toCollect)}</span>` : '<span class="pill ok">Déjà payée</span>'}</div>
-      <p style="margin:8px 0 4px"><b>${esc(o.customer.name)}</b> · ${esc(o.customer.phone)}</p><p class="muted small" style="margin:0">${esc([o.customer.address, o.customer.city].filter(Boolean).join(', '))}${o.customer.note ? '<br>' + esc(o.customer.note) : ''}</p>
+      <p style="margin:8px 0 4px"><b>${esc(o.customer.name)}</b> · ${esc(o.customer.phone)}</p><p class="muted small" style="margin:0">📍 ${esc([o.customer.address, o.customer.city].filter(Boolean).join(', '))}${o.customer.note ? '<br>Repère : ' + esc(o.customer.note) : ''}</p>
       <p class="small" style="margin:8px 0 0">${o.items.map(i => i.qty + ' × ' + esc(i.name)).join('<br>')}</p>
-      ${o.status !== 'livree' ? `<div class="fin-actions" style="margin:12px 0 0"><a class="btn ghost sm" href="tel:${esc(o.customer.phone.replace(/\s/g, ''))}">📞 Appeler</a><a class="btn ghost sm" target="_blank" rel="noopener" href="https://wa.me/${waNumber(o.customer.phone)}">💬 WhatsApp</a><a class="btn ghost sm" target="_blank" rel="noopener" href="https://www.google.com/maps/search/${encodeURIComponent([o.customer.address, o.customer.city].filter(Boolean).join(', '))}">🗺 Itinéraire</a></div>
+      ${o.status !== 'livree' ? `<div class="fin-actions" style="margin:12px 0 0"><a class="btn ghost sm" href="tel:${esc(o.customer.phone.replace(/\s/g, ''))}">📞 Appeler</a><a class="btn ghost sm" target="_blank" rel="noopener" href="https://wa.me/${waNumber(o.customer.phone)}">💬 WhatsApp</a><a class="btn ${o.customer.geo ? 'primary' : 'ghost'} sm" target="_blank" rel="noopener" href="${esc(mapsLink(o.customer))}">🗺 ${o.customer.geo ? 'Position exacte' : 'Itinéraire'}</a></div>
         <label class="btn primary block" style="margin-top:12px">📷 Colis livré : prendre la photo<input type="file" accept="image/*" capture="environment" class="sr" data-drv-photo="${esc(o.id)}"></label>` : `<p class="muted small" style="margin:10px 0 0">Livrée le ${dateFr(o.proof ? o.proof.at : o.createdAt)}</p>`}</div>`;
     $('#overlay').innerHTML = `<div class="scrim"><div class="modal wide" role="dialog" aria-modal="true" aria-label="Espace livreur"><div class="m-h"><h2>🛵 Bonjour ${esc(d.driver.name)}</h2></div>
       <div class="m-b"><p class="muted" style="margin-top:0">${todo.length} livraison${todo.length > 1 ? 's' : ''} à faire pour ${esc(d.shop)}. Une fois le colis remis, prenez la photo : la commande passe en « Livrée ».</p>
@@ -320,7 +320,7 @@
   window.coNext = async function () {
     readCO(); const err = $('#co-err');
     if (CO.step === 1 && (!CO.name || CO.phone.replace(/\D/g, '').length < 8)) { err.textContent = 'Indiquez votre nom et un numéro de téléphone valide.'; return; }
-    if (CO.step === 2 && CO.delivery === 'livraison' && !CO.address) { err.textContent = 'Indiquez votre adresse ou votre quartier.'; return; }
+    if (CO.step === 2 && CO.delivery === 'livraison' && (!CO.city || !CO.address)) { err.textContent = !CO.city ? 'Indiquez votre ville.' : 'Indiquez votre quartier.'; return; }
     if (CO.step === 1) { contact = { name: CO.name, phone: CO.phone }; syncCart(true); }
     if (CO.step < 3) { CO.step++; drawCheckout(); return; }
     if (!payCheck()) return;
@@ -328,7 +328,7 @@
     try {
       const r = await api('POST', '/api/orders', {
         items: S.cart.map(l => l.b ? { bundle: l.b, qty: l.qty } : (l.v ? { id: l.id, qty: l.qty, v: l.v } : { id: l.id, qty: l.qty })), promoCode: S.appliedPromo ? S.appliedPromo.code : '',
-        customer: { name: CO.name, phone: CO.phone, address: CO.address, city: CO.city, note: CO.note, country: CO.country || 'ML' }, payRef: CO.payRef || '',
+        customer: { name: CO.name, phone: CO.phone, address: CO.address, city: CO.city, note: CO.note, country: CO.country || 'ML', ...(CO.geo ? { geo: CO.geo } : {}) }, payRef: CO.payRef || '',
         delivery: CO.delivery, method: CO.method, cartId, ref: refCode(), source: srcCode(), campaign: cmpCode(), lpPids: lpSeen().filter(id => S.cart.some(l => l.id === id))
       });
       addMine(r.id, r.token); syncAlerts();

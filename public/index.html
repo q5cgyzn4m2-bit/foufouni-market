@@ -380,6 +380,13 @@ textarea.input{min-height:84px; resize:vertical}
 .fav-c b{display:block; font:700 18px/1.15 var(--f-d)}
 .lp-banner{display:flex; gap:12px; align-items:center; margin:14px 0 0; padding:12px 14px; border-radius:16px; background:linear-gradient(135deg,var(--indigo-soft),transparent); border:1px solid color-mix(in srgb,var(--indigo) 50%,var(--line)); cursor:pointer; text-align:left; width:100%; color:inherit; font:inherit}
 .lp-banner b{display:block}
+.ctry-grid{display:grid; grid-template-columns:repeat(auto-fill,minmax(min(140px,46%),1fr)); gap:8px; margin:0 0 14px}
+.ctry{position:relative; display:flex; align-items:center; gap:9px; padding:10px 12px; border-radius:14px; border:2px solid var(--line); background:var(--surface); color:var(--ink); font:700 14px var(--f-b); text-align:left; cursor:pointer}
+.ctry svg{width:30px; height:20px; border-radius:3px; flex:none; box-shadow:0 1px 3px rgba(0,0,0,.3)}
+.ctry[aria-pressed="true"]{border-color:var(--indigo); background:var(--indigo-soft); color:var(--indigo)}
+.ctry[aria-pressed="true"]::after{content:'✓'; position:absolute; top:4px; right:8px; font-size:13px}
+.co-lbl{font:800 12px var(--f-b); letter-spacing:.08em; text-transform:uppercase; color:var(--muted); margin:6px 0 8px}
+.geo-box{display:flex; gap:10px; align-items:center; flex-wrap:wrap; padding:12px; border-radius:14px; border:1px dashed color-mix(in srgb,var(--indigo) 55%,var(--line)); background:var(--indigo-soft); margin:0 0 14px}
 .empty{border:2px dashed var(--line); border-radius:var(--r-m); padding:48px 20px; text-align:center; color:var(--muted)}
 .empty h3{color:var(--ink); margin-bottom:8px; font-size:20px}
 
@@ -1386,7 +1393,7 @@ const deliveredLink = o => shopUrl()+'?livre='+encodeURIComponent(o.id)+'&t='+en
 const driverLink = d => shopUrl()+'?livreur='+encodeURIComponent(d.token||'');
 function courseText(o, d){
   const c = o.customer||{}, cod = /cod|livraison/.test(o.payment&&o.payment.method||'') && !PAID.includes(o.status);
-  return `🛵 Nouvelle livraison ${o.number} · ${S.settings.shopName}\nClient : ${c.name||''} · ${c.phone||''}\nAdresse : ${[c.address, c.city].filter(Boolean).join(', ')}${c.note?'\nNote : '+c.note:''}\nArticles : ${(o.items||[]).map(i=>i.qty+' × '+i.name).join(', ')}\n${cod?'À encaisser : '+fmt(o.total).replace(/[\u202f\u00a0]/g,' '):'Déjà payé'}${isServer()&&d&&d.token?`\n\nAprès la livraison, envoyez la photo ici : ${driverLink(d)}`:'\n\nAprès la livraison, envoyez-moi la photo du colis livré.'}`;
+  return `🛵 Nouvelle livraison ${o.number} · ${S.settings.shopName}\nClient : ${c.name||''} · ${c.phone||''}\nAdresse : ${[c.address, c.city, c.country&&c.country!=='ML'?WA[c.country]:''].filter(Boolean).join(', ')}${c.note?'\nRepère : '+c.note:''}\n📍 ${c.geo?'Position exacte':'Localisation'} : ${mapsLink(c)}\nArticles : ${(o.items||[]).map(i=>i.qty+' × '+i.name).join(', ')}\n${cod?'À encaisser : '+fmt(o.total).replace(/[\u202f\u00a0]/g,' '):'Déjà payé'}${isServer()&&d&&d.token?`\n\nAprès la livraison, envoyez la photo ici : ${driverLink(d)}`:'\n\nAprès la livraison, envoyez-moi la photo du colis livré.'}`;
 }
 function clientDeliveredText(o){ const c = o.customer||{};
   return `Bonjour ${firstName(c.name)||''} 😊 Votre commande ${o.number} a bien été livrée ✅${o.proof?`\nVoici la photo de votre colis : ${deliveredLink(o)}`:''}\nMerci pour votre confiance ! — ${S.settings.shopName}`; }
@@ -2181,7 +2188,7 @@ async function validatePromo(code, subtotal){
 /* --- Commande --- */
 let CO = null;
 try{ if(localStorage.getItem('ffm-inst-hide')) S.instHide = true; }catch(e){}
-document.addEventListener('change', e=>{ if(e.target && e.target.id==='co-country' && CO){ readCO(); drawCheckout(); } });
+document.addEventListener('change', e=>{ if(e.target && e.target.id==='co-city' && CO){ const before = CO.city; readCO(); if(CO.city!==before || !(QUARTIERS[CO.city]||[]).length) drawCheckout(); } });
 function openCheckout(){
   { const t0 = computeTotals(S.cart, S.appliedPromo, 'livraison'); ttTrack('InitiateCheckout', {value:Math.round(t0.subtotal), contents:t0.lines.filter(l=>l.kind==='product').map(l=>ttItem(l.p, l.qty, l.unit))}); }
   CO = {step:1, delivery:'livraison', name:S.myName && S.myName!=='Mode démo'?S.myName:'', phone:'', address:'', city:S.settings.city, note:'', method:null};
@@ -2207,11 +2214,16 @@ function drawCheckout(){
       <button class="pay-opt" data-a="coDelivery" data-v="livraison" aria-pressed="${CO.delivery==='livraison'}"><span class="pay-logo" style="background:var(--indigo)">🚚</span><span><b>Livraison à domicile</b><br><span class="muted small">${t.subtotal>=S.settings.freeFrom?'Offerte':fmt(S.settings.deliveryFee)}</span></span></button>
       <button class="pay-opt" data-a="coDelivery" data-v="retrait" aria-pressed="${CO.delivery==='retrait'}"><span class="pay-logo" style="background:var(--kola)">🏪</span><span><b>Retrait en boutique</b><br><span class="muted small">Gratuit</span></span></button>
     </div>
-    ${CO.delivery==='livraison'?`<div class="field"><label for="co-address">Adresse ou quartier</label><input class="input" id="co-address" value="${esc(CO.address)}" autocomplete="street-address"></div>
-    <div class="row"><div class="field"><label for="co-city">Ville</label><input class="input" id="co-city" value="${esc(CO.city)}"></div>
-    <div class="field"><label for="co-country">Pays</label><select class="input" id="co-country">${(S.settings.shipCountries||['ML']).filter(c=>WA[c]).map(c=>`<option value="${c}" ${(CO.country||'ML')===c?'selected':''}>${esc(WA[c])}</option>`).join('')}</select></div></div>
-    ${(CO.country||'ML')!=='ML'?'<p class="small" style="margin:-4px 0 12px;color:var(--indigo)">🌍 Livraison internationale : le délai et les frais d’envoi vous seront confirmés par notre équipe sur WhatsApp avant l’expédition.</p>':''}`:''}
-    <div class="field"><label for="co-note">Instructions (facultatif)</label><input class="input" id="co-note" value="${esc(CO.note)}" placeholder="Point de repère, horaire…"></div>`;
+    ${CO.delivery==='livraison'?(()=>{ const ctry = CO.country||'ML', list = (S.settings.shipCountries||['ML']).filter(c=>WA[c]); if(!CO.city && ctry==='ML') CO.city = S.settings.city||'Bamako';
+      const qs = QUARTIERS[CO.city] || [];
+      return `<p class="co-lbl">Pays de livraison${list.length>1?' · possible d’expédier hors du Mali':''}</p>
+      <div class="ctry-grid">${list.map(c=>`<button class="ctry" data-a="coCountry" data-v="${c}" aria-pressed="${ctry===c}">${flagSVG(c)}<span>${esc(WA[c])}</span></button>`).join('')}</div>
+      ${ctry!=='ML'?'<p class="small" style="margin:-4px 0 12px;color:var(--indigo)">🌍 Livraison internationale : le délai et les frais d’envoi vous seront confirmés par notre équipe sur WhatsApp avant l’expédition.</p>':''}
+      <div class="field"><label for="co-city">Ville *</label><input class="input" id="co-city" list="co-cities" value="${esc(CO.city)}" placeholder="ex. ${esc((CITIES[ctry]||['Bamako'])[0])}" autocomplete="address-level2"><datalist id="co-cities">${(CITIES[ctry]||[]).map(v=>`<option value="${esc(v)}">`).join('')}</datalist></div>
+      <div class="field"><label for="co-address" style="display:flex;justify-content:space-between;gap:8px"><span>📍 Quartier *</span>${qs.length?'<span class="small" style="color:var(--indigo);font-weight:700">Quartier introuvable ? Tapez-le</span>':''}</label><input class="input" id="co-address" list="co-quarts" value="${esc(CO.address)}" placeholder="${qs.length?'Tapez votre quartier (ex. Faladié, ACI 2000…)':'Quartier, rue ou adresse'}" autocomplete="off"><datalist id="co-quarts">${qs.map(v=>`<option value="${esc(v)}">`).join('')}</datalist></div>
+      <div class="field"><label for="co-note">Indications ou repère (facultatif)</label><input class="input" id="co-note" value="${esc(CO.note)}" placeholder="ex. derrière la pharmacie, portail bleu, 2e étage"></div>
+      <div class="geo-box">${CO.geo?`<span style="flex:1"><b style="color:var(--kola)">✓ Position exacte enregistrée</b><br><span class="muted small">Précision d’environ ${Math.round(CO.geo.acc||0)} m · <a href="${esc(mapsLink({geo:CO.geo}))}" target="_blank" rel="noopener" style="color:var(--indigo)">voir sur la carte</a></span></span><button class="btn ghost sm" data-a="coGeoDel" style="flex:0">Retirer</button>`
+        :`<span style="flex:1;min-width:180px"><b>Livraison plus rapide</b><br><span class="muted small">Si vous êtes à l’adresse de livraison, partagez votre position : le livreur arrive directement chez vous.</span></span><button class="btn primary sm" data-a="coGeo" style="flex:0;white-space:nowrap">📍 Partager ma position</button>`}</div>`; })():`<div class="field"><label for="co-note">Instructions (facultatif)</label><input class="input" id="co-note" value="${esc(CO.note)}" placeholder="Horaire de passage…"></div>`}`;
   if(CO.step===3){
     const procs = enabledProcs();
     body = `<h3 style="margin-bottom:14px">Paiement</h3>
@@ -2238,7 +2250,19 @@ function drawCheckout(){
       <button class="btn primary" data-a="coNext">${CO.step<3?'Continuer':`Payer ${fmt(t.total)}`}</button></div></div></div>`;
   const first = $('#overlay input'); if(first && !first.value) first.focus();
 }
-function readCO(){ ['name','phone','address','city','note','country','payref'].forEach(k=>{ const el=$('#co-'+k); if(el) CO[k==='payref'?'payRef':k]=el.value.trim(); }); }
+const CITIES = {
+  ML:['Bamako','Kati','Koulikoro','Ségou','Sikasso','Kayes','Mopti','Sévaré','Koutiala','Bougouni','San','Kita','Kadiolo','Fana','Dioïla','Nioro du Sahel','Diéma','Kolokani','Bandiagara','Djenné','Gao','Tombouctou','Kidal','Ménaka'],
+  SN:['Dakar','Pikine','Guédiawaye','Rufisque','Thiès','Mbour','Touba','Kaolack','Saint-Louis','Ziguinchor','Tambacounda'], CI:['Abidjan','Bouaké','Yamoussoukro','San-Pédro','Korhogo','Daloa','Man'],
+  BF:['Ouagadougou','Bobo-Dioulasso','Koudougou','Banfora','Ouahigouya'], GN:['Conakry','Kankan','Labé','Nzérékoré','Kindia'], NE:['Niamey','Zinder','Maradi','Agadez','Tahoua'],
+  BJ:['Cotonou','Abomey-Calavi','Porto-Novo','Parakou'], TG:['Lomé','Kara','Sokodé'], GH:['Accra','Kumasi','Tamale'], NG:['Lagos','Abuja','Kano'], MR:['Nouakchott','Nouadhibou','Kiffa'],
+  GM:['Banjul','Serekunda'], GW:['Bissau'], SL:['Freetown'], LR:['Monrovia'], CV:['Praia','Mindelo'] };
+const QUARTIERS = {Bamako:['ACI 2000','Badalabougou','Baco Djicoroni','Baco Djicoroni ACI','Bagadadji','Bamako Coura','Banankabougou','Banconi','Bolibana','Boulkassoumbougou','Bozola','Dar Salam','Daoudabougou','Djélibougou','Djicoroni Para','Doumanzana','Dravéla','Faladié','Garantiguibougou','Hamdallaye','Hamdallaye ACI','Hippodrome','Kalaban Coura','Kalaban Coura ACI','Kalabambougou','Kanadjiguila','Kodabougou','Korofina Nord','Korofina Sud','Koulouba','Lafiabougou','Lassa','Magnambougou','Médina Coura','Missabougou','Missira','N’Tomikorobougou','Niamakoro','Niaréla','Ouolofobougou','Point G','Quinzambougou','Sabalibougou','Samé','Sans Fil','Sébénikoro','Sénou','Sikoroni','Sirakoro Méguétana','Sogoniko','Sotuba','Titibougou','Torokorobougou','Yirimadio','Zone Industrielle'],
+  Kati:['Kati Coura','Kati Malibougou','Kati Noumorila','Kati Sananfara','Kati Farada','Kati Kôkô']};
+/* Lien Google Maps de la livraison : position exacte si le client l’a partagée, sinon recherche de son adresse */
+function mapsLink(c){ if(!c) return ''; const g = c.geo;
+  if(g && isFinite(g.lat) && isFinite(g.lng)) return `https://www.google.com/maps?q=${Number(g.lat).toFixed(6)},${Number(g.lng).toFixed(6)}`;
+  const q = [c.address, c.city, WA[c.country||'ML']||''].filter(Boolean).join(', '); return q ? 'https://www.google.com/maps/search/?api=1&query='+encodeURIComponent(q) : ''; }
+function readCO(){ ['name','phone','address','city','note','payref'].forEach(k=>{ const el=$('#co-'+k); if(el) CO[k==='payref'?'payRef':k]=el.value.trim(); }); }
 function payCheck(){ const err = $('#co-err');
   if(!CO.method){ err.textContent='Choisissez un moyen de paiement ci-dessus 👆'; const g = $('#pay-grid'); if(g){ g.classList.remove('pay-shake'); void g.offsetWidth; g.classList.add('pay-shake'); g.scrollIntoView({behavior:'smooth', block:'center'}); } return false; }
   const man = S.settings.manualPay||{}; if(man[CO.method] && !(CO.payRef||'').trim()){ err.textContent='Indiquez la référence de la transaction reçue par SMS, ou choisissez le paiement à la livraison.'; $('#co-payref')?.focus(); return false; }
@@ -2246,7 +2270,7 @@ function payCheck(){ const err = $('#co-err');
 async function coNext(){
   readCO(); const err = $('#co-err');
   if(CO.step===1){ if(!CO.name || CO.phone.replace(/\D/g,'').length<8){ err.textContent='Indiquez votre nom et un numéro de téléphone valide.'; return; } }
-  if(CO.step===2 && CO.delivery==='livraison' && !CO.address){ err.textContent='Indiquez votre adresse ou votre quartier.'; return; }
+  if(CO.step===2 && CO.delivery==='livraison' && (!CO.city || !CO.address)){ err.textContent = !CO.city ? 'Indiquez votre ville.' : 'Indiquez votre quartier.'; ($(!CO.city?'#co-city':'#co-address')||{}).focus?.(); return; }
   if(CO.step<3){ CO.step++; drawCheckout(); return; }
   if(!payCheck()) return;
   { const si = stockIssue(S.cart); if(si){ err.textContent = si; return; } }
@@ -2260,7 +2284,7 @@ async function coNext(){
       promoCode:S.appliedPromo?S.appliedPromo.code:'',
       source:srcCode(), campaign:cmpCode(), lpPids:lpSeen().filter(id=>S.cart.some(l=>l.id===id)),
       affiliate:S.appliedPromo&&S.appliedPromo.affiliate?{id:S.appliedPromo.affiliate.id, code:S.appliedPromo.code, discountPct:S.appliedPromo.value, commission:affCommission(t.lines, S.appliedPromo.value)}:null,
-      customer:{name:CO.name, phone:CO.phone, address:CO.address, city:CO.city, note:CO.note, country:CO.country||'ML'},
+      customer:{name:CO.name, phone:CO.phone, address:CO.address, city:CO.city, note:CO.note, country:CO.country||'ML', ...(CO.geo?{geo:CO.geo}:{})},
       delivery:CO.delivery, payment:{method:CO.method, ref, status:CO.method==='cod'?'à encaisser':'réussi'+(S.settings.testMode?' (test)':'')},
       status:CO.method==='cod'?'en_attente':'payee', channel:'en ligne', stockApplied:false,
       createdAt:Date.now(), createdBy:S.uid||'local'
@@ -3327,8 +3351,9 @@ function orderDetail(o){
   $('#overlay').innerHTML = `<div class="scrim" data-a="closeAll"><div class="modal wide" role="dialog" aria-modal="true" aria-label="Commande ${esc(o.number)}">
     <div class="m-h"><h2>${esc(o.number)} <span class="pill ${STATUS[o.status]?.cls}" style="vertical-align:middle">${STATUS[o.status]?.label}</span></h2><button class="x" data-a="closeAll" aria-label="Fermer">×</button></div>
     <div class="m-b"><div class="two"><div class="panel">${receiptHTML(o)}</div>
-      <div>${o.affiliate?`<div class="panel"><h3>Ambassadeur</h3><p style="margin:0"><b>${esc(o.affiliate.code)}</b> · ${esc((S.affiliates.find(a=>a.id===o.affiliate.id)||{}).name||'')}<br>Commission ${fmt(o.affiliate.commission)} <span class="pill ${AFF_ST[affState(o)].c}">${AFF_ST[affState(o)].l}</span></p></div>`:''}<div class="panel"><h3>Client</h3><p style="margin:0">${esc(c.name||'—')}<br>${esc(c.phone||'')}<br>${o.delivery==='livraison'?esc(c.address+', '+c.city):'Retrait en boutique'}${c.note?`<br><span class="muted">${esc(c.note)}</span>`:''}</p>
-      ${c.phone?`<a class="btn ghost sm" style="margin-top:10px" href="tel:${esc(c.phone.replace(/\s/g,''))}">Appeler</a>`:''}</div>
+      <div>${o.affiliate?`<div class="panel"><h3>Ambassadeur</h3><p style="margin:0"><b>${esc(o.affiliate.code)}</b> · ${esc((S.affiliates.find(a=>a.id===o.affiliate.id)||{}).name||'')}<br>Commission ${fmt(o.affiliate.commission)} <span class="pill ${AFF_ST[affState(o)].c}">${AFF_ST[affState(o)].l}</span></p></div>`:''}<div class="panel"><h3>Client</h3><p style="margin:0">${esc(c.name||'—')}<br>${esc(c.phone||'')}<br>${o.delivery==='livraison'?esc([c.address, c.city, c.country&&c.country!=='ML'?WA[c.country]:''].filter(Boolean).join(', ')):'Retrait en boutique'}${c.note?`<br><span class="muted">Repère : ${esc(c.note)}</span>`:''}</p>
+      <div class="fin-actions" style="margin:10px 0 0">${c.phone?`<a class="btn ghost sm" href="tel:${esc(c.phone.replace(/\s/g,''))}">Appeler</a>`:''}
+      ${o.delivery==='livraison'&&mapsLink(c)?`<a class="btn ghost sm" href="${esc(mapsLink(c))}" target="_blank" rel="noopener">📍 Google Maps${c.geo?' (position exacte)':''}</a><button class="btn ghost sm" data-a="copyMaps" data-v="${esc(mapsLink(c))}">Copier le lien</button>`:''}</div></div>
       ${o.delivery==='livraison'?`<div class="panel"><h3>🛵 Livraison</h3>
         <div class="row" style="align-items:flex-end;gap:8px"><div class="field" style="margin:0"><label for="od-drv">Livreur</label><select class="input" id="od-drv"><option value="">— Choisir —</option>${S.drivers.filter(d=>d.active!==false||(o.driver&&o.driver.id===d.id)).map(d=>`<option value="${d.id}" ${o.driver&&o.driver.id===d.id?'selected':''}>${esc(d.name)} · ${esc(d.phone)}</option>`).join('')}</select></div><button class="btn ghost sm" data-a="drivers" style="flex:0;white-space:nowrap">＋ Livreurs</button></div>
         ${o.driver?`<div class="fin-actions" style="margin:10px 0 0"><a class="btn ghost sm" href="tel:${esc(String(o.driver.phone).replace(/\s/g,''))}">📞 Appeler ${esc(o.driver.name)}</a><a class="btn ghost sm" target="_blank" rel="noopener" href="https://wa.me/${waNumber(o.driver.phone)}?text=${encodeURIComponent(courseText(o, S.drivers.find(d=>d.id===o.driver.id)))}">💬 Envoyer la course</a></div>`:''}
@@ -3703,6 +3728,13 @@ document.addEventListener('click', async e=>{
     case 'checkout': if(!enabledProcs().length){ toast('Aucun moyen de paiement actif pour le moment.'); break; } openCheckout(); break;
     case 'coDelivery': readCO(); CO.delivery=el.dataset.v; drawCheckout(); break;
     case 'procLogoDel': { const s2 = structuredClone(S.settings); if(s2.processors[el.dataset.v]) delete s2.processors[el.dataset.v].logo; try{ await put('settings','main',s2); toast('Logo retiré'); }catch(err){ dbErr(err); } break; }
+    case 'coCountry': readCO(); if(CO.country!==el.dataset.v){ CO.country = el.dataset.v; CO.city = el.dataset.v==='ML' ? (S.settings.city||'Bamako') : ''; CO.address = ''; } drawCheckout(); break;
+    case 'coGeoDel': readCO(); CO.geo = null; drawCheckout(); break;
+    case 'coGeo': { readCO(); if(!navigator.geolocation){ toast('Votre téléphone ne permet pas de partager la position.'); break; } el.disabled = true; el.textContent = 'Localisation…';
+      navigator.geolocation.getCurrentPosition(pos=>{ CO.geo = {lat:+pos.coords.latitude.toFixed(6), lng:+pos.coords.longitude.toFixed(6), acc:Math.round(pos.coords.accuracy||0)}; drawCheckout(); toast('Position enregistrée ✓'); },
+        e2=>{ el.disabled = false; el.textContent = '📍 Partager ma position'; toast(e2.code===1 ? 'Autorisez l’accès à la position dans votre navigateur, ou indiquez simplement votre quartier.' : 'Position introuvable : vérifiez que la localisation est activée, ou indiquez votre quartier.'); },
+        {enableHighAccuracy:true, timeout:15000, maximumAge:60000}); break; }
+    case 'copyMaps': try{ await navigator.clipboard.writeText(el.dataset.v); toast('Lien Google Maps copié'); }catch(err){ toast(el.dataset.v); } break;
     case 'copyPayNum': try{ await navigator.clipboard.writeText(el.dataset.v.replace(/\s/g,'')); toast('Numéro copié'); }catch(err){ toast(el.dataset.v); } break;
     case 'install': window.__instPopup = false; installGuide(); break;
     case 'instNever': try{ localStorage.setItem('ffm-inst-never','1'); }catch(err){} closeAll(); toast('D’accord, nous ne l’afficherons plus. Le guide reste disponible en bas de page.'); break;

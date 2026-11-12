@@ -284,3 +284,9 @@ Sur les photos (cartes de la boutique, fiche produit, page de vente) et sur les 
 - Données structurées schema.org : Product (prix en XOF, stock, état, code-barres GTIN quand il est réel, marque, note et avis), BreadcrumbList, CollectionPage pour les catégories, OnlineStore et WebSite pour l'accueil.
 - Contenu HTML rendu par le serveur (titre, description, prix, points forts, caractéristiques, avis, liens internes), lisible sans JavaScript ; balises title, description, robots et canonical par page ; page 404 en noindex.
 - Gestion › Société › Référencement Google : code de vérification Google Search Console.
+
+
+## Adresse de livraison et lien Google Maps
+
+- À la commande : pays par drapeaux (pays cochés dans Société), ville avec suggestions par pays, quartier avec suggestions pour Bamako et Kati (saisie libre si le quartier n'y est pas), indications ou repère, et bouton « 📍 Partager ma position » (position GPS du téléphone, vérifiée par le serveur).
+- Chaque commande a son lien Google Maps : position exacte si elle a été partagée, sinon recherche de « quartier, ville, pays ». Il apparaît dans la commande (avec « Copier le lien »), dans le message WhatsApp envoyé au livreur, et dans l'espace livreur (« Position exacte » ou « Itinéraire »).
