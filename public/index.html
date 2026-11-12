@@ -768,6 +768,9 @@ function render(){
         if(hasVar(p) && !varOf(p,vv)){ setTimeout(()=>{ openLanding(p.id); toast('Choisissez la couleur et la taille, puis « Commander maintenant ».'); }, 50); }
         else setTimeout(()=>{ addToCart(p.id, 1, 'cart', varOf(p,vv)?vv:''); if(enabledProcs().length) openCheckout(); else openCart(); }, 80); } }
     else if(ord){ S._payDeep = true; const tk = q.get('t')||''; setTimeout(()=>openPayOrder(ord, tk), 80); }
+    else if(q && q.get('avis')){ S._payDeep = true; const aid = q.get('avis'), tk = q.get('t')||''; try{ history.replaceState(null,'',location.pathname); }catch(e){}
+      setTimeout(async ()=>{ try{ if(window.attachOrder) await window.attachOrder(aid, tk); }catch(e){} const o = S.orders.find(x=>x.id===aid);
+        if(!o) return toast('Commande introuvable.'); if(!RV_OK.includes(o.status)) return toast('Vous pourrez donner votre avis dès la réception de votre commande.'); reviewForm(aid); }, 120); }
     else if(q && q.get('livre')){ S._payDeep = true; const lid = q.get('livre'), tk = q.get('t')||''; try{ history.replaceState(null,'',location.pathname); }catch(e){}
       setTimeout(async ()=>{ let o = null; try{ o = window.orderStatus ? await window.orderStatus(lid, tk) : S.orders.find(x=>x.id===lid); }catch(e){} if(o){ o.token = o.token || tk; showReceipt(o); } else toast('Commande introuvable.'); }, 80); } }
   if(!S._deep && S.ready && S.products.length){ const ut = urlTarget(); if(ut.kind==='cat' && S.view==='shop'){ S.cat = ut.id; S._deep = true; setTimeout(()=>$('#catalogue')?.scrollIntoView(), 300); } }
@@ -955,10 +958,11 @@ const shortName = n => { const w = String(n||'Client').trim().split(/\s+/); retu
 function lightbox(src){ const d=document.createElement('div'); d.className='lightbox'; d.innerHTML=`<img src="${esc(src)}" alt="Photo du client">`; d.onclick=()=>d.remove(); document.body.appendChild(d); }
 function reviewsSection(p){
   const all = pubReviews(p.id), rt = productRating(p.id);
-  if(!rt.n) return `<section class="pdp-sec" id="avis"><h2>Avis clients</h2><p class="muted">Aucun avis pour l’instant. Les clients qui ont acheté ce produit peuvent laisser une note et des photos depuis « Mes commandes ».</p></section>`;
+  const rvBtn = `<button class="btn primary" data-a="rvStart" data-id="${p.id}" style="margin:4px 0 14px">★ Donner mon avis</button>`;
+  if(!rt.n) return `<section class="pdp-sec" id="avis"><h2>Avis clients</h2><p class="muted">Aucun avis pour l’instant. Vous avez acheté ce produit ? Soyez le premier à le noter.</p>${rvBtn}</section>`;
   const photos = []; all.forEach(r=>(r.photos||[]).forEach(id=>photos.push(id))); loadReviewImgs(photos);
   const only = S.rvPhotos ? all.filter(r=>(r.photos||[]).length) : all;
-  return `<section class="pdp-sec" id="avis"><h2>Avis clients</h2>
+  return `<section class="pdp-sec" id="avis"><h2>Avis clients</h2>${rvBtn}
     <div class="rv-sum"><div><div class="rv-avg">${(Math.round(rt.avg*10)/10).toString().replace('.',',')}</div><div style="font-size:22px;margin:4px 0">${starsHTML(rt.avg)}</div><div class="muted small">${rt.n} avis vérifié${rt.n>1?'s':''}</div></div>
       <div>${[5,4,3,2,1].map(k=>`<div class="rv-bar"><span>${k} ★</span><i><b style="width:${Math.round(rt.dist[k-1]/rt.n*100)}%"></b></i><span>${rt.dist[k-1]}</span></div>`).join('')}</div></div>
     ${photos.length?`<h3 style="font-size:20px;margin:0 0 10px">Photos des clients</h3><div class="rv-photos">${photos.slice(0,20).map(id=>reviewImgSrc(id)?`<button data-a="rvZoom" data-v="${esc(id)}"><img src="${esc(reviewImgSrc(id))}" alt="Photo d’un client" loading="lazy"></button>`:'').join('')}</div>`:''}
@@ -974,6 +978,29 @@ async function postReview(o, item, r){
   const id = newId('r'), photos = [];
   for(const d of r.photos){ const pid = newId('ri'); await put('review-images', pid, {reviewId:id, data:d, createdAt:Date.now()}); photos.push(pid); }
   await put('reviews', id, {productId:item.id, orderId:o.id, rating:r.rating, comment:r.comment, name:r.name, photos, status:'published', createdAt:Date.now(), createdBy:S.uid||'local'});
+}
+const reviewLink = o => shopUrl()+'?avis='+encodeURIComponent(o.id)+'&t='+encodeURIComponent(o.token||'');
+const RV_OK = ['livree','expediee'];
+function startReview(pid){
+  const mine = (S.orders||[]).filter(o=>(o.items||[]).some(i=>i.id===pid || (i.components||[]).some(c=>c.id===pid)));
+  const ok = mine.find(o=>RV_OK.includes(o.status));
+  if(ok && (!S.isAdmin || !isServer())) return reviewForm(ok.id);
+  if(mine.length && !S.isAdmin) return toast('Vous pourrez donner votre avis dès que votre commande sera expédiée ou livrée.');
+  $('#overlay').innerHTML = `<div class="scrim" data-a="closeAll"><div class="modal" role="dialog" aria-modal="true" aria-label="Retrouver ma commande"><div class="m-h"><h2>★ Donner mon avis</h2><button class="x" data-a="closeAll" aria-label="Fermer">×</button></div>
+    <div class="m-b"><p style="margin-top:0">Les avis sont réservés aux clients qui ont <b>reçu</b> ce produit. Retrouvez votre commande :</p>
+    <div class="field"><label for="rv-num">Numéro de commande</label><input class="input" id="rv-num" placeholder="ex. FM-261112-AB12" autocapitalize="characters"></div>
+    <div class="field"><label for="rv-tel">Téléphone utilisé pour la commande</label><input class="input" id="rv-tel" inputmode="tel" placeholder="+223 …"></div>
+    <p class="muted small" style="margin:0">Le numéro de commande figure sur votre reçu et dans le message de confirmation.</p><div class="small" id="rv-err" style="color:var(--danger);margin-top:8px"></div></div>
+    <div class="m-f"><button class="btn primary" id="rv-go">Retrouver ma commande</button></div></div></div>`;
+  $('#rv-go').onclick = async e=>{ e.stopPropagation(); const num = $('#rv-num').value.trim().toUpperCase(), tel = $('#rv-tel').value.trim(), err = $('#rv-err');
+    if(!num || tel.replace(/\D/g,'').length<8) return err.textContent = 'Indiquez le numéro de commande et votre téléphone.';
+    let o = null;
+    try{ if(window.findOrder){ const r = await window.findOrder(num, tel); await window.attachOrder(r.id, r.token); o = S.orders.find(x=>x.id===r.id); }
+      else o = S.orders.find(x=>String(x.number).toUpperCase()===num && phoneKey(x.customer&&x.customer.phone)===phoneKey(tel)); }
+    catch(e2){ return err.textContent = e2.message || 'Commande introuvable.'; }
+    if(!o) return err.textContent = 'Commande introuvable : vérifiez le numéro et le téléphone.';
+    if(!RV_OK.includes(o.status)) return err.textContent = 'Votre commande n’est pas encore expédiée : vous pourrez donner votre avis dès sa réception.';
+    reviewForm(o.id); };
 }
 function reviewForm(orderId){
   const o = S.orders.find(x=>x.id===orderId); if(!o) return;
@@ -1396,7 +1423,7 @@ function courseText(o, d){
   return `🛵 Nouvelle livraison ${o.number} · ${S.settings.shopName}\nClient : ${c.name||''} · ${c.phone||''}\nAdresse : ${[c.address, c.city, c.country&&c.country!=='ML'?WA[c.country]:''].filter(Boolean).join(', ')}${c.note?'\nRepère : '+c.note:''}\n📍 ${c.geo?'Position exacte':'Localisation'} : ${mapsLink(c)}\nArticles : ${(o.items||[]).map(i=>i.qty+' × '+i.name).join(', ')}\n${cod?'À encaisser : '+fmt(o.total).replace(/[\u202f\u00a0]/g,' '):'Déjà payé'}${isServer()&&d&&d.token?`\n\nAprès la livraison, envoyez la photo ici : ${driverLink(d)}`:'\n\nAprès la livraison, envoyez-moi la photo du colis livré.'}`;
 }
 function clientDeliveredText(o){ const c = o.customer||{};
-  return `Bonjour ${firstName(c.name)||''} 😊 Votre commande ${o.number} a bien été livrée ✅${o.proof?`\nVoici la photo de votre colis : ${deliveredLink(o)}`:''}\nMerci pour votre confiance ! — ${S.settings.shopName}`; }
+  return `Bonjour ${firstName(c.name)||''} 😊 Votre commande ${o.number} a bien été livrée ✅${o.proof?`\nVoici la photo de votre colis : ${deliveredLink(o)}`:''}\n⭐ Votre avis nous aide beaucoup : ${reviewLink(o)}\nMerci pour votre confiance ! — ${S.settings.shopName}`; }
 async function shareProof(o){
   const src = proofSrc(o), c = o.customer||{};
   if(src && navigator.canShare){ try{ const blob = await fetch(src).then(r=>r.blob()); const f = new File([blob], `livraison-${o.number}.jpg`, {type:blob.type||'image/jpeg'});
@@ -3359,6 +3386,7 @@ function orderDetail(o){
         ${o.driver?`<div class="fin-actions" style="margin:10px 0 0"><a class="btn ghost sm" href="tel:${esc(String(o.driver.phone).replace(/\s/g,''))}">📞 Appeler ${esc(o.driver.name)}</a><a class="btn ghost sm" target="_blank" rel="noopener" href="https://wa.me/${waNumber(o.driver.phone)}?text=${encodeURIComponent(courseText(o, S.drivers.find(d=>d.id===o.driver.id)))}">💬 Envoyer la course</a></div>`:''}
         ${o.proof?`<div style="margin-top:12px;text-align:center"><img data-proof="${esc(o.id)}" src="${esc(proofSrc(o))}" alt="Colis livré" style="max-width:100%;max-height:260px;border-radius:12px;background:#fff;cursor:zoom-in" onclick="this.src&&zoomBox(this.src)"><p class="muted small" style="margin:6px 0">Livré le ${dateFr(o.proof.at)}${o.proof.by?' par '+esc(o.proof.by):''}${o.proof.note?' · '+esc(o.proof.note):''}</p>
           <button class="btn primary sm" data-a="proofSend" data-id="${o.id}">📤 Envoyer la photo au client</button></div>`:''}
+        ${RV_OK.includes(o.status)&&c.phone?`<a class="btn ghost sm" style="margin-top:10px" target="_blank" rel="noopener" href="https://wa.me/${waNumber(c.phone)}?text=${encodeURIComponent(`Bonjour ${firstName(c.name)||''} 😊 Merci pour votre commande ${o.number} chez ${S.settings.shopName} ! Votre avis compte beaucoup pour nous : notez votre achat en 30 secondes, avec une photo si vous le souhaitez 👉 ${reviewLink(o)}`)}">⭐ Demander un avis</a>`:''}
         <label class="btn ghost sm" style="margin-top:10px">📷 ${o.proof?'Remplacer la photo':'Ajouter la photo de livraison'}<input type="file" accept="image/*" capture="environment" class="sr" id="od-proof"></label></div>`:''}
       <div class="panel"><h3>Statut</h3><div class="field"><label for="od-status">Changer le statut</label><select class="input" id="od-status">${Object.entries(STATUS).map(([k,v])=>`<option value="${k}" ${k===o.status?'selected':''}>${v.label}</option>`).join('')}</select></div>
       <p class="muted small" style="margin:0">${o.stockApplied?'Le stock a été déduit pour cette commande.':'Le stock sera déduit dès que la commande passe en « Payée » ou au-delà.'}</p></div></div></div></div>
@@ -3687,6 +3715,7 @@ document.addEventListener('click', async e=>{
     case 'exportTop': { const rows=salesStats(S.topDays).sort((a,b)=>b.revenue-a.revenue); save('produits-phares.csv', csv([['Produit','Catégorie','Quantité vendue','Chiffre d’affaires','Coût d’achat','Marge brute','Marge %','Stock'], ...rows.map(r=>[r.p.name,r.p.category,r.qty,Math.round(r.revenue),r.noCost?'':Math.round(r.cost),r.margin===null?'':Math.round(r.margin),r.margin===null?'':pct(r.margin,r.revenue),r.p.stock])])); break; }
     case 'exportStock': save('inventaire-stock.csv', csv([['Produit','SKU','Catégorie','Prix d’achat','Prix de vente','Stock','Compté','Écart','Valeur au prix d’achat'], ...S.products.map(p=>{ const c=S.inv[p.id]; return [p.name,p.sku,p.category,costOf(p.id)||'',p.price,p.stock,c??'',c!==undefined&&c!==''?Number(c)-p.stock:'',costOf(p.id)*Math.max(0,p.stock)]; })])); break;
     case 'reviewOrder': e.stopPropagation(); reviewForm(id); break;
+    case 'rvStart': startReview(id); break;
     case 'rvZoom': { const src = reviewImgSrc(el.dataset.v); if(src) lightbox(src); break; }
     case 'rvFilter': S.rvPhotos = el.dataset.v==='1'; schedule(); break;
     case 'rvMore': S.rvMore = true; schedule(); break;

@@ -995,6 +995,15 @@ app.post('/api/orders', h(async (req, res) => {
   }
   res.json({ id, token: order.token, redirect, order: publicOrder(getDoc('orders', id), id) });
 }));
+/* Retrouver sa commande (numéro + téléphone) pour donner un avis depuis un autre appareil */
+app.post('/api/orders/find', h(async (req, res) => {
+  if (limited('find:' + req.ip, 10, 3600e3)) throw httpErr(429, 'Trop d’essais. Réessayez dans une heure.');
+  const num = String(req.body?.number || '').trim().toUpperCase().slice(0, 30), ph = String(req.body?.phone || '').replace(/\D/g, '').slice(-8);
+  if (!num || ph.length < 8) throw httpErr(400, 'Indiquez le numéro de commande et votre téléphone.');
+  const o = allDocs('orders').find(x => String(x.number || '').toUpperCase() === num && String(x.customer?.phone || '').replace(/\D/g, '').slice(-8) === ph);
+  if (!o) throw httpErr(404, 'Commande introuvable : vérifiez le numéro et le téléphone.');
+  res.json({ id: o.id, token: o.token });
+}));
 app.get('/api/orders/:id', h(async (req, res) => {
   const id = req.params.id; let o = validId(id) && getDoc('orders', id);
   if (!o || !req.query.t || !safeEq(o.token, req.query.t)) throw httpErr(404, 'Commande introuvable.');
@@ -1142,7 +1151,7 @@ app.get('/api/admin/state', requireStaff, (req, res) => {
     reviews: allDocs('reviews').sort((a, b) => b.createdAt - a.createdAt),
     bundles: allDocs('bundles').sort((a, b) => (b.createdAt || 0) - (a.createdAt || 0)),
     promos: allDocs('promos').sort((a, b) => (b.createdAt || 0) - (a.createdAt || 0)),
-    orders: allDocs('orders').sort((a, b) => b.createdAt - a.createdAt).slice(0, 2000).map(o => publicOrder(o, o.id)),
+    orders: allDocs('orders').sort((a, b) => b.createdAt - a.createdAt).slice(0, 2000).map(o => ({ ...publicOrder(o, o.id), token: o.token, driver: o.driver || null })),
     clients: allDocs('clients'), suppliers: allDocs('suppliers'),
     moves: allDocs('fin-moves').sort((a, b) => b.createdAt - a.createdAt), ledger: allDocs('fin-ledger').sort((a, b) => b.createdAt - a.createdAt),
     finConfig: getDoc('fin-config', 'main') || {},

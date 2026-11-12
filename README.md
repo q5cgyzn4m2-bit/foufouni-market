@@ -290,3 +290,10 @@ Sur les photos (cartes de la boutique, fiche produit, page de vente) et sur les 
 
 - À la commande : pays par drapeaux (pays cochés dans Société), ville avec suggestions par pays, quartier avec suggestions pour Bamako et Kati (saisie libre si le quartier n'y est pas), indications ou repère, et bouton « 📍 Partager ma position » (position GPS du téléphone, vérifiée par le serveur).
 - Chaque commande a son lien Google Maps : position exacte si elle a été partagée, sinon recherche de « quartier, ville, pays ». Il apparaît dans la commande (avec « Copier le lien »), dans le message WhatsApp envoyé au livreur, et dans l'espace livreur (« Position exacte » ou « Itinéraire »).
+
+
+## Donner son avis : trois accès
+
+- Bouton « ★ Donner mon avis » sur chaque fiche produit et page de vente : ouvre directement le formulaire si la commande livrée est sur ce téléphone, sinon le client retrouve sa commande avec son numéro et son téléphone (`/api/orders/find`, 10 essais par heure).
+- Gestion › Commandes : « ⭐ Demander un avis » envoie au client, sur WhatsApp, un lien personnel (`/?avis=ID&t=…`) qui ouvre le formulaire sur n'importe quel téléphone.
+- Le message « Votre commande a bien été livrée » (avec la photo du colis) contient aussi ce lien.

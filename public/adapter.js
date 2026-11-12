@@ -306,6 +306,8 @@
   window.readCnProduct = (shots, photos) => api('POST', '/api/admin/ai/cn-product', { shots, photos: photos || [] });
   window.lpView = pid => api('POST', '/api/lp-view', { pid }).catch(() => {});
   window.readInvoice = file => api('POST', '/api/admin/ai/invoice', { file });
+  window.findOrder = (number, phone) => api('POST', '/api/orders/find', { number, phone });
+  window.attachOrder = async (id, t) => { if (!id || !t) return; addMine(id, t); if (!me) await load(); };
   window.orderToken = id => { const m = myOrders().find(x => x.id === id); return m ? m.t : ''; };
   window.lookupBarcode = code => api('GET', '/api/admin/lookup-barcode?code=' + encodeURIComponent(code));
   window.posQrOrder = (items, promo) => api('POST', '/api/admin/pos/qr-order', { items: items.map(l => l.b ? { bundle: l.b, qty: l.qty } : (l.v ? { id: l.id, qty: l.qty, v: l.v } : { id: l.id, qty: l.qty })), promoCode: promo ? promo.code : '' });
