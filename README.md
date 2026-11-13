@@ -314,3 +314,8 @@ Fiche produit › Page de vente › « 📤 Envoyer une vidéo » (MP4, MOV ou W
 - Deux champs vidéo par produit : un lien (TikTok, YouTube…, sans espace utilisé) et un fichier MP4 hébergé (`lpVideoFile`). Le fichier est lu en priorité ; le lien est alors proposé en complément (« Voir aussi sur… »). « Retirer » supprime le fichier hébergé.
 - Page de vente : bouton « Commander sur WhatsApp » à côté de « Commander maintenant » (en haut et en bas de page), et dans la barre fixe sur téléphone. Boutons de commande, de panier et WhatsApp animés (pulsation et reflet, désactivés si l'appareil demande moins d'animations).
 - Logo WhatsApp devant le numéro WhatsApp (pied de page, encadré « À votre écoute »).
+
+
+## Guide client (`/guide`)
+
+Page « Guide d'achat » : 9 étapes pour commander sur le site (sans compte, choix, commande, adresse et position, paiement, confirmation, suivi, réception avec photo, avis) et 6 étapes pour commander sur WhatsApp. Avec `?o=ID&t=JETON`, le guide affiche l'avancement de la commande (reçue, payée, en préparation, en route, livrée), le reçu, l'avis et un bouton WhatsApp. Accès : reçu de commande (« Et maintenant ? Suivez le guide »), choix WhatsApp à la commande, pied de page, Gestion › Commandes › « 📖 Guide client » (réponse WhatsApp type) et « 📖 Envoyer le guide » dans chaque commande. Page lisible par Google et présente dans le plan du site.
