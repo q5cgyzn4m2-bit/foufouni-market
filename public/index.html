@@ -418,6 +418,9 @@ textarea.input{min-height:84px; resize:vertical}
 .track div{text-align:center; font:700 11.5px var(--f-b); color:var(--muted)}
 .track i{display:block; height:6px; border-radius:6px; background:var(--line); margin-bottom:6px}
 .track .on i{background:var(--indigo)}.track .on{color:var(--ink)}.track .cur{color:var(--indigo)}
+.serp{padding:14px 16px; border-radius:14px; background:#fff; color:#202124; font-family:Arial,sans-serif; margin-top:10px}
+.serp .u{font-size:12.5px; color:#4d5156}.serp .t{font-size:19px; color:#1a0dab; margin:3px 0; line-height:1.3}.serp .d{font-size:14px; color:#4d5156; line-height:1.5}
+.cnt{font:700 11px var(--f-b); float:right}.cnt.ok{color:var(--kola)}.cnt.bad{color:var(--danger)}
 .empty{border:2px dashed var(--line); border-radius:var(--r-m); padding:48px 20px; text-align:center; color:var(--muted)}
 .empty h3{color:var(--ink); margin-bottom:8px; font-size:20px}
 
@@ -790,6 +793,7 @@ function render(){
   if((S.view==='product' || S.view==='landing') && S._vc !== S.view+S.pid){ S._vc = S.view+S.pid; const pp = S.products.find(x=>x.id===S.pid); if(pp) ttTrack('ViewContent', {contents:[ttItem(pp)], value:Math.round(pp.price)}); }
   if(S.view!=='product' && S.view!=='landing') S._vc = '';
   if(S.view==='landing') setTimeout(lpAfterRender, 0);
+  ['co-seoTitle','co-seoDesc'].forEach(id=>{ const el = $('#'+id); if(el && el.value) seoCounter(el, id==='co-seoTitle'?60:155, $('#'+id+'-c')); });
   if(S.view==='admin' && S.tab==='company') setTimeout(()=>{ companyPreview(); document.querySelectorAll('[data-co]').forEach(i=>{ if(!i.dataset.on){ i.dataset.on='1'; i.addEventListener('input', companyPreview); } }); }, 0);
   { const rs = $('#recv-scan'); if(rs && !rs.dataset.on){ rs.dataset.on='1'; rs.onkeydown = e=>{ if(e.key==='Enter'){ e.preventDefault(); const v = rs.value.trim(); rs.value=''; if(v) recvScan(v); setTimeout(()=>$('#recv-scan')?.focus(), 30); } }; } }
   if(S.view==='pos' && S.posTab==='vente'){ const sc = $('#pos-scan'); if(sc && !sc.dataset.on){ sc.dataset.on='1'; sc.onkeydown = e=>{ if(e.key==='Enter'){ e.preventDefault(); const v = sc.value.trim(); sc.value=''; if(v) posScan(v); } }; } }
@@ -1705,6 +1709,29 @@ function viewGuide(){
     <div class="lp-final" style="margin-top:20px"><h2 style="font-size:28px;margin:0 0 8px">Une question ?</h2><p class="muted" style="margin:0 0 14px">Nous répondons rapidement, tous les jours${st.hours?' ('+esc(st.hours)+')':''}.</p>
       <div class="cta-wa" style="justify-content:center;max-width:560px;margin:0 auto"><button class="btn primary btn-live" data-a="go" data-v="shop">🛍️ Voir la boutique</button>${shopWa()?`<a class="btn wa" target="_blank" rel="noopener" href="https://wa.me/${shopWa()}">${WA_ICON}Nous écrire sur WhatsApp</a>`:''}</div></div></div>`;
 }
+/* --- Référencement : titre SEO (≤ 60 caractères) et méta-description (≤ 155), générés automatiquement --- */
+const cutWords = (t, n) => { t = String(t||'').replace(/\s+/g,' ').trim(); if(t.length<=n) return t; const c = t.slice(0, n-1); return c.slice(0, Math.max(c.lastIndexOf(' '), n-15)).replace(/[\s,;:–-]+$/,'')+'…'; };
+const plainFmt = n => Math.round(n||0).toLocaleString('fr-FR').replace(/[\u202f\u00a0]/g,' ');
+function autoSeo(p){
+  const st = S.settings, city = st.city || 'Bamako', shop = st.shopName, nm = String(p.name||'').trim(), price = plainFmt(p.price)+' FCFA';
+  const used = p.condition && p.condition!=='neuf' ? ' d’occasion' : '';
+  const titles = [`${nm}${used} à ${price} – ${city} | ${shop}`, `${nm}${used} – ${price} à ${city}`, `${nm}${used} – Livraison ${city}`, `${nm}${used} | ${shop}`, nm];
+  const title = titles.find(t=>t.length<=60) || cutWords(nm, 60);
+  const hl = lines(p.highlights).slice(0,2).map((x,i)=>{ x = x.replace(/[.!]+$/,''); return i ? x.charAt(0).toLowerCase()+x.slice(1) : x; }), promo = p.comparePrice>p.price ? ` au lieu de ${plainFmt(p.comparePrice)} FCFA` : '';
+  const pays = enabledProcs().filter(([k])=>k!=='cod').map(([k])=>PROCESSORS[k].name).slice(0,2), cod = enabledProcs().some(([k])=>k==='cod');
+  const payTxt = [...pays, cod?'à la livraison':''].filter(Boolean).join(', ').replace(/, ([^,]*)$/, ' ou $1');
+  const a = `Achetez ${nm}${used} à ${price}${promo}.`, a2 = `${nm}${used} à ${price}.`, extra = hl.length ? hl : (p.description ? [cutWords(p.description, 70).replace(/…$/,'')] : []);
+  const liv = `Livraison rapide à ${city}${payTxt?', paiement '+payTxt:''}.`, liv2 = `Livraison rapide à ${city}.`;
+  const cands = [[a, extra.join(', ')+'.', liv], [a, (extra[0]||'')+'.', liv], [a2, (extra[0]||'')+'.', liv], [a, liv], [a, (extra[0]||'')+'.', liv2], [a, liv2]].map(c=>c.filter(x=>x && x!=='.').join(' '));
+  let desc = cands.find(c=>c.length<=155) || cutWords(cands[cands.length-1], 155);
+  return {title, desc};
+}
+function autoSeoHome(){ const st = S.settings, city = st.city || 'Bamako', cats = [...new Set(S.products.map(p=>p.category).filter(Boolean))].slice(0,4);
+  const title = [`${st.shopName} – Boutique en ligne à ${city}`, `${st.shopName} – Boutique en ligne`].find(t=>t.length<=60) || cutWords(st.shopName, 60);
+  return {title, desc: cutWords(`Commandez en ligne ${cats.length?cats.join(', ').toLowerCase()+' ':''}chez ${st.shopName} : livraison rapide à ${city} et au Mali, paiement Orange Money, Wave ou à la livraison.`, 155)}; }
+const serpHTML = (url, t, d) => `<div class="serp" aria-label="Aperçu Google"><div class="u">${esc(url)}</div><div class="t">${esc(t||'—')}</div><div class="d">${esc(d||'—')}</div></div>`;
+document.addEventListener('input', e=>{ const t = e.target; if(t && (t.id==='co-seoTitle' || t.id==='co-seoDesc')) seoCounter(t, t.id==='co-seoTitle'?60:155, $('#'+t.id+'-c')); });
+function seoCounter(el, max, cnt){ const n = el.value.length; cnt.textContent = n+' / '+max; cnt.className = 'cnt '+(n>max||n<Math.round(max*.45)?'bad':'ok'); }
 function viewLanding(){
   const p = S.products.find(x=>x.id===S.pid && x.active!==false); if(!p){ S.view='shop'; return viewShop(); }
   const st = S.settings, imgs = galleryFor(p), caps = p.angleCaps||[], save = p.comparePrice>p.price ? p.comparePrice-p.price : 0, rt = productRating(p.id);
@@ -3251,7 +3278,7 @@ function paneProducts(){
   const list = S.products.filter(p=>!q || (p.name+' '+p.sku+' '+p.category).toLowerCase().includes(q));
   return `<div class="toolbar"><h2 style="font-size:24px;flex:1">Produits <span class="muted small">(${S.products.length})</span></h2>
     <label class="sr" for="aq">Rechercher</label><input class="input" id="aq" data-in="aq" value="${esc(S.aq)}" placeholder="Rechercher…">
-    <button class="btn ghost" data-a="cnImport">🌍 Importer un produit</button><button class="btn ghost" data-a="scanImport">📷 Scanner un produit</button><button class="btn ghost" data-a="labelsAll">🏷️ Étiquettes</button>${isServer()?'<button class="btn ghost" data-a="fbCatalog">Catalogue Facebook</button>':''}${dl?'<button class="btn ghost" data-a="exportProducts">Exporter CSV</button>':''}<button class="btn primary" data-a="newProduct">Ajouter un produit</button></div>
+    <button class="btn ghost" data-a="seoAll">🔎 Compléter le SEO</button><button class="btn ghost" data-a="cnImport">🌍 Importer un produit</button><button class="btn ghost" data-a="scanImport">📷 Scanner un produit</button><button class="btn ghost" data-a="labelsAll">🏷️ Étiquettes</button>${isServer()?'<button class="btn ghost" data-a="fbCatalog">Catalogue Facebook</button>':''}${dl?'<button class="btn ghost" data-a="exportProducts">Exporter CSV</button>':''}<button class="btn primary" data-a="newProduct">Ajouter un produit</button></div>
     <div class="panel tbl-wrap">${list.length?`<table><thead><tr><th></th><th>Produit</th><th>Catégorie</th><th>Prix</th><th>Achat</th><th>Marge</th><th>Stock</th><th>En vente</th></tr></thead><tbody>
     ${list.map(p=>`<tr class="click" data-a="editProduct" data-id="${p.id}"><td><div class="li-img" style="width:40px;height:40px;font-size:20px">${pImg(p)}</div></td><td><b>${esc(p.name)}</b><div class="muted small">${esc(p.sku)}</div></td><td>${esc(p.category)}</td><td>${fmt(p.price)}</td><td class="small">${costOf(p.id)?fmt(costOf(p.id)):'<span class="muted">—</span>'}</td><td class="small">${costOf(p.id)?`<span class="${p.price-costOf(p.id)>=0?'amt-in':'amt-out'}">${pct(p.price-costOf(p.id),p.price)} %</span>`:'—'}</td>
     <td><span class="pill ${p.stock<=0?'bad':p.stock<=(p.lowStock||5)?'warn':'ok'}">${p.stock}</span></td><td><span class="pill ${p.active!==false?'ok':''}">${p.active!==false?'Oui':'Masqué'}</span></td></tr>`).join('')}</tbody></table>`
@@ -3366,6 +3393,12 @@ function productForm(p){
           ${p.id?`<button type="button" class="btn ghost sm" data-a="openLanding" data-id="${p.id}" style="margin-top:12px">Voir la page de vente</button>`:''}</div>
         <div class="field"><label for="pf-war">Garantie / retour (facultatif)</label><input class="input" id="pf-war" value="${esc(p.warranty||'')}" placeholder="ex. Garantie 6 mois, échange sous 7 jours"></div>
         <div class="field"><label for="pf-desc">Description courte (sous le nom du produit)</label><textarea class="input" id="pf-desc">${esc(p.description)}</textarea></div>
+        <details class="panel" style="padding:12px 14px;margin:0 0 14px" ${(p.seoTitle||p.seoDesc)&&!p.seoAuto?'':'open'}><summary style="cursor:pointer;font-weight:800">🔎 Référencement Google (SEO)</summary>
+          <p class="muted small" style="margin:8px 0 10px">Ce que Google affiche dans ses résultats. Laissez vide : c’est rempli automatiquement à l’enregistrement.</p>
+          <div class="field"><label for="pf-seot">Titre SEO <span class="cnt" id="pf-seot-c"></span></label><input class="input" id="pf-seot" maxlength="70" value="${p.seoAuto?'':esc(p.seoTitle||'')}" placeholder="automatique"></div>
+          <div class="field"><label for="pf-seod">Méta-description <span class="cnt" id="pf-seod-c"></span></label><textarea class="input" id="pf-seod" maxlength="170" style="min-height:70px" placeholder="automatique">${p.seoAuto?'':esc(p.seoDesc||'')}</textarea></div>
+          <button type="button" class="btn ghost sm" id="pf-seo-gen">✨ Générer${isServer()?' avec l’assistante':' automatiquement'}</button>
+          <div id="pf-serp"></div></details>
         <label class="row" style="align-items:center;gap:10px"><span class="switch" style="flex:0 0 42px"><input type="checkbox" id="pf-active" ${p.active!==false?'checked':''}><span></span></span><span>En vente sur la boutique</span></label>
       </div></div><div class="small" id="pf-err" style="color:var(--danger)"></div></div>
     <div class="m-f">${isNew0?'':`<button class="btn danger" id="pf-del" style="margin-right:auto">Supprimer</button>`}<button class="btn ghost" data-a="closeAll">Annuler</button><button class="btn primary" id="pf-save">${isNew0?'Ajouter le produit':'Enregistrer'}</button></div></div></div>`;
@@ -3450,11 +3483,20 @@ function productForm(p){
   $('#pf-file').onchange = async e=>{ const files=[...e.target.files]; e.target.value='';
     for(const f of files){ if(items.length>=8){ toast('8 photos maximum par produit.'); break; } try{ const d = await compress(f); items.push({kind:'new', src:d, data:d}); drawGal(); }catch(err){} } };
   const asData = src => /^data:/.test(src) ? Promise.resolve(src) : fetch(src).then(r=>r.blob()).then(b=>new Promise(ok=>{ const fr=new FileReader(); fr.onload=()=>ok(fr.result); fr.readAsDataURL(b); }));
+  { const cur = ()=>({...p, name:$('#pf-name').value.trim()||p.name, price:Number($('#pf-price').value.replace(/\s/g,''))||p.price, comparePrice:Number(($('#pf-cmp')||{value:''}).value.replace(/\s/g,''))||0, category:($('#pf-cat')||{}).value||p.category, highlights:($('#pf-hl')||{}).value||p.highlights, description:($('#pf-desc')||{}).value||p.description, condition:($('#pf-cond')||{}).value||p.condition});
+    const drawSerp = ()=>{ if(!$('#pf-seot')) return; const a = autoSeo(cur()); $('#pf-seot').placeholder = a.title; $('#pf-seod').placeholder = a.desc; seoCounter($('#pf-seot'), 60, $('#pf-seot-c')); seoCounter($('#pf-seod'), 155, $('#pf-seod-c'));
+      if(!$('#pf-seot').value){ $('#pf-seot-c').textContent = 'auto · '+a.title.length+' / 60'; $('#pf-seot-c').className = 'cnt ok'; } if(!$('#pf-seod').value){ $('#pf-seod-c').textContent = 'auto · '+a.desc.length+' / 155'; $('#pf-seod-c').className = 'cnt ok'; }
+      $('#pf-serp').innerHTML = serpHTML((isServer()?location.host:'votre-boutique')+' › produit', $('#pf-seot').value||a.title, $('#pf-seod').value||a.desc); };
+    ['#pf-seot','#pf-seod','#pf-name','#pf-price','#pf-desc','#pf-hl'].forEach(sel=>{ const el = $(sel); if(el) el.addEventListener('input', drawSerp); }); drawSerp();
+    if($('#pf-seo-gen')) $('#pf-seo-gen').onclick = async e=>{ e.preventDefault(); const b = e.currentTarget; b.disabled = true; b.textContent = 'Rédaction…'; let r = null;
+      if(window.seoAI && p.id){ try{ r = await window.seoAI(p.id); }catch(err){ r = null; } }
+      if(!r) r = autoSeo(cur()); $('#pf-seot').value = r.title||''; $('#pf-seod').value = r.desc||''; drawSerp(); b.disabled = false; b.textContent = '✨ Générer'+(isServer()?' avec l’assistante':' automatiquement'); }; }
   $('#pf-save').onclick = async ()=>{
     const v = id=>$(id).value.trim();
     const data = {name:v('#pf-name'), category:v('#pf-cat')||'Divers', sku:v('#pf-sku'), barcode:(v('#pf-bc').replace(/\s/g,'')||pCode({id:pid})), price:Number(v('#pf-price').replace(/\s/g,'')), comparePrice:Number(v('#pf-cmp').replace(/\s/g,''))||0,
       stock:Math.max(0,parseInt(v('#pf-stock'))||0), ...(()=>{ readVars(); const opts = readOpts(); const keys = new Set(); return vars.length && opts.length ? {options:opts, variants:vars.filter(x=>!keys.has(x.key) && keys.add(x.key)).map(x=>({key:x.key, vals:x.vals, stock:Math.max(0,Number(x.stock)||0), price:Number(x.price)>0?Number(x.price):'', sku:x.sku||'', barcode:x.barcode||makeEan(pid+'|'+x.key)}))} : {options:[], variants:[]}; })(), lowStock:Math.max(0,parseInt(v('#pf-low'))||0), emoji:v('#pf-emoji')||'📦', description:v('#pf-desc'),
       condition:$('#pf-cond').value, conditionNote:$('#pf-cond').value==='neuf'?'':v('#pf-cnote'),
+      ...(()=>{ if(!$('#pf-seot')) return {}; const a = autoSeo({...p, name:v('#pf-name'), price:Number(v('#pf-price').replace(/\s/g,'')), comparePrice:Number(v('#pf-cmp').replace(/\s/g,''))||0, highlights:v('#pf-hl'), description:v('#pf-desc'), condition:$('#pf-cond').value}); return {seoTitle:v('#pf-seot')||a.title, seoDesc:v('#pf-seod')||a.desc, seoAuto:!v('#pf-seot') && !v('#pf-seod')}; })(),
       lpHook:v('#lp-hook'), lpSub:v('#lp-sub'), lpProblem:$('#lp-pb').value.trim(), lpSolution:$('#lp-so').value.trim(), lpUsages:$('#lp-us').value.trim(), lpFaq:$('#lp-faq').value.trim(), lpOffer:v('#lp-off'), lpUntil:$('#lp-until').value, lpVideo:(pv=>pv&&!pv.short)(parseVideo(v('#lp-vid')))?v('#lp-vid'):'', lpVideoTitle:v('#lp-vidt'),
       highlights:$('#pf-hl').value.trim(), details:$('#pf-details').value.trim(), specs:$('#pf-specs').value.trim(), warranty:v('#pf-war'), active:$('#pf-active').checked,
       bulkMin:Math.max(0,parseInt(v('#pf-bmin'))||0), bulkPrice:Number(v('#pf-bprice').replace(/\s/g,''))||0,
@@ -3677,7 +3719,11 @@ function paneCompany(){
     <label style="display:flex;gap:8px;align-items:center"><input type="checkbox" id="co-showTrust" ${st.showTrust===false?'':'checked'}> Afficher les étoiles et les garanties sur les photos et les affiches</label>
     <label style="display:flex;gap:8px;align-items:center;margin-top:8px"><input type="checkbox" id="co-lpFirst" ${st.lpFirst===false?'':'checked'}> Au clic sur un produit, ouvrir directement sa page de vente (quand elle est remplie)</label></div>
    <div class="panel"><h3>Reçus</h3>${f('receiptNote')}</div>
-   <div class="panel"><h3>Référencement Google</h3><div class="field"><label for="co-googleVerify">Code de vérification Google Search Console</label><input class="input" id="co-googleVerify" data-co="googleVerify" value="${esc(st.googleVerify||'')}" placeholder="le code de la balise « google-site-verification »" style="font-family:monospace"></div>
+   <div class="panel"><h3>Référencement Google</h3>
+    <div class="field"><label for="co-seoTitle">Titre de l’accueil <span class="cnt" id="co-seoTitle-c"></span></label><input class="input" id="co-seoTitle" data-co="seoTitle" maxlength="70" value="${esc(st.seoTitle||'')}" placeholder="${esc(autoSeoHome().title)}"></div>
+    <div class="field"><label for="co-seoDesc">Méta-description de l’accueil <span class="cnt" id="co-seoDesc-c"></span></label><textarea class="input" id="co-seoDesc" data-co="seoDesc" maxlength="170" style="min-height:70px" placeholder="${esc(autoSeoHome().desc)}">${esc(st.seoDesc||'')}</textarea></div>
+    <button class="btn ghost sm" data-a="seoHomeGen" style="margin-bottom:12px">✨ Générer automatiquement</button>
+    <div class="field"><label for="co-googleVerify">Code de vérification Google Search Console</label><input class="input" id="co-googleVerify" data-co="googleVerify" value="${esc(st.googleVerify||'')}" placeholder="le code de la balise « google-site-verification »" style="font-family:monospace"></div>
     <p class="muted small" style="margin:0">Dans Search Console, choisissez « Balise HTML » et copiez seulement le texte entre les guillemets de content="…". Plan du site à déclarer : <b>${esc(isServer()?location.origin:'votre-adresse')}/sitemap.xml</b></p></div>
    <div class="panel"><h3>Suivi publicitaire</h3><div class="field"><label for="co-gtmId">Google Tag Manager</label><input class="input" id="co-gtmId" data-co="gtmId" value="${esc(st.gtmId||'')}" placeholder="ex. GTM-WJVTWPWW" style="font-family:monospace"></div>
     <div class="field"><label for="co-metaPixel">Identifiant du pixel Meta (Facebook, Instagram)</label><input class="input" id="co-metaPixel" data-co="metaPixel" inputmode="numeric" value="${esc(st.metaPixel||'')}" placeholder="ex. 1784224236125858" style="font-family:monospace"></div>
@@ -3934,6 +3980,15 @@ document.addEventListener('click', async e=>{
     case 'guideReceipt': if(S.guideOrder) showReceipt(S.guideOrder); break;
     case 'guideReview': if(S.guideOrder) reviewForm(S.guideOrder.id); break;
     case 'guideLink': { const o = id ? S.orders.find(x=>x.id===id) : null, l = guideLink(o); try{ await navigator.clipboard.writeText(l); toast('Lien du guide copié'); }catch(err){ toast(l); } break; }
+    case 'seoAll': { const todo = S.products.filter(p=>!p.seoTitle || !p.seoDesc || p.seoAuto);
+      if(!todo.length){ toast('Tous les produits ont déjà leur titre et leur description SEO.'); break; }
+      if(!confirm(`Compléter le titre et la méta-description de ${todo.length} produit${todo.length>1?'s':''} ?${window.seoAI?'\nL’assistante rédige chaque texte (moins de 1 FCFA par produit).':''}\nLes textes que vous avez écrits vous-même ne sont pas modifiés.`)) break;
+      el.disabled = true; let n = 0, ai = 0;
+      let noAI = !window.seoAI;
+      for(const p of todo){ let r = null; if(!noAI){ try{ r = await window.seoAI(p.id); ai++; }catch(err){ r = null; noAI = true; } } if(!r) r = autoSeo(p);
+        try{ await patch('products', p.id, {seoTitle:r.title, seoDesc:r.desc, seoAuto:true}); n++; el.textContent = `🔎 ${n} / ${todo.length}…`; }catch(err){} }
+      el.disabled = false; el.textContent = '🔎 Compléter le SEO'; toast(`${n} produit${n>1?'s':''} complété${n>1?'s':''}${ai?' (rédigés par l’assistante)':''} ✓`); break; }
+    case 'seoHomeGen': { const a = autoSeoHome(); $('#co-seoTitle').value = a.title; $('#co-seoDesc').value = a.desc; ['#co-seoTitle','#co-seoDesc'].forEach(x=>$(x).dispatchEvent(new Event('input'))); break; }
     case 'copyPayNum': try{ await navigator.clipboard.writeText(el.dataset.v.replace(/\s/g,'')); toast('Numéro copié'); }catch(err){ toast(el.dataset.v); } break;
     case 'install': window.__instPopup = false; installGuide(); break;
     case 'instNever': try{ localStorage.setItem('ffm-inst-never','1'); }catch(err){} closeAll(); toast('D’accord, nous ne l’afficherons plus. Le guide reste disponible en bas de page.'); break;

@@ -609,6 +609,24 @@ app.get('/media/:file', h(async (req, res) => {
   res.set('Content-Length', size).send(f.data);
 }));
 
+/* Titre SEO et méta-description d'un produit, rédigés par l'assistante */
+app.post('/api/admin/ai/seo', requireStaff, h(async (req, res) => {
+  if (!env.ANTHROPIC_API_KEY) throw httpErr(503, 'Ajoutez la clé ANTHROPIC_API_KEY sur Render pour la rédaction par l’assistante.');
+  if (limited('seo:' + req.user.id, 300, 3600e3)) throw httpErr(429, 'Trop de demandes en une heure.');
+  const pid = String(req.body?.productId || ''), p = validId(pid) && getDoc('products', pid); if (!p) throw httpErr(404, 'Produit introuvable.');
+  const s = settings(), city = s.city || 'Bamako';
+  const system = `Tu rédiges le référencement Google d'une fiche produit pour la boutique en ligne malienne « ${s.shopName} » (${city}, Mali). Français simple, sans majuscules abusives ni emojis.
+Réponds UNIQUEMENT avec un objet JSON sur une ligne : {"title":"…","desc":"…"}
+- title : 45 à 60 caractères, commence par le nom du produit tel que les clients le cherchent, puis un mot-clé utile (prix en FCFA, ${city} ou Mali, ou le nom de la boutique).
+- desc : 130 à 155 caractères, donne envie de cliquer : le bénéfice principal, le prix en FCFA, la livraison à ${city} et le paiement mobile money ou à la livraison.
+N'invente aucune caractéristique, promotion, garantie ou certification absente des données.`;
+  const data = JSON.stringify({ nom: p.name, categorie: p.category, prix_fcfa: p.price, prix_barre: p.comparePrice > p.price ? p.comparePrice : undefined, etat: p.condition && p.condition !== 'neuf' ? p.condition : 'neuf', description: String(p.description || '').slice(0, 400), points_forts: String(p.highlights || '').slice(0, 400), garantie: p.warranty || undefined, accroche: p.lpHook || undefined });
+  const txt = await askClaude(system, [{ role: 'user', content: data }], 400);
+  let o; try { o = parseAIJson(txt); } catch (e) { throw httpErr(502, 'Réponse illisible, réessayez.'); }
+  const cut = (t, n) => { t = String(t || '').replace(/\s+/g, ' ').trim(); return t.length <= n ? t : t.slice(0, n - 1).replace(/\s+\S*$/, '') + '…'; };
+  res.json({ title: cut(o.title, 60), desc: cut(o.desc, 155) });
+}));
+
 /* Lecture et traduction d'une fiche produit chinoise (Pinduoduo, 1688, Taobao…) à partir de captures d'écran */
 app.post('/api/admin/ai/cn-product', express.json({ limit: '24mb' }), requireStaff, h(async (req, res) => {
   if (!env.ANTHROPIC_API_KEY) throw httpErr(503, 'Ajoutez la clé ANTHROPIC_API_KEY sur Render pour lire et traduire les fiches automatiquement.');
@@ -1420,8 +1438,8 @@ function sendPage(req, res) {
   const pg = seoPage(req);
   if (pg.redirect) return res.redirect(301, pg.redirect + (req.originalUrl.includes('?') ? req.originalUrl.slice(req.originalUrl.indexOf('?')) : ''));
   const { s, kind, p, cat } = pg, isLp = kind === 'offer';
-  const title = p ? `${isLp && p.lpHook ? p.lpHook : p.name} — ${plain(p.price)} FCFA | ${s.shopName}` : kind === 'guide' ? `Guide d’achat : comment commander | ${s.shopName}` : kind === 'category' ? `${cat} : achat en ligne à ${s.city || 'Bamako'} | ${s.shopName}` : kind === 'notfound' ? `Page introuvable | ${s.shopName}` : `${s.shopName} — ${s.tagline || 'Boutique en ligne'}`;
-  const desc = (p
+  const title = p && p.seoTitle ? String(p.seoTitle).slice(0, 70) : !p && kind === 'home' && s.seoTitle ? String(s.seoTitle).slice(0, 70) : p ? `${isLp && p.lpHook ? p.lpHook : p.name} — ${plain(p.price)} FCFA | ${s.shopName}` : kind === 'guide' ? `Guide d’achat : comment commander | ${s.shopName}` : kind === 'category' ? `${cat} : achat en ligne à ${s.city || 'Bamako'} | ${s.shopName}` : kind === 'notfound' ? `Page introuvable | ${s.shopName}` : `${s.shopName} — ${s.tagline || 'Boutique en ligne'}`;
+  const desc = (p && p.seoDesc ? String(p.seoDesc) : !p && kind === 'home' && s.seoDesc ? String(s.seoDesc) : p
     ? `${p.condition && p.condition !== 'neuf' ? `Occasion · ${({ comme_neuf: 'Comme neuf', tres_bon: 'Très bon état', bon: 'Bon état', correct: 'État correct', reconditionne: 'Reconditionné' })[p.condition] || 'Occasion'}. ` : ''}${p.comparePrice > p.price ? `Promo : ${plain(p.price)} FCFA au lieu de ${plain(p.comparePrice)} FCFA. ` : `${plain(p.price)} FCFA. `}${p.lpSub || p.description || p.category || ''} Livraison à ${s.city || 'Bamako'}, paiement mobile money ou à la livraison.`
     : kind === 'guide' ? `Comment commander chez ${s.shopName} : choisir, commander sur le site ou WhatsApp, payer par mobile money ou à la livraison, suivre la livraison et donner son avis.`
     : kind === 'category' ? `Achetez ${cat.toLowerCase()} en ligne chez ${s.shopName} : livraison à ${s.city || 'Bamako'} et en Afrique de l’Ouest, paiement Orange Money, Wave ou à la livraison.`

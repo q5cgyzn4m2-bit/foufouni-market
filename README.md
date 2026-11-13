@@ -319,3 +319,12 @@ Fiche produit › Page de vente › « 📤 Envoyer une vidéo » (MP4, MOV ou W
 ## Guide client (`/guide`)
 
 Page « Guide d'achat » : 9 étapes pour commander sur le site (sans compte, choix, commande, adresse et position, paiement, confirmation, suivi, réception avec photo, avis) et 6 étapes pour commander sur WhatsApp. Avec `?o=ID&t=JETON`, le guide affiche l'avancement de la commande (reçue, payée, en préparation, en route, livrée), le reçu, l'avis et un bouton WhatsApp. Accès : reçu de commande (« Et maintenant ? Suivez le guide »), choix WhatsApp à la commande, pied de page, Gestion › Commandes › « 📖 Guide client » (réponse WhatsApp type) et « 📖 Envoyer le guide » dans chaque commande. Page lisible par Google et présente dans le plan du site.
+
+
+## Titres SEO et méta-descriptions
+
+- Fiche produit › « 🔎 Référencement Google (SEO) » : titre SEO (60 caractères) et méta-description (155 caractères), avec compteurs et aperçu du résultat Google. Laissés vides, ils sont générés à l'enregistrement (nom, état, prix, promotion, points forts, livraison, moyens de paiement) et se mettent à jour avec le produit ; écrits à la main, ils sont conservés.
+- « ✨ Générer avec l'assistante » (`/api/admin/ai/seo`, si la clé Anthropic est configurée), sinon modèles gratuits.
+- Gestion › Produits › « 🔎 Compléter le SEO » : tous les produits d'un coup, sans toucher aux textes écrits à la main.
+- Gestion › Société › Référencement Google : titre et méta-description de l'accueil.
+- Le serveur utilise ces textes dans les balises title, description, Open Graph et Twitter de chaque page.
