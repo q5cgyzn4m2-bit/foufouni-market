@@ -136,6 +136,7 @@ function publicSettings() {
   const s = settings();
   const procs = {}; for (const [k, v] of Object.entries(s.processors || {})) procs[k] = { enabled: !!v.enabled, ...(typeof v.showLogo === 'boolean' ? { showLogo: v.showLogo } : {}), ...(/^data:image\/(png|jpeg|webp);base64,/.test(v.logo || '') && v.logo.length < 250000 ? { logo: v.logo } : {}) }; // jamais d'identifiants côté public, seulement le logo
   return { shopName: s.shopName, tagline: s.tagline, intro: s.intro, currency: s.currency, deliveryFee: s.deliveryFee, freeFrom: s.freeFrom, city: s.city, phone: s.phone, processors: procs,
+    carouselOn: s.carouselOn !== false, carouselMode: ['both', 'new', 'sale'].includes(s.carouselMode) ? s.carouselMode : 'both', carouselSpeed: ['lent', 'normal', 'rapide'].includes(s.carouselSpeed) ? s.carouselSpeed : 'normal',
     showTrust: s.showTrust !== false, deliveryPromise: String(s.deliveryPromise || '').slice(0, 40), returnPolicy: String(s.returnPolicy || '').slice(0, 40),
     manualPay: manualPay(), shipCountries: Array.isArray(s.shipCountries) ? s.shipCountries : ['ML'],
     headerSub: s.headerSub || '', legalName: s.legalName || '', legalForm: s.legalForm || '', capital: s.capital || '', rccm: s.rccm || '', nif: s.nif || '', address: s.address || '', country: s.country || '', whatsapp: s.whatsapp || '', phone2: s.phone2 || '', email: s.email || '', hours: s.hours || '', receiptNote: s.receiptNote || '',
@@ -697,7 +698,7 @@ function sold30(id) {
     soldCache = { at: Date.now(), map: m }; }
   return soldCache.map[id] || 0;
 }
-const publicProduct = p => ({ id: p.id, name: p.name, sku: p.sku, category: p.category, price: p.price, comparePrice: p.comparePrice, stock: p.stock, lowStock: p.lowStock, emoji: p.emoji, image: p.image, description: p.description, active: true, createdAt: p.createdAt, bulkMin: p.bulkMin || 0, bulkPrice: p.bulkPrice || 0, newUntil: p.newUntil || 0,
+const publicProduct = p => ({ id: p.id, name: p.name, sku: p.sku, category: p.category, price: p.price, comparePrice: p.comparePrice, stock: p.stock, lowStock: p.lowStock, emoji: p.emoji, image: p.image, description: p.description, active: true, createdAt: p.createdAt, bulkMin: p.bulkMin || 0, bulkPrice: p.bulkPrice || 0, newUntil: p.newUntil || 0, ...(typeof p.carousel === 'boolean' ? { carousel: p.carousel } : {}),
   condition: p.condition || 'neuf', conditionNote: p.conditionNote || '',
   lpHook: p.lpHook || '', lpSub: p.lpSub || '', lpProblem: p.lpProblem || '', lpSolution: p.lpSolution || '', lpUsages: p.lpUsages || '', lpFaq: p.lpFaq || '', lpOffer: p.lpOffer || '', lpUntil: p.lpUntil || '',
   angleCaps: Array.isArray(p.angleCaps) ? p.angleCaps : [], spin: Array.isArray(p.spin) ? p.spin : [],

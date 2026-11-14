@@ -436,6 +436,28 @@ textarea.input{min-height:84px; resize:vertical}
 .serp{padding:14px 16px; border-radius:14px; background:#fff; color:#202124; font-family:Arial,sans-serif; margin-top:10px}
 .serp .u{font-size:12.5px; color:#4d5156}.serp .t{font-size:19px; color:#1a0dab; margin:3px 0; line-height:1.3}.serp .d{font-size:14px; color:#4d5156; line-height:1.5}
 .cnt{font:700 11px var(--f-b); float:right}.cnt.ok{color:var(--kola)}.cnt.bad{color:var(--danger)}
+.car{position:relative; margin:-6px 0 22px; padding:12px 0; overflow:hidden; border-radius:20px; background:linear-gradient(90deg,var(--surface),var(--surface-2),var(--surface)); border:1px solid var(--line)}
+.car-h{display:flex; justify-content:space-between; align-items:center; padding:0 16px 10px}
+.car-h b{font:700 18px var(--f-d)}
+.car-mask{overflow:hidden; -webkit-mask-image:linear-gradient(90deg,transparent,#000 4%,#000 96%,transparent); mask-image:linear-gradient(90deg,transparent,#000 4%,#000 96%,transparent)}
+.car-track{display:flex; gap:12px; width:max-content; padding:0 6px; animation:carscroll var(--car-dur,40s) linear infinite}
+.car:hover .car-track,.car.paused .car-track{animation-play-state:paused}
+@keyframes carscroll{from{transform:translateX(0)}to{transform:translateX(-50%)}}
+.car-c{position:relative; flex:none; width:156px; text-align:left; padding:0; border:1px solid var(--line); border-radius:16px; background:var(--surface); color:var(--ink); overflow:hidden; cursor:pointer; font:inherit; transition:transform .2s}
+.car-c:hover{transform:translateY(-3px)}
+.car-c .im{display:grid; place-items:center; height:130px; background:#fff; font-size:52px}
+.car-c .im img{width:100%; height:100%; object-fit:cover}
+.car-c .tx{padding:8px 10px 10px}
+.car-c .nm{display:block; font:700 13.5px/1.25 var(--f-b); height:34px; overflow:hidden}
+.car-c .pr{font:700 16px var(--f-d); color:var(--indigo)}
+.car-c .st{font-size:11.5px; color:var(--muted); text-decoration:line-through; margin-left:4px}
+.car-bd{position:absolute; top:8px; left:8px; padding:4px 9px; border-radius:999px; font:800 11px var(--f-b); letter-spacing:.04em; box-shadow:0 2px 8px rgba(0,0,0,.3); animation:bdglow 2s ease-in-out infinite}
+.car-bd.new{background:var(--indigo); color:var(--on-indigo)}
+.car-bd.sale{background:#E5484D; color:#fff}
+.car-bd + .car-bd{top:34px}
+@keyframes bdglow{0%,100%{transform:scale(1)}50%{transform:scale(1.08)}}
+@media (prefers-reduced-motion:reduce){ .car-track{animation:none} .car-mask{overflow-x:auto} .car-bd{animation:none} }
+@media (max-width:760px){ .car{margin:0 0 18px; border-radius:16px} .car-c{width:136px} .car-c .im{height:112px} }
 .empty{border:2px dashed var(--line); border-radius:var(--r-m); padding:48px 20px; text-align:center; color:var(--muted)}
 .empty h3{color:var(--ink); margin-bottom:8px; font-size:20px}
 
@@ -976,7 +998,7 @@ function viewShop(){
       <span style="display:block;margin-top:6px"><span class="price" style="font-size:20px">${fmt(p.price)}</span>${p.comparePrice>p.price?` <span class="strike">${fmt(p.comparePrice)}</span>`:''}</span>
       ${rt.n?`<span class="small">${starsHTML(rt.avg)} <span class="muted">(${rt.n})</span></span>`:sd>=3?`<span class="sold">🔥 ${sd} vendus ce mois-ci</span>`:''}
       <span class="see-offer" style="margin-top:8px">${(p.lpVideo||p.lpVideoFile)?'▶ Voir la vidéo et l’offre ›':'✨ Découvrir l’offre ›'}</span></span></button>`; }).join('')}</div>` : '';
-  return `${instBar}${ribbon}${hero}${favBlock}${S.cat==='Tout'&&!S.q?flagsBand():''}${saleBlock}${usedBlock}${S.cat==='Tout'?bundleBlock:''}
+  return `${S.cat==='Tout'&&!S.q?carouselBlock():''}${instBar}${ribbon}${hero}${favBlock}${S.cat==='Tout'&&!S.q?flagsBand():''}${saleBlock}${usedBlock}${S.cat==='Tout'?bundleBlock:''}
     <div class="sec-h" id="catalogue"><h2>${S.q?`Résultats pour « ${esc(S.q)} »`:S.cat==='Tout'?'La collection':esc(S.cat)}</h2><span class="muted small">${S.cat==='Lots'?bundles.length+' lot'+(bundles.length>1?'s':''):list.length+' produit'+(list.length>1?'s':'')}</span></div>
     <div class="cats" role="group" aria-label="Catégories">${cats.map(c=>`<button aria-pressed="${S.cat===c}" data-a="cat" data-v="${esc(c)}">${esc(c)}</button>`).join('')}</div>
     ${S.cat==='Lots'?'':facetBar()}
@@ -2180,6 +2202,24 @@ function bundleCard(b){
 /* --- Panier --- */
 const DAY = 864e5;
 const isNew = p => (p.newUntil||0) > Date.now();
+const isSale = p => Number(p.comparePrice)>Number(p.price) && Number(p.price)>0;
+const salePct = p => isSale(p) ? Math.round((1-p.price/p.comparePrice)*100) : 0;
+function carouselBlock(){
+  const st = S.settings; if(st.carouselOn===false) return '';
+  const mode = st.carouselMode || 'both';
+  const list = shopBase().filter(p=>p.stock>0 && p.carousel!==false && (p.carousel===true || (mode!=='sale' && isNew(p)) || (mode!=='new' && isSale(p))))
+    .sort((a,b)=>(b.carousel===true)-(a.carousel===true) || isNew(b)-isNew(a) || salePct(b)-salePct(a)).slice(0,16);
+  if(list.length<2) return '';
+  const card = p => `<button class="car-c" data-a="product" data-id="${p.id}" aria-label="${esc(p.name)}"><span class="im">${p.image?`<img src="${esc(p.image)}" alt="" loading="lazy">`:esc(p.emoji||'📦')}</span>
+    ${isNew(p)?'<span class="car-bd new">NOUVEAU</span>':!isSale(p)?'<span class="car-bd new">⭐ À LA UNE</span>':''}${isSale(p)?`<span class="car-bd sale">-${salePct(p)} %</span>`:''}
+    <span class="tx"><span class="nm">${esc(p.name)}</span><span class="pr">${fmt(p.price)}</span>${isSale(p)?`<span class="st">${fmt(p.comparePrice)}</span>`:''}</span></button>`;
+  const cards = list.map(card).join(''), dur = Math.max(18, list.length * ({lent:7, normal:4.5, rapide:2.8}[st.carouselSpeed||'normal']));
+  const title = mode==='new' ? '✨ Nouveautés' : mode==='sale' ? '🔥 En solde' : '✨ Nouveautés et soldes';
+  return `<section class="car" aria-label="${title}" style="--car-dur:${dur}s"><div class="car-h"><b>${title}</b><span class="muted small">${list.length} produits</span></div>
+    <div class="car-mask"><div class="car-track">${cards}<span aria-hidden="true" style="display:contents">${cards.replace(/<button /g,'<button tabindex="-1" ')}</span></div></div></section>`;
+}
+document.addEventListener('touchstart', e=>{ const c = e.target.closest && e.target.closest('.car'); if(c) c.classList.add('paused'); }, {passive:true});
+document.addEventListener('touchend', e=>{ const c = e.target.closest && e.target.closest('.car'); if(c) setTimeout(()=>c.classList.remove('paused'), 1500); }, {passive:true});
 const onSale = p => p.comparePrice > p.price;
 const unitPrice = (p,qty) => (p.bulkMin>1 && p.bulkPrice>0 && qty>=p.bulkMin) ? p.bulkPrice : p.price;
 const lineKey = l => l.b ? 'b:'+l.b : l.id + (l.v ? '|'+l.v : '');
@@ -3408,7 +3448,11 @@ function productForm(p){
         <div class="field"><label for="pf-low">Alerte stock bas à</label><input class="input" id="pf-low" inputmode="numeric" value="${esc(p.lowStock??5)}"></div></div>
         <div class="row"><div class="field"><label for="pf-bmin">Prix de gros dès (unités)</label><input class="input" id="pf-bmin" inputmode="numeric" value="${esc(p.bulkMin||'')}" placeholder="ex. 10"></div>
         <div class="field"><label for="pf-bprice">Prix de gros à l’unité</label><input class="input" id="pf-bprice" inputmode="numeric" value="${esc(p.bulkPrice||'')}"></div></div>
-        <label class="row" style="align-items:center;gap:10px;margin-bottom:14px"><span class="switch" style="flex:0 0 42px"><input type="checkbox" id="pf-new" ${isNewP||isNew(p)?'checked':''}><span></span></span><span>Banderole « Nouveau » pendant 30 jours</span></label>
+        <div class="panel" style="padding:12px 14px;margin:0 0 14px"><b>✨ Badge « Nouveau » et carrousel de l’accueil</b>
+          <div class="row" style="align-items:center;gap:10px;margin-top:10px"><span class="switch" style="flex:0 0 42px"><input type="checkbox" id="pf-new" ${isNewP||isNew(p)?'checked':''}><span></span></span><span style="flex:1">Badge « Nouveau »${isNew(p)?` <span class="muted small">(jusqu’au ${new Date(p.newUntil).toLocaleDateString('fr-FR')})</span>`:''}</span>
+            <select class="input" id="pf-newdays" style="flex:0 1 170px"><option value="keep">${isNew(p)?'Garder la date':'—'}</option>${[[7,'7 jours'],[15,'15 jours'],[30,'30 jours'],[60,'60 jours'],[90,'90 jours'],[3650,'Sans limite']].map(([d,l])=>`<option value="${d}" ${!isNew(p)&&d===30?'selected':''}>${l}</option>`).join('')}</select></div>
+          <div class="field" style="margin:10px 0 0"><label for="pf-car">Carrousel de l’accueil</label><select class="input" id="pf-car"><option value="auto" ${p.carousel===undefined?'selected':''}>Automatique (s’il est nouveau ou en solde)</option><option value="on" ${p.carousel===true?'selected':''}>Toujours l’afficher (mis en avant)</option><option value="off" ${p.carousel===false?'selected':''}>Ne jamais l’afficher</option></select></div>
+          <p class="muted small" style="margin:6px 0 0">Un produit est « en solde » quand son prix barré est supérieur à son prix : le badge -X % s’affiche tout seul.</p></div>
         <div class="field"><label for="pf-aff">Commission ambassadeur (%)</label><input class="input" id="pf-aff" inputmode="decimal" value="${esc(p.affPct??'')}" placeholder="${esc(S.settings.affDefaultPct)} % par défaut"></div>
         <div class="field"><label for="pf-hl">Points forts (un par ligne)</label><textarea class="input" id="pf-hl" placeholder="Écran LED lisible de loin&#10;Fonctionne sur piles, sans fil&#10;Garantie 6 mois">${esc(p.highlights||'')}</textarea></div>
         <div class="field"><label for="pf-details">Description détaillée (paragraphes séparés par une ligne vide)</label><textarea class="input" id="pf-details" style="min-height:110px">${esc(p.details||'')}</textarea></div>
@@ -3539,7 +3583,8 @@ function productForm(p){
       lpHook:v('#lp-hook'), lpSub:v('#lp-sub'), lpProblem:$('#lp-pb').value.trim(), lpSolution:$('#lp-so').value.trim(), lpUsages:$('#lp-us').value.trim(), lpFaq:$('#lp-faq').value.trim(), lpOffer:v('#lp-off'), lpUntil:$('#lp-until').value, lpVideo:(pv=>pv&&!pv.short)(parseVideo(v('#lp-vid')))?v('#lp-vid'):'', lpVideoTitle:v('#lp-vidt'),
       highlights:$('#pf-hl').value.trim(), details:$('#pf-details').value.trim(), specs:$('#pf-specs').value.trim(), warranty:v('#pf-war'), active:$('#pf-active').checked,
       bulkMin:Math.max(0,parseInt(v('#pf-bmin'))||0), bulkPrice:Number(v('#pf-bprice').replace(/\s/g,''))||0,
-      newUntil:$('#pf-new').checked?(isNew(p)?p.newUntil:Date.now()+30*DAY):0,
+      newUntil:(()=>{ if(!$('#pf-new').checked) return 0; const d = $('#pf-newdays').value; if(d==='keep') return isNew(p) ? p.newUntil : Date.now()+30*DAY; return Date.now()+Number(d)*DAY; })(),
+      carousel:({on:true, off:false})[$('#pf-car').value],
       affPct:v('#pf-aff')===''?'':Math.min(100,Math.max(0,Number(v('#pf-aff').replace(',','.'))||0)),
       createdAt:p.createdAt||Date.now(), updatedAt:Date.now()};
     if(!data.name || !(data.price>0)){ $('#pf-err').textContent='Le nom et un prix supérieur à zéro sont obligatoires.'; return; }
@@ -3756,6 +3801,11 @@ function paneCompany(){
     <div class="row"><div class="field"><label for="co-deliveryPromise">Délai de livraison</label><input class="input" id="co-deliveryPromise" data-co="deliveryPromise" value="${esc(st.deliveryPromise||'')}" placeholder="ex. Livré en 24 h à Bamako"></div>
     <div class="field"><label for="co-returnPolicy">Échange ou retour</label><input class="input" id="co-returnPolicy" data-co="returnPolicy" value="${esc(st.returnPolicy||'')}" placeholder="ex. Échange sous 7 jours"></div></div>
     <label style="display:flex;gap:8px;align-items:center"><input type="checkbox" id="co-showTrust" ${st.showTrust===false?'':'checked'}> Afficher les étoiles et les garanties sur les photos et les affiches</label>
+    <div style="margin-top:14px;padding-top:12px;border-top:1px solid var(--line)"><b>Carrousel de l’accueil</b>
+      <label style="display:flex;gap:8px;align-items:center;margin-top:8px"><input type="checkbox" id="co-carOn" ${st.carouselOn===false?'':'checked'}> Afficher le carrousel animé sous l’en-tête</label>
+      <div class="row" style="margin-top:8px"><div class="field"><label for="co-carMode">Contenu</label><select class="input" id="co-carMode">${[['both','Nouveautés et soldes'],['new','Nouveautés seulement'],['sale','Soldes seulement']].map(([v,l])=>`<option value="${v}" ${(st.carouselMode||'both')===v?'selected':''}>${l}</option>`).join('')}</select></div>
+      <div class="field"><label for="co-carSpeed">Vitesse</label><select class="input" id="co-carSpeed">${[['lent','Lente'],['normal','Normale'],['rapide','Rapide']].map(([v,l])=>`<option value="${v}" ${(st.carouselSpeed||'normal')===v?'selected':''}>${l}</option>`).join('')}</select></div></div>
+      <p class="muted small" style="margin:0">Le badge « Nouveau » et la mise en avant se règlent dans la fiche de chaque produit. Il faut au moins 2 produits pour que le carrousel s’affiche.</p></div>
     <label style="display:flex;gap:8px;align-items:center;margin-top:8px"><input type="checkbox" id="co-lpFirst" ${st.lpFirst===false?'':'checked'}> Au clic sur un produit, ouvrir directement sa page de vente (quand elle est remplie)</label></div>
    <div class="panel"><h3>Reçus</h3>${f('receiptNote')}</div>
    <div class="panel"><h3>Référencement Google</h3>
@@ -3782,6 +3832,7 @@ async function saveCompany(){
   const s2 = structuredClone(S.settings); document.querySelectorAll('[data-co]').forEach(i=>s2[i.dataset.co]=i.value.trim());
   const ship = [...document.querySelectorAll('[data-ship]')].filter(i=>i.checked).map(i=>i.dataset.ship); if(document.querySelector('[data-ship]')) s2.shipCountries = ship.length ? ship : ['ML'];
   if(!s2.shopName) return toast('Le nom commercial est obligatoire.'); if(document.querySelector('[data-co="whatsapp"]') && !s2.whatsapp && !s2.phone) toast('Astuce : renseignez votre WhatsApp pour activer « Commander sur WhatsApp ».');
+  if($('#co-carOn')){ s2.carouselOn = $('#co-carOn').checked; s2.carouselMode = $('#co-carMode').value; s2.carouselSpeed = $('#co-carSpeed').value; }
   if($('#co-showTrust')) s2.showTrust = $('#co-showTrust').checked; if($('#co-lpFirst')) s2.lpFirst = $('#co-lpFirst').checked; s2.deliveryPromise = String(s2.deliveryPromise||'').slice(0,40); s2.returnPolicy = String(s2.returnPolicy||'').slice(0,40);
   s2.metaPixel = String(s2.metaPixel||'').replace(/\s/g,''); if(s2.metaPixel && !/^\d{10,20}$/.test(s2.metaPixel)) return toast('Identifiant de pixel Meta invalide (uniquement des chiffres).');
   s2.googleVerify = String(s2.googleVerify||'').trim().replace(/^.*content=["']?([A-Za-z0-9_-]+).*$/,'$1'); if(s2.googleVerify && !/^[A-Za-z0-9_-]{20,80}$/.test(s2.googleVerify)) return toast('Code de vérification Google invalide.');
