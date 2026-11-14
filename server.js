@@ -225,7 +225,7 @@ async function vapidKeys() {
   if (!k) { k = await WP.generateVapidKeys(); putDoc('push-config', 'vapid', k); await store.flush(); }
   return (VAPID = k);
 }
-const PUSH_SUBJECT = 'mailto:' + (env.ADMIN_EMAIL || 'contact@foufouni.ml');
+const PUSH_SUBJECT = 'mailto:' + (env.ADMIN_EMAIL || 'contact@foufouni-market.com');
 async function pushTo(subs, msg) {
   const v = await vapidKeys(); let sent = 0, failed = 0;
   for (let i = 0; i < subs.length; i += 20) {
