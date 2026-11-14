@@ -59,7 +59,22 @@ h1,h2,h3{font-family:var(--f-d); font-weight:600; line-height:1.1; margin:0; let
 .brand b{font:700 25px/1 var(--f-d); letter-spacing:.01em}
 .brand small{display:block; font-size:11.5px; color:var(--muted); margin-top:3px}
 .search{flex:1; max-width:460px; position:relative}
-.search input{width:100%; padding:10px 14px 10px 38px; border-radius:999px; border:1px solid var(--line); background:var(--surface)}
+.search .mic{position:absolute; right:5px; top:50%; transform:translateY(-50%); width:34px; height:34px; border-radius:50%; border:0; background:transparent; color:var(--indigo); display:grid; place-items:center; cursor:pointer}
+.search .mic svg{position:static; transform:none; color:inherit}
+.search .mic.on{background:var(--danger); color:#fff; animation:micpulse 1.2s infinite}
+@keyframes micpulse{0%{box-shadow:0 0 0 0 rgba(220,60,60,.6)}70%{box-shadow:0 0 0 10px rgba(220,60,60,0)}100%{box-shadow:0 0 0 0 rgba(220,60,60,0)}}
+.cat-btn{display:inline-flex; align-items:center; gap:6px; flex:none; padding:9px 14px; border-radius:999px; border:1px solid var(--line); background:var(--surface); color:var(--ink); font:700 13.5px var(--f-b); cursor:pointer}
+.cat-drawer .scrim{align-items:flex-end}
+.cat-panel{width:100%; max-width:560px; max-height:82vh; overflow:auto; background:var(--surface); border-radius:22px 22px 0 0; padding:10px 16px 24px; animation:catup .25s ease-out}
+@media (min-width:761px){ .cat-drawer .scrim{align-items:stretch; justify-content:flex-start} .cat-panel{max-width:360px; max-height:none; height:100%; border-radius:0 22px 22px 0; animation:catleft .25s ease-out} }
+@keyframes catup{from{transform:translateY(100%)}to{transform:none}} @keyframes catleft{from{transform:translateX(-100%)}to{transform:none}}
+.cat-list{display:grid; grid-template-columns:repeat(2,1fr); gap:10px; margin-top:12px}
+.cat-list button{display:flex; flex-direction:column; align-items:flex-start; gap:4px; padding:14px; border-radius:16px; border:2px solid var(--line); background:var(--surface-2); color:var(--ink); font:700 14.5px var(--f-b); text-align:left; cursor:pointer}
+.cat-list button[aria-pressed="true"]{border-color:var(--indigo); background:var(--indigo-soft)}
+@media (max-width:760px){ .cat-btn{display:none} }
+.cat-list i{font-style:normal; font-size:26px}.cat-list small{color:var(--muted); font-weight:600}
+@media (prefers-reduced-motion:reduce){ .cat-panel,.search .mic.on{animation:none} }
+.search input{width:100%; padding:10px 42px 10px 38px; border-radius:999px; border:1px solid var(--line); background:var(--surface)}
 .search svg{position:absolute; left:13px; top:50%; transform:translateY(-50%); color:var(--muted)}
 .modes{display:flex; gap:4px; background:var(--surface-2); padding:4px; border-radius:999px}
 .modes button{border:0; background:none; padding:7px 14px; border-radius:999px; font-weight:600; font-size:14px; color:var(--muted)}
@@ -829,18 +844,42 @@ function renderTop(){
     : [['shop','Boutique'],['orders','Mes commandes']];
   $('#topbar').innerHTML = `
     <button class="brand" data-a="go" data-v="shop" aria-label="Accueil boutique"><span class="mark" aria-hidden="true"></span><span><b>${esc(S.settings.shopName)}</b><small>${S.live||isServer()?esc(S.settings.headerSub||'Boutique en ligne')+(S.settings.phone?' · '+esc(S.settings.phone):''):'Mode démo · données sur cet appareil'}</small></span></button>
-    <div class="search">${svgSearch}<label class="sr" for="q">Rechercher un produit</label><input id="q" type="search" placeholder="Rechercher un produit, une catégorie…" value="${esc(S.q)}" data-in="q"></div>
+    <div class="search">${svgSearch}<label class="sr" for="q">Rechercher un produit</label><input id="q" type="search" placeholder="Rechercher un produit, une catégorie…" value="${esc(S.q)}" data-in="q">${voiceOK()?`<button class="mic" data-a="voiceSearch" aria-label="Recherche vocale" title="Recherche vocale"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" aria-hidden="true"><rect x="9" y="3" width="6" height="11" rx="3"/><path d="M5 11a7 7 0 0 0 14 0M12 18v3"/></svg></button>`:''}</div><button class="cat-btn" data-a="catDrawer" aria-label="Choisir une catégorie">☰ <span class="cb-l">Catégories</span></button>
     <div class="spacer"></div>
     <div class="modes" role="group" aria-label="Espace">${modes.map(([v,l])=>`<button aria-pressed="${S.view===v}" data-a="go" data-v="${v}">${l}</button>`).join('')}</div>
     ${S.myName?`<span class="who">${esc(S.myName)}</span>`:''}
     ${S.isAdmin?(()=>{ const n=reminders().late.length; return `<button class="icon-btn" data-a="reminders" aria-label="Rappels de créances${n?`, ${n} en retard`:''}">${svgBell}${n?`<span class="badge-n" style="background:var(--danger);color:#fff">${n}</span>`:''}</button>`; })():''}
     <button class="icon-btn" data-a="cart" aria-label="Panier, ${cartCount()} article(s)">${svgBag}${cartCount()?`<span class="badge-n">${cartCount()}</span>`:''}</button>`;
 }
+/* --- Volet des catégories et recherche vocale --- */
+const CAT_EMO = [[/électr|electr|téléph|phone|informat|audio/i,'📱'],[/solaire|énergie|energie|lampe/i,'☀️'],[/quincaill|outil|bricol|bâtiment|batiment/i,'🔧'],[/beaut|cosm|soin|parfum/i,'💄'],[/mode|vêtement|vetement|wax|bazin|chauss|sac|bijou/i,'👗'],[/épicerie|epicerie|aliment|riz|huile|boisson/i,'🛒'],[/maison|cuisine|déco|deco/i,'🏠'],[/bébé|bebe|enfant|jouet/i,'🧸'],[/sport/i,'⚽'],[/auto|moto/i,'🏍️'],[/bureau|école|ecole/i,'📚'],[/santé|sante/i,'🩺'],[/lot/i,'🎁'],[/occasion/i,'♻️']];
+const catEmo = c => (CAT_EMO.find(([re])=>re.test(c))||[0,'🏷️'])[1];
+function catDrawer(){
+  const live = shopBase(), cats = [...new Set(live.map(p=>p.category).filter(Boolean))].sort((a,b)=>a.localeCompare(b,'fr'));
+  const n = c => live.filter(p=>p.category===c).length;
+  $('#overlay').innerHTML = `<div class="cat-drawer"><div class="scrim" data-a="closeAll"><div class="cat-panel" role="dialog" aria-modal="true" aria-label="Catégories">
+    <div class="m-h" style="padding:6px 0"><h2>🗂️ Catégories</h2><button class="x" data-a="closeAll" aria-label="Fermer">×</button></div>
+    <div class="cat-list"><button data-a="catPick" data-v="Tout" aria-pressed="${S.cat==='Tout'}"><i>✨</i>Tout voir<small>${live.length} article${live.length>1?'s':''}</small></button>
+    ${cats.map(c=>`<button data-a="catPick" data-v="${esc(c)}" aria-pressed="${S.cat===c}"><i>${catEmo(c)}</i>${esc(c)}<small>${n(c)} article${n(c)>1?'s':''}</small></button>`).join('')}</div></div></div></div>`;
+}
+const voiceOK = () => !!(window.SpeechRecognition || window.webkitSpeechRecognition);
+let voiceRec = null;
+function voiceSearch(btn){
+  const SR = window.SpeechRecognition || window.webkitSpeechRecognition; if(!SR) return toast('La recherche vocale n’est pas disponible sur ce navigateur.');
+  if(voiceRec){ try{ voiceRec.stop(); }catch(e){} return; }
+  const r = new SR(); voiceRec = r; r.lang = 'fr-FR'; r.interimResults = true; r.maxAlternatives = 1;
+  const inp = $('#q'); btn.classList.add('on'); toast('🎤 Parlez maintenant… (ex. « montre connectée »)');
+  r.onresult = ev=>{ const t = [...ev.results].map(x=>x[0].transcript).join(' ').trim(); if(inp) inp.value = t;
+    if(ev.results[ev.results.length-1].isFinal){ S.q = t.replace(/[.?!]+$/,''); S.view = 'shop'; S.cat = 'Tout'; schedule(); setTimeout(()=>$('#catalogue')?.scrollIntoView({behavior:'smooth'}), 120); } };
+  r.onerror = ev=>{ toast(ev.error==='not-allowed' || ev.error==='service-not-allowed' ? 'Autorisez le micro dans votre navigateur pour la recherche vocale.' : ev.error==='no-speech' ? 'Je n’ai rien entendu : réessayez en parlant près du téléphone.' : 'Recherche vocale interrompue, réessayez.'); };
+  r.onend = ()=>{ voiceRec = null; document.querySelectorAll('.mic.on').forEach(b=>b.classList.remove('on')); };
+  try{ r.start(); }catch(e){ voiceRec = null; btn.classList.remove('on'); }
+}
 function renderBnav(){
   const items = S.isAdmin
     ? [['shop','🏪','Boutique'],['pos','🧾','Caisse'],['admin','📊','Gestion'],['cart','🛍️','Panier']]
-    : [['shop','🏪','Boutique'],['orders','📦','Commandes'],['cart','🛍️','Panier']];
-  $('#bnav').innerHTML = items.map(([v,i,l])=> v==='cart'
+    : [['shop','🏪','Boutique'],['cats','🗂️','Catégories'],['orders','📦','Commandes'],['cart','🛍️','Panier']];
+  $('#bnav').innerHTML = items.map(([v,i,l])=> v==='cats' ? `<button data-a="catDrawer"><span aria-hidden="true">${i}</span>${l}</button>` : v==='cart'
     ? `<button data-a="cart"><span aria-hidden="true">${i}</span>${l}${cartCount()?`<span class="badge-n">${cartCount()}</span>`:''}</button>`
     : `<button data-a="go" data-v="${v}" aria-pressed="${S.view===v}"><span aria-hidden="true">${i}</span>${l}</button>`).join('');
 }
@@ -3989,6 +4028,9 @@ document.addEventListener('click', async e=>{
         try{ await patch('products', p.id, {seoTitle:r.title, seoDesc:r.desc, seoAuto:true}); n++; el.textContent = `🔎 ${n} / ${todo.length}…`; }catch(err){} }
       el.disabled = false; el.textContent = '🔎 Compléter le SEO'; toast(`${n} produit${n>1?'s':''} complété${n>1?'s':''}${ai?' (rédigés par l’assistante)':''} ✓`); break; }
     case 'seoHomeGen': { const a = autoSeoHome(); $('#co-seoTitle').value = a.title; $('#co-seoDesc').value = a.desc; ['#co-seoTitle','#co-seoDesc'].forEach(x=>$(x).dispatchEvent(new Event('input'))); break; }
+    case 'catDrawer': catDrawer(); break;
+    case 'catPick': { closeAll(); S.facets={}; S.grades=[]; S.cat = el.dataset.v; S.q=''; S.view='shop'; try{ history.pushState({},'', S.cat==='Tout' ? homePath() : catPathC(S.cat)); }catch(err){} schedule(); setTimeout(()=>$('#catalogue')?.scrollIntoView({behavior:'smooth'}), 120); break; }
+    case 'voiceSearch': voiceSearch(el); break;
     case 'copyPayNum': try{ await navigator.clipboard.writeText(el.dataset.v.replace(/\s/g,'')); toast('Numéro copié'); }catch(err){ toast(el.dataset.v); } break;
     case 'install': window.__instPopup = false; installGuide(); break;
     case 'instNever': try{ localStorage.setItem('ffm-inst-never','1'); }catch(err){} closeAll(); toast('D’accord, nous ne l’afficherons plus. Le guide reste disponible en bas de page.'); break;
