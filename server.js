@@ -11,6 +11,10 @@ const env = process.env;
 const PORT = Number(env.PORT || 3000);
 const BASE_URL = (env.BASE_URL || env.RENDER_EXTERNAL_URL || `http://localhost:${PORT}`).replace(/\/$/, '');
 const BASE_ORIGIN = new URL(BASE_URL).origin;
+/* Adresses autorisées : le domaine, sa version avec ou sans www, l'adresse Render, et ALLOWED_ORIGINS (séparées par des virgules) */
+const ALLOWED_ORIGINS = new Set([BASE_ORIGIN]);
+{ const u = new URL(BASE_ORIGIN), h = u.hostname; if (!/^(localhost|[\d.]+)$/.test(h)) ALLOWED_ORIGINS.add(`${u.protocol}//${h.startsWith('www.') ? h.slice(4) : 'www.' + h}${u.port ? ':' + u.port : ''}`);
+  for (const x of [env.RENDER_EXTERNAL_URL, ...String(env.ALLOWED_ORIGINS || '').split(',')]) { try { if (x && x.trim()) ALLOWED_ORIGINS.add(new URL(x.trim()).origin); } catch (e) {} } }
 const SECURE = BASE_URL.startsWith('https://');
 if (!env.SESSION_SECRET || env.SESSION_SECRET.length < 32) {
   console.error('SESSION_SECRET manquant ou trop court (32 caractères minimum).');
@@ -686,7 +690,7 @@ app.use(express.json({ limit: '3mb' }));
 app.use('/api', (req, res, next) => {
   if (req.method === 'GET') return next();
   const origin = req.headers.origin;
-  if (origin && origin !== BASE_ORIGIN) return res.status(403).json({ error: 'Origine refusée.' });
+  if (origin && !ALLOWED_ORIGINS.has(origin)) return res.status(403).json({ error: 'Origine refusée.' });
   next();
 });
 
