@@ -601,6 +601,24 @@ app.post('/api/admin/video', requireStaff, express.raw({ type: ['video/*', 'appl
   await store.files.save(id, mime, buf);
   res.json({ id, url: `/media/${id}.${VIDEO_TYPES[mime]}`, size: buf.length });
 }));
+/* Import d’une vidéo depuis l’adresse directe de son fichier (.mp4…) : copiée sur la boutique pour ne plus dépendre du site d’origine */
+app.post('/api/admin/video-import', express.json({ limit: '10kb' }), requireStaff, h(async (req, res) => {
+  if (limited('vimp:' + req.user.id, 20, 3600e3)) throw httpErr(429, 'Trop d’imports en une heure.');
+  let u; try { u = new URL(String(req.body?.url || '').trim()); } catch (e) { throw httpErr(400, 'Collez l’adresse complète du fichier vidéo.'); }
+  if (u.protocol !== 'https:') throw httpErr(400, 'L’adresse doit commencer par https://.');
+  if (/\.m3u8(\?|$)/i.test(u.pathname + u.search)) throw httpErr(400, 'Ce lien est un flux vidéo découpé (.m3u8) : il se lit dans la page mais ne peut pas être importé. Téléchargez la vidéo puis utilisez « Envoyer une vidéo ».');
+  let r; try { r = await safeFetch(u.href, 0, 30000); } catch (e) { if (e.status) throw e; throw httpErr(422, 'Le site de la vidéo ne répond pas.'); }
+  if (!r.ok) throw httpErr(422, `Le site refuse le téléchargement (code ${r.status}) : le lien a peut-être expiré. Téléchargez la vidéo puis utilisez « Envoyer une vidéo ».`);
+  const len = Number(r.headers.get('content-length') || 0); if (len > 30 * 1024 * 1024) throw httpErr(413, 'Vidéo trop lourde (30 Mo max.).');
+  let mime = String(r.headers.get('content-type') || '').split(';')[0].trim().toLowerCase();
+  if (!VIDEO_TYPES[mime]) { const ext = (/\.(mp4|mov|webm)(\?|$)/i.exec(u.pathname) || [])[1]; mime = ext ? { mp4: 'video/mp4', mov: 'video/quicktime', webm: 'video/webm' }[ext.toLowerCase()] : ''; }
+  if (!mime) throw httpErr(400, 'Ce lien n’est pas un fichier vidéo (MP4, MOV ou WebM).');
+  const buf = await readLimited(r, 30 * 1024 * 1024 + 1); if (buf.length > 30 * 1024 * 1024) throw httpErr(413, 'Vidéo trop lourde (30 Mo max.).'); if (buf.length < 1000) throw httpErr(422, 'Fichier vidéo vide ou illisible.');
+  const used = await store.files.usage(); if (used.bytes + buf.length > 350 * 1024 * 1024) throw httpErr(413, 'Espace vidéo plein (350 Mo) : supprimez d’anciennes vidéos ou utilisez un lien YouTube.');
+  const id = 'v' + Date.now().toString(36) + rnd(6).toLowerCase();
+  await store.files.save(id, mime, buf);
+  res.json({ id, url: `/media/${id}.${VIDEO_TYPES[mime]}`, size: buf.length });
+}));
 app.delete('/api/admin/video/:id', requireStaff, h(async (req, res) => {
   const id = String(req.params.id || '').replace(/\.\w+$/, ''); if (!/^v[a-z0-9]{6,30}$/.test(id)) throw httpErr(400, 'Vidéo invalide.');
   await store.files.del(id); res.json({ ok: true });

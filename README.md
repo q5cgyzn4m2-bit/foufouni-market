@@ -346,3 +346,10 @@ Page « Guide d'achat » : 9 étapes pour commander sur le site (sans compte, ch
 - `/go/:id` : redirection vers le lien affilié, avec comptage des clics (un par visiteur et par produit toutes les 10 minutes, robots exclus) dans `aff-clicks`. Tableau de bord › « Liens partenaires · 30 derniers jours ».
 - Exclus du panier, des commandes (refus côté serveur), de la caisse, du stock, du catalogue Facebook et du plan du site ; fiches en `noindex`, sans données « Product ».
 - Dans les articles Conseils : `[[produit:ID]]` d'un produit partenaire affiche son bouton, et les liens vers Amazon, AliExpress, Temu et Jumia sont marqués sponsorisés.
+
+
+## Vidéos d'Amazon, AliExpress, Temu, Shein…
+
+- Les pages produit de ces sites ne peuvent pas être affichées ailleurs (ils l'interdisent) : un lien de page est reconnu et un message explique quoi faire.
+- Le lien direct du fichier vidéo (.mp4, .webm, .mov) est reconnu et lu dans la page, avec le nom du site d'origine ; les flux .m3u8 (Amazon) sont lus nativement sur iPhone et avec hls.js 1.5.20 (jsDelivr) ailleurs.
+- « ⬇️ Importer cette vidéo sur la boutique » (`/api/admin/video-import`) copie le fichier (https, 30 Mo max.) dans l'espace vidéo de la boutique, pour ne plus dépendre d'un lien qui expire.

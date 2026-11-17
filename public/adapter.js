@@ -307,6 +307,7 @@
   window.lpView = pid => api('POST', '/api/lp-view', { pid }).catch(() => {});
   window.readInvoice = file => api('POST', '/api/admin/ai/invoice', { file });
   window.markWaCart = () => { clearTimeout(syncT); api('POST', `/api/carts/${encodeURIComponent(cartId)}/whatsapp`, {}).catch(() => {}); };
+  window.importVideo = url => api('POST', '/api/admin/video-import', { url });
   window.deleteVideo = file => api('DELETE', '/api/admin/video/' + encodeURIComponent(file)).catch(() => {});
   window.seoAI = pid => api('POST', '/api/admin/ai/seo', { productId: pid });
   window.articleAI = body => api('POST', '/api/admin/ai/article', body);
