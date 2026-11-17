@@ -3784,7 +3784,7 @@ const CO_FIELDS = [
   ['legalName','Raison sociale','ex. FOUFOUNI MARKET SARL'],['legalForm','Forme juridique','ex. SARL, SUARL, SA, Entreprise individuelle, GIE'],['capital','Capital social','ex. 1 000 000 FCFA'],
   ['rccm','N° RCCM','ex. MA.BKO.2026.B.1234'],['nif','NIF','ex. 084123456X'],
   ['address','Adresse','ex. Rue 312, Hamdallaye ACI 2000'],['city','Ville','Bamako'],['country','Pays','Mali'],
-  ['phone','Téléphone principal','ex. +223 70 00 00 00'],['phone2','Second téléphone',''],['whatsapp','WhatsApp','ex. +223 70 00 00 00'],['email','E-mail','ex. contact@foufouni-market.com'],
+  ['phone','Téléphone principal','ex. +223 70 00 00 00'],['phone2','Second téléphone',''],['whatsapp','WhatsApp','ex. +223 70 00 00 00'],['email','E-mail','ex. contact@foufouni.ml'],
   ['hours','Horaires','ex. Lun – sam, 8 h – 19 h'],['receiptNote','Message en bas des reçus','ex. Merci pour votre confiance !']];
 function paneCompany(){
   const st = S.settings, f = k => `<div class="field"><label for="co-${k}">${esc((CO_FIELDS.find(x=>x[0]===k)||[])[1])}</label><input class="input" id="co-${k}" data-co="${k}" value="${esc(st[k]||'')}" placeholder="${esc((CO_FIELDS.find(x=>x[0]===k)||[])[2]||'')}"></div>`;
