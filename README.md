@@ -328,3 +328,21 @@ Page « Guide d'achat » : 9 étapes pour commander sur le site (sans compte, ch
 - Gestion › Produits › « 🔎 Compléter le SEO » : tous les produits d'un coup, sans toucher aux textes écrits à la main.
 - Gestion › Société › Référencement Google : titre et méta-description de l'accueil.
 - Le serveur utilise ces textes dans les balises title, description, Open Graph et Twitter de chaque page.
+
+
+## Conseils (blog)
+
+- Pages `/conseils` (liste, filtre par rubrique) et `/conseils/titre--id` (article), lisibles par Google sans JavaScript, avec données BlogPosting et fil d'Ariane, image de partage, et présence dans le plan du site. Une adresse dont le titre a changé redirige en 301.
+- Gestion › Conseils (blog) : liste des articles, idées d'articles calculées à partir des catégories et des produits, éditeur (sujet, titre, rubrique, couverture, résumé, contenu en `## titre`, `- liste`, `**gras**`, `[texte](lien)`, `[[produit:ID]]` pour une carte produit), produits liés, titre SEO et méta-description avec aperçu Google, brouillon ou publié.
+- « ✨ Rédiger avec l'assistante » (`/api/admin/ai/article`, clé Anthropic) ; sans clé, un plan à compléter. Publication bloquée sous 80 mots ou s'il reste des passages « Ajoutez ici… ».
+- Boutique : section « Nos conseils » sur l'accueil, lien dans le pied de page et le volet des catégories, « Nos conseils sur ce produit » sur les fiches liées, boutons de partage WhatsApp et Facebook.
+- Couvertures servies par `/img/a/:id`.
+
+
+## Produits partenaires (affiliation Amazon, AliExpress…)
+
+- Fiche produit › « 🔗 Produit partenaire » : site (Amazon, AliExpress, Temu, Jumia, autre) et lien affilié en https. Le prix devient indicatif (0 = « Voir le prix »), le stock est ignoré.
+- Boutique : badge « Partenaire · Amazon », bouton « Voir sur Amazon ↗ » à la place de l'ajout au panier, encadré expliquant que le produit est vendu et livré par le partenaire, mentions légales (dont la phrase obligatoire d'Amazon) sur la fiche, dans les articles et en pied de page. Liens marqués `rel="sponsored nofollow"`.
+- `/go/:id` : redirection vers le lien affilié, avec comptage des clics (un par visiteur et par produit toutes les 10 minutes, robots exclus) dans `aff-clicks`. Tableau de bord › « Liens partenaires · 30 derniers jours ».
+- Exclus du panier, des commandes (refus côté serveur), de la caisse, du stock, du catalogue Facebook et du plan du site ; fiches en `noindex`, sans données « Product ».
+- Dans les articles Conseils : `[[produit:ID]]` d'un produit partenaire affiche son bouton, et les liens vers Amazon, AliExpress, Temu et Jumia sont marqués sponsorisés.

@@ -458,6 +458,38 @@ textarea.input{min-height:84px; resize:vertical}
 @keyframes bdglow{0%,100%{transform:scale(1)}50%{transform:scale(1.08)}}
 @media (prefers-reduced-motion:reduce){ .car-track{animation:none} .car-mask{overflow-x:auto} .car-bd{animation:none} }
 @media (max-width:760px){ .car{margin:0 0 18px; border-radius:16px} .car-c{width:136px} .car-c .im{height:112px} }
+.blog-grid{display:grid; grid-template-columns:repeat(auto-fill,minmax(min(280px,100%),1fr)); gap:18px; margin:0 0 30px}
+.art-card{display:flex; flex-direction:column; text-align:left; padding:0; border:1px solid var(--line); border-radius:20px; overflow:hidden; background:var(--surface); color:var(--ink); cursor:pointer; font:inherit; transition:transform .2s, box-shadow .2s}
+.art-card:hover{transform:translateY(-3px); box-shadow:var(--shadow)}
+.art-card .cv{aspect-ratio:16/9; background:linear-gradient(135deg,var(--indigo-soft),var(--surface-2)); display:grid; place-items:center; font-size:46px; overflow:hidden}
+.art-card .cv img{width:100%; height:100%; object-fit:cover}
+.art-card .bd{padding:14px 16px 18px; display:flex; flex-direction:column; gap:6px}
+.art-card h3{font:700 20px/1.2 var(--f-d); margin:0}
+.art-meta{font:600 12px var(--f-b); color:var(--muted); letter-spacing:.02em}
+.art-cat{display:inline-block; font:800 11px var(--f-b); letter-spacing:.08em; text-transform:uppercase; color:var(--indigo)}
+.article{max-width:760px; margin:0 auto}
+.article h1{font-size:clamp(30px,4.4vw,46px); line-height:1.12; margin:8px 0 10px}
+.article .lead{font-size:18px; line-height:1.6; color:var(--ink); margin:14px 0 18px; font-weight:600}
+.article .cover{border-radius:20px; overflow:hidden; margin:18px 0; aspect-ratio:16/9; background:var(--surface-2)}
+.article .cover img{width:100%; height:100%; object-fit:cover}
+.art-body{font-size:17px; line-height:1.75}
+.art-body h2{font-size:28px; margin:34px 0 10px}
+.art-body h3{font-size:21px; margin:24px 0 8px}
+.art-body p{margin:0 0 14px}
+.art-body ul{margin:0 0 16px; padding-left:22px}.art-body li{margin:6px 0}
+.art-body a{color:var(--indigo); font-weight:700}
+.art-prod{display:flex; gap:14px; align-items:center; padding:12px; margin:12px 0 20px; border-radius:16px; border:1px solid color-mix(in srgb,var(--indigo) 45%,var(--line)); background:var(--indigo-soft)}
+.art-prod .im{width:84px; height:84px; flex:none; border-radius:12px; overflow:hidden; background:#fff; display:grid; place-items:center; font-size:40px}
+.art-prod .im img{width:100%; height:100%; object-fit:cover}
+.art-share{display:flex; gap:8px; flex-wrap:wrap; margin:22px 0}
+.blog-ed textarea.body{min-height:340px; font:14px/1.6 ui-monospace,Menlo,Consolas,monospace}
+.prod-pick{max-height:200px; overflow:auto; border:1px solid var(--line); border-radius:12px; padding:6px 10px}
+.prod-pick label{display:flex; gap:8px; align-items:center; padding:5px 0; font-size:14px}
+.idea{display:flex; justify-content:space-between; gap:10px; align-items:center; padding:10px 12px; border:1px dashed var(--line); border-radius:12px; margin:6px 0}
+.partner-box{margin:16px 0; padding:16px; border-radius:16px; border:1px solid color-mix(in srgb,var(--indigo) 45%,var(--line)); background:var(--surface-2)}
+.partner-box p{margin:0 0 12px}
+.card .add.partner{display:grid; place-items:center; text-decoration:none; font-size:18px}
+.aff-note{font-size:12px; color:var(--muted); margin:10px 0 0; line-height:1.5}
 .empty{border:2px dashed var(--line); border-radius:var(--r-m); padding:48px 20px; text-align:center; color:var(--muted)}
 .empty h3{color:var(--ink); margin-bottom:8px; font-size:20px}
 
@@ -652,7 +684,7 @@ const ROLES = ['Gérant','Vendeur','Caissier','Livreur','Gestionnaire de stock']
 /* ============ état ============ */
 const S = {
   ready:false, live:false, isAdmin:false, uid:null, myName:'',
-  products:[], bundles:[], clients:[], suppliers:[], reviews:[], drivers:[], purchases:[], lpStats:[], dphoto:{}, campaigns:[], contactFlags:{}, audCarts:null, audSeg:'abandon_new', audSel:{}, costs:{}, stockMoves:[], inv:{}, topDays:30, topSort:'revenue', stFilter:'all', stCat:'', affiliates:[], affPayouts:[], moves:[], ledger:[], finConfig:{}, posTab:'vente', trAcc:'all', trType:'all', pq:'', promos:[], orders:[], settings:structuredClone(DEFAULT_SETTINGS), team:{members:[]},
+  products:[], bundles:[], articles:[], affClicks:[], clients:[], suppliers:[], reviews:[], drivers:[], purchases:[], lpStats:[], dphoto:{}, campaigns:[], contactFlags:{}, audCarts:null, audSeg:'abandon_new', audSel:{}, costs:{}, stockMoves:[], inv:{}, topDays:30, topSort:'revenue', stFilter:'all', stCat:'', affiliates:[], affPayouts:[], moves:[], ledger:[], finConfig:{}, posTab:'vente', trAcc:'all', trType:'all', pq:'', promos:[], orders:[], settings:structuredClone(DEFAULT_SETTINGS), team:{members:[]},
   cart:[], pos:[], posPromo:null, appliedPromo:null,
   view:'shop', tab:'dash', cat:'Tout', q:'', aq:'', orderFilter:'all', selPromos:new Set(), names:{}
 };
@@ -692,6 +724,11 @@ function demoSeed(){
 function loadLocal(){
   try{ local = JSON.parse(localStorage.getItem(LS)||'null'); }catch(e){ local=null; }
   if(!local || !local.products) local = demoSeed();
+  if(!local.articles){ const ids = Object.keys(local.products||{}).slice(0,2);
+    local.articles = {a_demo:{title:'Acheter en ligne à Bamako : 6 conseils pour éviter les mauvaises surprises', category:'Guides d’achat', status:'published', productIds:ids, cover:'', createdAt:Date.now()-2*864e5, publishedAt:Date.now()-2*864e5, updatedAt:Date.now()-2*864e5,
+      summary:'Acheter en ligne au Mali est simple quand on sait quoi vérifier. Voici nos conseils pour commander sereinement, payer en sécurité et être bien livré.',
+      body:'Commander en ligne fait gagner du temps, surtout avec les embouteillages et la chaleur. Voici comment le faire sans risque.\n\n## 1. Vérifiez les photos et la description\nRegardez toutes les photos, la vidéo si elle existe, et lisez les **caractéristiques**. Un vendeur sérieux décrit précisément ce qu’il vend.\n\n## 2. Lisez les avis des autres clients\nLes avis **vérifiés** viennent de clients qui ont vraiment reçu le produit. Les photos des clients sont souvent les plus parlantes.\n\n## 3. Choisissez un paiement sûr\n- **Paiement à la livraison** : vous payez en recevant le colis.\n- **Mobile money** : gardez toujours la référence de la transaction reçue par SMS.\n\n## 4. Indiquez une adresse précise\nDonnez votre quartier et un repère, ou partagez votre position : le livreur arrive plus vite.\n\n## 5. Vérifiez le colis à la réception\nOuvrez-le devant le livreur si possible, et signalez tout problème tout de suite.\n\n## 6. Donnez votre avis\nVotre avis aide les autres clients à bien choisir.\n\n## Quelques produits de la boutique\n'+ids.map(i=>'[[produit:'+i+']]').join('\n')+'\n\n## En résumé\nPhotos, avis, paiement sûr, adresse précise et vérification à la réception : avec ces réflexes, acheter en ligne devient simple.'}};
+  }
   if(local._needLookup){ delete local._needLookup; hashCode('BIENVENUE').then(h=>{ local['promo-lookup'][h]={type:'percent',value:10,minOrder:20000,maxUses:0,expiresAt:'',active:true}; saveLocal(); }); }
   syncLocal();
 }
@@ -699,6 +736,7 @@ function saveLocal(){ try{ localStorage.setItem(LS, JSON.stringify(local)); }cat
 function syncLocal(){
   const arr = c => Object.entries(local[c]||{}).map(([id,d])=>({id,...d}));
   S.products = arr('products').sort((a,b)=>(b.createdAt||0)-(a.createdAt||0));
+  S.articles = arr('articles').sort((a,b)=>(b.publishedAt||b.createdAt||0)-(a.publishedAt||a.createdAt||0));
   S.bundles = arr('bundles').sort((a,b)=>(b.createdAt||0)-(a.createdAt||0));
   S.costs = Object.fromEntries(arr('costs').map(c=>[c.id, Number(c.cost)||0]));
   S.stockMoves = arr('stock-moves').sort((a,b)=>b.createdAt-a.createdAt);
@@ -775,6 +813,7 @@ async function boot(){
     }catch(e){}
     db.collection('products').onSnapshot(s=>{ S.products = s.docs.map(d=>({id:d.id,...d.data()})).sort((a,b)=>(b.createdAt||0)-(a.createdAt||0)); schedule(); }, dbErr);
     db.collection('reviews').onSnapshot(s=>{ S.reviews = s.docs.map(d=>({id:d.id,...d.data()})).sort((a,b)=>b.createdAt-a.createdAt); schedule(); }, dbErr);
+    db.collection('articles').onSnapshot(s=>{ S.articles = s.docs.map(d=>({id:d.id,...d.data()})).sort((a,b)=>(b.publishedAt||b.createdAt||0)-(a.publishedAt||a.createdAt||0)); schedule(); }, dbErr);
     db.collection('bundles').onSnapshot(s=>{ S.bundles = s.docs.map(d=>({id:d.id,...d.data()})).sort((a,b)=>(b.createdAt||0)-(a.createdAt||0)); schedule(); }, dbErr);
     db.doc('settings/main').onSnapshot(d=>{ S.settings = mergeSettings(d.exists?d.data():null); schedule(); }, dbErr);
     if(S.isAdmin){
@@ -813,10 +852,13 @@ function render(){
   const a = document.activeElement, fid = a && a.id, ss = a && a.selectionStart;
   renderTop(); renderBnav();
   if(!S.ready) return;
+  if(!S._blogDeep){ S._blogDeep = true; const ut = urlTarget(); if(ut.kind==='blog') S.view='blog'; else if(ut.kind==='art'){ S.view='article'; S.aid=ut.id; } }
   const m = $('#main');
   if(S.view==='shop') m.innerHTML = viewShop();
   else if(S.view==='product') m.innerHTML = viewProduct();
   else if(S.view==='landing') m.innerHTML = viewLanding();
+  else if(S.view==='blog') m.innerHTML = viewBlog();
+  else if(S.view==='article') m.innerHTML = viewArticle();
   else if(S.view==='guide') m.innerHTML = viewGuide();
   else if(S.view==='orders') m.innerHTML = viewMyOrders();
   else if(S.view==='pos' && S.isAdmin) m.innerHTML = viewPos();
@@ -881,7 +923,7 @@ function catDrawer(){
   const n = c => live.filter(p=>p.category===c).length;
   $('#overlay').innerHTML = `<div class="cat-drawer"><div class="scrim" data-a="closeAll"><div class="cat-panel" role="dialog" aria-modal="true" aria-label="Catégories">
     <div class="m-h" style="padding:6px 0"><h2>🗂️ Catégories</h2><button class="x" data-a="closeAll" aria-label="Fermer">×</button></div>
-    <div class="cat-list"><button data-a="catPick" data-v="Tout" aria-pressed="${S.cat==='Tout'}"><i>✨</i>Tout voir<small>${live.length} article${live.length>1?'s':''}</small></button>
+    <div class="cat-list"><button data-a="catPick" data-v="Tout" aria-pressed="${S.cat==='Tout'}"><i>✨</i>Tout voir<small>${live.length} article${live.length>1?'s':''}</small></button>${pubArticles().length?`<button data-a="blog"><i>💡</i>Conseils<small>${pubArticles().length} guide${pubArticles().length>1?'s':''}</small></button>`:''}
     ${cats.map(c=>`<button data-a="catPick" data-v="${esc(c)}" aria-pressed="${S.cat===c}"><i>${catEmo(c)}</i>${esc(c)}<small>${n(c)} article${n(c)>1?'s':''}</small></button>`).join('')}</div></div></div></div>`;
 }
 const voiceOK = () => !!(window.SpeechRecognition || window.webkitSpeechRecognition);
@@ -910,7 +952,20 @@ const bundleVisual = b => { if(b.image) return `<img src="${esc(b.image)}" alt="
   if(!comps.length) return `<span aria-hidden="true">${esc(b.emoji||'🎁')}</span>`;
   return `<span class="collage n${comps.length}" aria-hidden="true">${comps.map(p=>`<span>${p.image?`<img src="${esc(p.image)}" alt="" loading="lazy">`:`<i>${esc(p.emoji||'📦')}</i>`}</span>`).join('')}</span>`; };
 const pImg = (p, big) => Array.isArray(p.items) ? bundleVisual(p) : p.image ? `<img src="${esc(p.image)}" alt="" loading="lazy">` : `<span aria-hidden="true">${esc(p.emoji||'📦')}</span>`;
+/* --- Produits partenaires (liens d’affiliation Amazon, AliExpress…) --- */
+const PARTNERS = {amazon:{n:'Amazon'}, aliexpress:{n:'AliExpress'}, temu:{n:'Temu'}, jumia:{n:'Jumia'}, autre:{n:'le site partenaire'}};
+const isPartner = p => !!(p && p.partner && /^https?:\/\//.test(p.partner.url||''));
+const partnerName = p => (PARTNERS[(p.partner||{}).platform]||PARTNERS.autre).n;
+const goLink = p => isServer() ? '/go/'+encodeURIComponent(p.id) : p.partner.url;
+const AFF_RE = /(^|\.)(amazon\.[a-z.]+|amzn\.to|aliexpress\.[a-z.]+|s\.click\.aliexpress\.com|temu\.com|jumia\.[a-z.]+)$/i;
+const isAffUrl = u => { try{ return AFF_RE.test(new URL(u).hostname); }catch(e){ return false; } };
+const AMAZON_NOTE = 'En tant que Partenaire Amazon, je réalise un bénéfice sur les achats remplissant les conditions requises.';
+function partnerBtn(p, cls){ return `<a class="btn ${cls||'primary'}" href="${esc(goLink(p))}" target="_blank" rel="sponsored nofollow noopener">Voir sur ${esc(partnerName(p))} ↗</a>`; }
+function partnerBox(p){ const n = esc(partnerName(p));
+  return `<div class="partner-box"><p><b>Produit vendu et livré par ${n}</b>, pas par ${esc(S.settings.shopName)}. Le prix, la livraison, le paiement et le service après-vente sont ceux de ${n}.</p>${partnerBtn(p,'primary btn-live block')}
+    <p class="aff-note">Lien partenaire : nous pouvons recevoir une commission si vous achetez, sans aucun surcoût pour vous.${p.partner.platform==='amazon'?' '+AMAZON_NOTE:''}</p></div>`; }
 function stockPill(p){
+  if(isPartner(p)) return `<span class="pill info tag">Partenaire · ${esc(partnerName(p))}</span>`;
   if(p.stock<=0) return '<span class="pill bad tag">Rupture</span>';
   if(p.stock<=(p.lowStock||5)) return `<span class="pill warn tag">Plus que ${p.stock}</span>`;
   if(p.comparePrice>p.price) return `<span class="pill info tag">−${Math.round((1-p.price/p.comparePrice)*100)} %</span>`;
@@ -1006,15 +1061,17 @@ function viewShop(){
       <article class="card">
         <button class="thumb" data-a="product" data-id="${p.id}" aria-label="Voir ${esc(p.name)}">${pImg(p)}${stockPill(p)}${isNew(p)?'<span class="new-band">Nouveau</span>':''}${(p.lpVideo||p.lpVideoFile)?'<span class="vid-badge">▶ Vidéo</span>':''}${photoOverlay(p)}</button>
         <div class="card-b"><span class="cat">${esc(p.category)}${isUsed(p)?` · <b style="color:var(--indigo)">Occasion · ${esc(condLabel(p))}</b>`:''}</span><h3><a href="${esc(hasLanding(p)&&S.settings.lpFirst!==false ? offerPath(p) : productPath(p))}" data-a="product" data-id="${p.id}" style="color:inherit;text-decoration:none">${esc(p.name)}</a></h3>${p.lpHook?`<span class="hook">« ${esc(p.lpHook)} »</span>`:''}${(()=>{ const rt=productRating(p.id); return rt.n?`<span class="small">${starsHTML(rt.avg)} <span class="muted">(${rt.n})</span></span>`:''; })()}${soldCount(p)>=3?`<span class="sold">🔥 ${soldCount(p)} vendus ce mois-ci</span>`:''}${p.bulkMin>1&&p.bulkPrice>0?`<span class="bulk">Dès ${p.bulkMin} : ${fmt(p.bulkPrice)} l’unité</span>`:''}
-          <div class="card-f"><span class="price">${hasVar(p)&&minPrice(p)<p.price?'<span class="muted small" style="font-family:var(--f-b)">Dès </span>'+fmt(minPrice(p)):fmt(p.price)}${p.comparePrice>p.price?`<span class="strike">${fmt(p.comparePrice)}</span>`:''}</span>
-          <button class="add" data-a="add" data-id="${p.id}" ${p.stock<=0?'disabled':''} aria-label="Ajouter ${esc(p.name)} au panier">+</button></div>
+          <div class="card-f"><span class="price">${isPartner(p)?(p.price?'<span class="muted small" style="font-family:var(--f-b)">env. </span>'+fmt(p.price):'<span class="muted small" style="font-family:var(--f-b)">Voir le prix</span>'):hasVar(p)&&minPrice(p)<p.price?'<span class="muted small" style="font-family:var(--f-b)">Dès </span>'+fmt(minPrice(p)):fmt(p.price)}${p.comparePrice>p.price?`<span class="strike">${fmt(p.comparePrice)}</span>`:''}</span>
+          ${isPartner(p)?`<a class="add partner" href="${esc(goLink(p))}" target="_blank" rel="sponsored nofollow noopener" aria-label="Voir ${esc(p.name)} sur ${esc(partnerName(p))}">↗</a>`:`<button class="add" data-a="add" data-id="${p.id}" ${p.stock<=0?'disabled':''} aria-label="Ajouter ${esc(p.name)} au panier">+</button>`}</div>
           ${hasLanding(p)?`<button class="see-offer" data-a="openLanding" data-id="${p.id}">✨ Découvrir l’offre ›</button>`:''}
         </div>
       </article>`).join('')}</div>`:empty}
+    ${S.cat==='Tout'&&!S.q?blogBlock():''}
     <footer class="shop-foot"><div><span class="fb">${esc(st.shopName)}</span><p style="margin-top:10px">${esc(st.intro)}</p></div>
       <div><h4>Paiement sécurisé</h4><p>${esc(enabledProcs().map(([k])=>PROCESSORS[k].name).join(', ')||'En espèces à la réception')}.</p>${payRow(false)}</div>
-      <div><h4>Livraison</h4><p>À ${esc(st.city)}, offerte dès ${fmt(st.freeFrom)} d’achat, et partout en Afrique de l’Ouest. Retrait en boutique possible.</p><button class="btn ghost sm" data-a="install" style="margin-top:10px">📲 Installer l’application</button> <button class="btn ghost sm" data-a="guide" style="margin-top:10px">📖 Guide d’achat</button></div>
+      <div><h4>Livraison</h4><p>À ${esc(st.city)}, offerte dès ${fmt(st.freeFrom)} d’achat, et partout en Afrique de l’Ouest. Retrait en boutique possible.</p><button class="btn ghost sm" data-a="install" style="margin-top:10px">📲 Installer l’application</button> <button class="btn ghost sm" data-a="guide" style="margin-top:10px">📖 Guide d’achat</button> ${pubArticles().length?'<button class="btn ghost sm" data-a="blog" style="margin-top:10px">💡 Conseils</button>':''}</div>
       <div><h4>Nous contacter</h4><p>${st.phone?`📞 <a href="tel:${esc(st.phone.replace(/\s/g,''))}" style="color:var(--indigo)">${esc(st.phone)}</a>${st.phone2?` · <a href="tel:${esc(st.phone2.replace(/\s/g,''))}" style="color:var(--indigo)">${esc(st.phone2)}</a>`:''}<br>`:''}${st.whatsapp?`<a href="https://wa.me/${waNumber(st.whatsapp)}" target="_blank" rel="noopener" style="color:#25D366;font-weight:700;display:inline-flex;align-items:center">${WA_ICON}WhatsApp ${esc(st.whatsapp)}</a><br>`:''}${st.email?`✉️ <a href="mailto:${esc(st.email)}" style="color:var(--indigo)">${esc(st.email)}</a><br>`:''}${st.address?`📍 ${esc(st.address)}${st.city?', '+esc(st.city):''}<br>`:''}${st.hours?`🕘 ${esc(st.hours)}`:''}${!st.phone&&!st.whatsapp&&!st.email&&!st.address?'Notre équipe vous répond à la livraison et en boutique.':''}</p></div></footer>
+    ${S.products.some(isPartner)?`<p class="aff-note" style="text-align:center;margin:0 0 6px">Certains produits sont proposés via des liens partenaires (marqués « Partenaire ») : nous pouvons recevoir une commission, sans surcoût pour vous.${S.products.some(p=>isPartner(p)&&p.partner.platform==='amazon')?' '+AMAZON_NOTE:''}</p>`:''}
     <p class="foot-note">© ${new Date().getFullYear()} ${esc(st.legalName||st.shopName)}${st.legalForm?' · '+esc(st.legalForm):''}${st.capital?' au capital de '+esc(st.capital):''}${st.rccm?' · RCCM '+esc(st.rccm):''}${st.nif?' · NIF '+esc(st.nif):''}${st.address?' · '+esc(st.address)+(st.city?', '+esc(st.city):''):''}${st.country?' · '+esc(st.country):''}</p>`;
 }
 function viewMyOrders(){
@@ -1633,9 +1690,65 @@ const homePath = () => prettyOn() ? '/' : location.pathname;
 function urlTarget(){ let q = null; try{ q = new URLSearchParams(location.search); }catch(e){}
   const m = /^\/(produit|offre)\/[^/]*--([A-Za-z0-9_-]+)\/?$/.exec(location.pathname), mc = /^\/categorie\/([a-z0-9-]+)\/?$/.exec(location.pathname);
   if(m) return {kind: m[1]==='offre' ? 'lp' : 'p', id: m[2]};
+  { const ma = /^\/conseils\/[^/]*--([A-Za-z0-9_-]+)\/?$/.exec(location.pathname); if(ma) return {kind:'art', id:ma[1]}; if(/^\/conseils\/?$/.test(location.pathname)) return {kind:'blog'};
+    if(q && q.get('conseil')) return {kind:'art', id:q.get('conseil')}; if(q && q.get('conseils')) return {kind:'blog'}; }
   if(q && q.get('lp')) return {kind:'lp', id:q.get('lp')}; if(q && q.get('p')) return {kind:'p', id:q.get('p')};
   if(mc){ const c = [...new Set(S.products.map(x=>x.category).filter(Boolean))].find(x=>slugify(x)===mc[1]); if(c) return {kind:'cat', id:c}; }
   return {}; }
+/* ===================== Conseils (blog) ===================== */
+const pubArticles = () => S.articles.filter(a=>a.status==='published' && a.title).sort((a,b)=>(b.publishedAt||0)-(a.publishedAt||0));
+const articlePath = a => prettyOn() ? `/conseils/${slugify(a.title)}--${a.id}` : '?conseil='+encodeURIComponent(a.id);
+const blogPath = () => prettyOn() ? '/conseils' : '?conseils=1';
+const readMin = t => Math.max(1, Math.round(String(t||'').split(/\s+/).filter(Boolean).length/200));
+const artDate = a => new Date(a.publishedAt||a.createdAt||Date.now()).toLocaleDateString('fr-FR',{day:'numeric',month:'long',year:'numeric'});
+const artCover = (a, big) => a.cover ? `<img src="${esc(a.cover)}" alt="" ${big?'':'loading="lazy"'}>` : (()=>{ const pp = (a.productIds||[]).map(id=>S.products.find(x=>x.id===id)).find(x=>x&&x.image); return pp ? `<img src="${esc(pp.image)}" alt="" loading="lazy">` : '<span aria-hidden="true">📖</span>'; })();
+function artProdCard(p){ return `<div class="art-prod"><span class="im">${p.image?`<img src="${esc(p.image)}" alt="" loading="lazy">`:esc(p.emoji||'📦')}</span><div style="flex:1;min-width:0"><b style="display:block">${esc(p.name)}</b><span class="price" style="font-size:19px">${fmt(p.price)}</span>${isSale(p)?` <span class="strike">${fmt(p.comparePrice)}</span>`:''}
+  <div class="row" style="gap:8px;margin-top:8px;flex-wrap:wrap"><button class="btn primary sm" data-a="product" data-id="${p.id}">Voir le produit</button>${isPartner(p)?partnerBtn(p,'ghost sm'):p.stock>0?`<button class="btn ghost sm" data-a="add" data-id="${p.id}">Ajouter au panier</button>`:''}</div></div></div>`; }
+function mdLite(src){
+  const prod = id => S.products.find(x=>x.id===id && x.active!==false);
+  const inl = t => esc(t).replace(/\*\*([^*]+)\*\*/g,'<strong>$1</strong>').replace(/\[([^\]]+)\]\(((?:https?:\/\/|\/)[^)\s]+)\)/g,(m,l,u)=>`<a href="${u}" ${u.startsWith('http')?`target="_blank" rel="${isAffUrl(u.replace(/&amp;/g,'&'))?'sponsored nofollow noopener':'noopener'}"`:''}>${l}</a>`)
+    .replace(/\[\[produit:([A-Za-z0-9_-]+)\]\]/g,(m,id)=>{ const p = prod(id); return p ? `<a href="${esc(productPath(p))}" data-a="product" data-id="${p.id}">${esc(p.name)}</a>` : ''; });
+  const out = []; let list = null;
+  for(const raw of String(src||'').split('\n')){ const l = raw.trim(), solo = /^(#{2,3} )?\[\[produit:([A-Za-z0-9_-]+)\]\]$/.exec(l);
+    if(/^[-*] /.test(l)){ (list ||= []).push(`<li>${inl(l.slice(2))}</li>`); continue; }
+    if(list){ out.push(`<ul>${list.join('')}</ul>`); list = null; }
+    if(!l) continue;
+    if(solo){ const p = prod(solo[2]); if(p){ if(solo[1]) out.push(`<h3>${esc(p.name)}</h3>`); out.push(artProdCard(p)); } continue; }
+    if(l.startsWith('### ')) out.push(`<h3>${inl(l.slice(4))}</h3>`); else if(l.startsWith('## ')) out.push(`<h2>${inl(l.slice(3))}</h2>`); else out.push(`<p>${inl(l)}</p>`); }
+  if(list) out.push(`<ul>${list.join('')}</ul>`);
+  return out.join(''); }
+function artCard(a){ return `<button class="art-card" data-a="article" data-id="${a.id}"><span class="cv">${artCover(a)}</span><span class="bd">${a.category?`<span class="art-cat">${esc(a.category)}</span>`:''}<h3>${esc(a.title)}</h3>${a.summary?`<span class="muted small">${esc(cutWords(a.summary,140))}</span>`:''}<span class="art-meta">${artDate(a)} · ${readMin(a.body)} min de lecture</span></span></button>`; }
+function blogBlock(){ const list = pubArticles().slice(0,3); if(!list.length) return '';
+  return `<div class="sec-h"><h2>Nos conseils</h2><button class="btn ghost sm" data-a="blog">Tous les conseils ›</button></div><div class="blog-grid">${list.map(artCard).join('')}</div>`; }
+function openBlog(){ closeAll(); S.view='blog'; try{ history.pushState({blog:1}, '', blogPath()); }catch(e){} schedule(); window.scrollTo(0,0); }
+function openArticle(id){ closeAll(); S.view='article'; S.aid=id; const a = S.articles.find(x=>x.id===id); try{ history.pushState({art:id}, '', a ? articlePath(a) : blogPath()); }catch(e){} schedule(); window.scrollTo(0,0); }
+function viewBlog(){
+  const list = pubArticles(), cats = [...new Set(list.map(a=>a.category).filter(Boolean))], cur = S.blogCat || 'Tout', shown = cur==='Tout' ? list : list.filter(a=>a.category===cur);
+  return `<div class="pdp-wrap"><nav class="crumb"><button data-a="go" data-v="shop">← ${esc(S.settings.shopName)}</button></nav>
+    <div class="lp-kicker">Conseils</div><h1 style="font-size:clamp(32px,4vw,48px);margin:6px 0 8px">Nos conseils pour bien choisir</h1>
+    <p class="lp-sub" style="margin-bottom:18px">Guides d’achat, comparatifs et astuces pour acheter malin à ${esc(S.settings.city||'Bamako')}.</p>
+    ${cats.length>1?`<div class="cats" role="tablist" style="margin-bottom:18px">${['Tout',...cats].map(c=>`<button aria-pressed="${cur===c}" data-a="blogCat" data-v="${esc(c)}">${esc(c)}</button>`).join('')}</div>`:''}
+    ${shown.length?`<div class="blog-grid">${shown.map(artCard).join('')}</div>`:`<div class="empty"><h3>Les premiers conseils arrivent bientôt</h3><p>${S.isAdmin?'Écrivez votre premier article dans Gestion › Conseils.':'Revenez très vite.'}</p></div>`}</div>`; }
+function viewArticle(){
+  const a = S.articles.find(x=>x.id===S.aid);
+  if(!a || (a.status!=='published' && !S.isAdmin)) return `<div class="empty"><h3>Article introuvable</h3><button class="btn ghost" data-a="blog">Voir tous les conseils</button></div>`;
+  const rel = (a.productIds||[]).map(id=>S.products.find(x=>x.id===id && x.active!==false)).filter(Boolean), url = (isServer()?location.origin:'')+articlePath(a);
+  const others = pubArticles().filter(x=>x.id!==a.id).sort((x,y)=>(y.category===a.category)-(x.category===a.category)).slice(0,3);
+  const share = encodeURIComponent(a.title+'\n'+url);
+  return `<div class="pdp-wrap"><article class="article"><nav class="crumb"><button data-a="go" data-v="shop">${esc(S.settings.shopName)}</button> › <button data-a="blog">Conseils</button></nav>
+    ${a.status!=='published'?'<div class="pill warn" style="margin:10px 0">Brouillon : visible seulement par l’équipe</div>':''}
+    ${a.category?`<div class="art-cat" style="margin-top:12px">${esc(a.category)}</div>`:''}<h1>${esc(a.title)}</h1>
+    <div class="art-meta">${artDate(a)} · ${readMin(a.body)} min de lecture · ${esc(S.settings.shopName)}</div>
+    ${a.cover||rel.some(p=>p.image)?`<div class="cover">${artCover(a, true)}</div>`:''}
+    ${a.summary?`<p class="lead">${esc(a.summary)}</p>`:''}
+    <div class="art-body">${mdLite(a.body)}</div>
+    ${(()=>{ const ps = (a.productIds||[]).concat([...String(a.body||'').matchAll(/\[\[produit:([A-Za-z0-9_-]+)\]\]/g)].map(m=>m[1])).map(id=>S.products.find(x=>x.id===id)).filter(isPartner), links = [...String(a.body||'').matchAll(/\]\((https?:\/\/[^)\s]+)\)/g)].map(m=>m[1]).filter(isAffUrl);
+      return ps.length||links.length ? `<p class="aff-note">Cet article contient des liens partenaires : nous pouvons recevoir une commission si vous achetez, sans surcoût pour vous.${ps.some(p=>p.partner.platform==='amazon')||links.some(u=>/amazon|amzn/i.test(u))?' '+AMAZON_NOTE:''}</p>` : ''; })()}
+    ${rel.length && !/\[\[produit:/.test(a.body||'')?`<h2 style="font-size:26px;margin-top:30px">Les produits de cet article</h2>${rel.map(artProdCard).join('')}`:''}
+    <div class="art-share"><a class="btn wa sm" target="_blank" rel="noopener" href="https://wa.me/?text=${share}">${WA_ICON}Partager sur WhatsApp</a><a class="btn ghost sm" target="_blank" rel="noopener" href="https://www.facebook.com/sharer/sharer.php?u=${encodeURIComponent(url)}">Facebook</a><button class="btn ghost sm" data-a="copyArt" data-v="${esc(url)}">Copier le lien</button></div>
+    ${shopWa()?`<div class="lp-final" style="margin:20px 0"><h2 style="font-size:24px;margin:0 0 6px">Une question avant d’acheter ?</h2><p class="muted" style="margin:0 0 12px">Écrivez-nous : nous vous conseillons gratuitement.</p><a class="btn wa btn-live" target="_blank" rel="noopener" href="https://wa.me/${shopWa()}?text=${encodeURIComponent('Bonjour, j’ai lu votre article « '+a.title+' » et j’ai une question.')}">${WA_ICON}Nous écrire sur WhatsApp</a></div>`:''}
+    ${others.length?`<h2 style="font-size:26px;margin-top:34px">À lire aussi</h2><div class="blog-grid">${others.map(artCard).join('')}</div>`:''}
+    ${S.isAdmin?`<button class="btn ghost sm" data-a="artEdit" data-id="${a.id}">✏️ Modifier l’article</button>`:''}</article></div>`; }
 function openLanding(id){ closeAll(); S.view='landing'; S.pid=id; S.pqty=1; try{ const pp = S.products.find(x=>x.id===id); history.pushState({lp:id}, '', pp ? offerPath(pp) : '?lp='+encodeURIComponent(id)); }catch(e){} schedule(); window.scrollTo(0,0); }
 const lpBlocks = t => String(t||'').split(/\n\s*\n/).map(b=>b.trim()).filter(Boolean);
 function lpFaq(p){
@@ -2128,6 +2241,7 @@ function openProduct(id){
   schedule(); window.scrollTo(0,0);
 }
 window.addEventListener('popstate', ()=>{ const ut = urlTarget(); let pid = ut.kind==='p' ? ut.id : '', lid = ut.kind==='lp' ? ut.id : ''; if(ut.kind==='cat'){ S.cat = ut.id; }
+  if(ut.kind==='blog' || ut.kind==='art'){ S.view = ut.kind==='blog' ? 'blog' : 'article'; if(ut.kind==='art') S.aid = ut.id; closeAll(); schedule(); return; } if(S.view==='blog' || S.view==='article') S.view='shop';
   if(lid && S.products.some(x=>x.id===lid)){ S.view='landing'; S.pid=lid; S.pqty=1; }
   else if(pid && S.products.some(x=>x.id===pid)){ S.view='product'; S.pid=pid; S.pqty=1; } else if(S.view==='product' || S.view==='landing') S.view='shop';
   closeAll(); schedule(); });
@@ -2161,18 +2275,18 @@ function viewProduct(){
       ${(()=>{ const rt=productRating(p.id); return rt.n?`<div class="rate-line">${starsHTML(rt.avg)}<b>${(Math.round(rt.avg*10)/10).toString().replace('.',',')}</b><button data-a="rvGo">${rt.n} avis vérifié${rt.n>1?'s':''}</button></div>`:''; })()}
       ${p.description?`<p class="muted" style="margin:0 0 10px;font-size:16px">${esc(p.description)}</p>`:''}
       ${isUsed(p)?`<div class="trust-box" style="margin:4px 0 14px;border-color:color-mix(in srgb,var(--indigo) 45%,var(--line))"><div><span>♻️</span><span><b>Occasion · ${esc(condLabel(p))}</b>${esc(CONDITIONS[condKey(p)].d)}${p.conditionNote?`<br><span style="color:var(--ink)">${esc(p.conditionNote)}</span>`:''}</span></div></div>`:''}
-      <div class="pdp-price"><span class="price">${hasVar(p)&&selVariant(p)?fmt(vPrice(p,selVariant(p).key)):hasVar(p)&&minPrice(p)<p.price?'<span class="muted small" style="font-family:var(--f-b)">Dès </span>'+fmt(minPrice(p)):fmt(p.price)}</span>${save?`<span class="strike">${fmt(p.comparePrice)}</span>`:''}</div>
+      <div class="pdp-price"><span class="price">${isPartner(p)?(p.price?'<span class="muted small" style="font-family:var(--f-b)">Environ </span>'+fmt(p.price):'<span class="muted" style="font-family:var(--f-b);font-size:18px">Prix affiché sur '+esc(partnerName(p))+'</span>'):hasVar(p)&&selVariant(p)?fmt(vPrice(p,selVariant(p).key)):hasVar(p)&&minPrice(p)<p.price?'<span class="muted small" style="font-family:var(--f-b)">Dès </span>'+fmt(minPrice(p)):fmt(p.price)}</span>${save?`<span class="strike">${fmt(p.comparePrice)}</span>`:''}</div>
       ${save?`<div class="save">Vous économisez ${fmt(save)}</div>`:''}
       ${p.bulkMin>1&&p.bulkPrice>0?`<p class="bulk" style="font-size:14px;margin:10px 0 0">Achat groupé : ${fmt(p.bulkPrice)} l’unité dès ${p.bulkMin} unités</p>`:''}
       ${hasVar(p)?optionPicker(p):''}
-      <p style="margin:14px 0 0">${out?'<span class="pill bad">Rupture de stock</span>':hasVar(p)&&selVariant(p)?`<span class="pill ${selVariant(p).stock>0?'ok':'bad'}">${selVariant(p).stock>0?`En stock · ${selVariant(p).stock}`:'Cette variante est épuisée'}</span>`:`<span class="pill ok">En stock</span>`}</p>
-      ${out?'':`<div class="pdp-buy"><div class="qty big"><button data-a="pdpQty" data-d="-1" aria-label="Moins">−</button><span>${q}</span><button data-a="pdpQty" data-d="1" aria-label="Plus">+</button></div>
+      <p style="margin:14px 0 0">${isPartner(p)?'':out?'<span class="pill bad">Rupture de stock</span>':hasVar(p)&&selVariant(p)?`<span class="pill ${selVariant(p).stock>0?'ok':'bad'}">${selVariant(p).stock>0?`En stock · ${selVariant(p).stock}`:'Cette variante est épuisée'}</span>`:`<span class="pill ok">En stock</span>`}</p>
+      ${isPartner(p)?partnerBox(p):out?'':`<div class="pdp-buy"><div class="qty big"><button data-a="pdpQty" data-d="-1" aria-label="Moins">−</button><span>${q}</span><button data-a="pdpQty" data-d="1" aria-label="Plus">+</button></div>
         <button class="btn primary btn-live" data-a="pdpAdd">Ajouter au panier</button><button class="btn ghost" data-a="pdpBuy">Acheter maintenant</button></div>
         ${shopWa()?`<button class="btn wa btn-live" data-a="waProduct" data-id="${p.id}" style="margin-top:10px;width:100%">${WA_ICON}Commander ce produit sur WhatsApp</button>`:''}`}
-      <div class="trust-box"><div><span>🚚</span><span><b>Livraison à ${esc(st.city)}</b>${st.freeFrom?`Offerte dès ${fmt(st.freeFrom)} d’achat, sinon ${fmt(st.deliveryFee)}. `:''}Retrait en boutique possible.</span></div>
+      <div ${isPartner(p)?'hidden':''}><div class="trust-box"><div><span>🚚</span><span><b>Livraison à ${esc(st.city)}</b>${st.freeFrom?`Offerte dès ${fmt(st.freeFrom)} d’achat, sinon ${fmt(st.deliveryFee)}. `:''}Retrait en boutique possible.</span></div>
         <div><span>💳</span><span><b>Paiement sécurisé</b>${esc(pays.join(', ')||'À la livraison')}${payRow(false)}</span></div>
         ${p.warranty?`<div><span>🛡️</span><span><b>Garantie et retour</b>${esc(p.warranty)}</span></div>`:''}
-        ${st.phone?`<div><span>📞</span><span><b>Une question ?</b><a href="tel:${esc(st.phone.replace(/\s/g,''))}" style="color:var(--indigo)">${esc(st.phone)}</a></span></div>`:''}</div>
+        ${st.phone?`<div><span>📞</span><span><b>Une question ?</b><a href="tel:${esc(st.phone.replace(/\s/g,''))}" style="color:var(--indigo)">${esc(st.phone)}</a></span></div>`:''}</div></div>
       <div class="mini-codes">${qrSVG(payLink(p, hasVar(p)?selVariant(p):null), 64)}<div>${eanSVG(hasVar(p)&&selVariant(p)?vCode(p,selVariant(p)):pCode(p), 150, 50)}<span>Scannez le QR pour payer sur votre téléphone · code produit ${esc(hasVar(p)&&selVariant(p)?vCode(p,selVariant(p)):pCode(p))}</span></div></div>
       ${hasLanding(p)?`<button class="lp-banner" data-a="openLanding" data-id="${p.id}"><span style="font-size:26px">✨</span><span style="flex:1"><b>Découvrez ce produit en détail</b><span class="muted small">${[(p.angleCaps||[]).some(c=>c&&c.t)?'photos sous tous les angles':'', (p.lpVideo||p.lpVideoFile)?'vidéo':'', (p.spin||[]).length>=4?'vue à 360°':'', productRating(p.id).n?'avis clients':'', 'questions fréquentes'].filter(Boolean).join(' · ')}</span></span><span style="font-weight:800;color:var(--indigo)">Voir ›</span></button>`:''}
       <div class="row" style="gap:8px;margin-top:14px;flex-wrap:wrap"><button class="btn ghost sm" data-a="openLanding" data-id="${p.id}" style="flex:0;white-space:nowrap">✨ Page de vente</button><button class="btn ghost sm" data-a="shareProduct" data-id="${p.id}" style="flex:0">↗ Partager</button>${S.isAdmin?`<button class="btn ghost sm" data-a="visual" data-id="${p.id}" style="flex:0">🖼 Visuel</button><button class="btn ghost sm" data-a="editProduct" data-id="${p.id}" style="flex:0">✏️ Modifier</button>`:''}</div>
@@ -2182,8 +2296,9 @@ function viewProduct(){
   ${paras.length?`<section class="pdp-sec"><h2>Description</h2><div class="pdp-desc">${paras.map(x=>`<p>${esc(x).replace(/\n/g,'<br>')}</p>`).join('')}</div></section>`:''}
   ${specs.length?`<section class="pdp-sec"><h2>Caractéristiques</h2><div class="panel tbl-wrap specs"><table><tbody>${specs.map(([k,v])=>`<tr><td>${esc(k)}</td><td>${esc(v)}</td></tr>`).join('')}</tbody></table></div></section>`:''}
   ${reviewsSection(p)}
+  ${(()=>{ const ar = pubArticles().filter(a=>(a.productIds||[]).includes(p.id) || new RegExp('\\[\\[produit:'+p.id+'\\]\\]').test(a.body||'')).slice(0,3); return ar.length ? `<section class="pdp-sec"><h2>Nos conseils sur ce produit</h2><div class="blog-grid">${ar.map(artCard).join('')}</div></section>` : ''; })()}
   ${related.length?`<section class="pdp-sec"><h2>Dans la même catégorie</h2><div class="related">${related.map(miniCard).join('')}</div></section>`:''}
-  ${out?'':`<div class="buybar"><span class="price">${fmt(p.price)}</span><button class="btn primary" data-a="pdpAdd">Ajouter au panier</button></div>`}
+  ${isPartner(p)?`<div class="buybar"><span class="muted small">${esc(partnerName(p))}</span>${partnerBtn(p,'primary')}</div>`:out?'':`<div class="buybar"><span class="price">${fmt(p.price)}</span><button class="btn primary" data-a="pdpAdd">Ajouter au panier</button></div>`}
   </div>`;
 }
 
@@ -2275,6 +2390,7 @@ function addLine(target, match, make, label){
 }
 function addToCart(id, qty=1, target='cart', v=''){
   const p = S.products.find(x=>x.id===id); if(!p) return;
+  if(isPartner(p)){ window.open(goLink(p), '_blank', 'noopener'); return; }
   if(hasVar(p) && !v){ if(target==='pos') return pickVariant(p); return openProduct(id); }
   addLine(target, l=>!l.b && l.id===id && (l.v||'')===(v||''), ()=>(v?{id, qty:1, v}:{id, qty:1}), `${p.name}${v?' — '+v:''} ajouté au panier`);
 }
@@ -2619,7 +2735,7 @@ function viewPos(){
 }
 function viewSale(){
   const q = S.aq.trim().toLowerCase();
-  const list = S.products.filter(p=>p.active!==false && (!q || (p.name+' '+(p.sku||'')+' '+p.category).toLowerCase().includes(q)));
+  const list = S.products.filter(p=>p.active!==false && !isPartner(p) && (!q || (p.name+' '+(p.sku||'')+' '+p.category).toLowerCase().includes(q)));
   const t = computeTotals(S.pos, S.posPromo, 'retrait');
   const lcd = S.posLcd || {l1:'PRÊT · SCANNEZ UN ARTICLE', l2:S.settings.shopName.toUpperCase()};
   return `<div class="sec-h"><h2>Caisse</h2><span class="muted small">Vente au comptoir · le stock est mis à jour à l’encaissement</span></div>
@@ -2780,7 +2896,7 @@ function invDiffs(){
 function paneStock(){
   const q = S.aq.trim().toLowerCase(), cats = [...new Set(S.products.map(p=>p.category).filter(Boolean))].sort();
   const hasInv = pid => S.inv[pid]!==undefined && S.inv[pid]!=='';
-  const list = S.products.filter(p=>(!q || (p.name+' '+(p.sku||'')).toLowerCase().includes(q)) && (!S.stCat || p.category===S.stCat)
+  const list = S.products.filter(p=>!isPartner(p) && (!q || (p.name+' '+(p.sku||'')).toLowerCase().includes(q)) && (!S.stCat || p.category===S.stCat)
     && (S.stFilter==='all' || (S.stFilter==='low' && p.stock>0 && p.stock<=(p.lowStock||5)) || (S.stFilter==='out' && p.stock<=0) || (S.stFilter==='diff' && invDiffs().some(x=>x.p.id===p.id))));
   const valCost = S.products.reduce((t,p)=>t+costOf(p.id)*Math.max(0,p.stock),0), valSale = S.products.reduce((t,p)=>t+p.price*Math.max(0,p.stock),0);
   const diffs = invDiffs(), diffVal = diffs.reduce((t,x)=>t+x.d*costOf(x.p.id),0);
@@ -3302,10 +3418,94 @@ function billForm(type, x){
 }
 
 /* --- Gestion --- */
-const TABS = [['dash','Tableau de bord'],['products','Produits'],['stock','Stock & inventaire'],['bundles','Lots'],['orders','Commandes'],['promos','Codes promo'],['affiliates','Ambassadeurs'],['reviews','Avis clients'],['studio','Studio réseaux'],['audience','Clients & retargeting'],['alerts','Alertes clients'],['carts','Assistant & paniers'],['company','Société'],['payments','Paiements'],['team','Équipe']];
+const TABS = [['dash','Tableau de bord'],['products','Produits'],['stock','Stock & inventaire'],['bundles','Lots'],['orders','Commandes'],['promos','Codes promo'],['affiliates','Ambassadeurs'],['reviews','Avis clients'],['blog','Conseils (blog)'],['studio','Studio réseaux'],['audience','Clients & retargeting'],['alerts','Alertes clients'],['carts','Assistant & paniers'],['company','Société'],['payments','Paiements'],['team','Équipe']];
+/* --- Gestion › Conseils --- */
+function blogIdeas(){
+  const city = S.settings.city||'Bamako', live = S.products.filter(p=>p.active!==false), cats = [...new Set(live.map(p=>p.category).filter(Boolean))];
+  const have = new Set(S.articles.map(a=>slugify(a.title)));
+  const ideas = [];
+  for(const c of cats.slice(0,8)){ const ps = live.filter(p=>p.category===c), lc = c.toLowerCase(), prices = ps.map(p=>p.price).sort((a,b)=>a-b), mid = prices[Math.floor(prices.length/2)]||0, cap = Math.ceil(mid*1.3/5000)*5000;
+    ideas.push({t:`Comment bien choisir en ${lc} à ${city} : le guide complet`, ids:ps.slice(0,4).map(p=>p.id)});
+    if(ps.length>=2 && cap) ideas.push({t:`Les meilleurs choix en ${lc} à moins de ${plainFmt(cap)} FCFA`, ids:ps.filter(p=>p.price<=cap).slice(0,5).map(p=>p.id)}); }
+  const top = live.slice().sort((a,b)=>soldCount(b)-soldCount(a)).slice(0,4);
+  for(const p of top.slice(0,2)) ideas.push({t:`${p.name} : notre avis, ses points forts et pour qui il est fait`, ids:[p.id]});
+  ideas.push({t:`Idées cadeaux pour la Tabaski et les fêtes à ${city}`, ids:top.map(p=>p.id)});
+  ideas.push({t:'Délestages et chaleur : nos astuces et les équipements utiles', ids:live.filter(p=>/solaire|lampe|ventil|batter|power|énergie|energie/i.test(p.name+' '+p.category)).slice(0,5).map(p=>p.id)});
+  return ideas.filter(i=>!have.has(slugify(i.t))).slice(0,8); }
+function paneBlog(){
+  const list = S.articles.slice().sort((a,b)=>(b.updatedAt||b.createdAt||0)-(a.updatedAt||a.createdAt||0)), pub = list.filter(a=>a.status==='published').length;
+  return `<div class="toolbar"><h2 style="font-size:24px;flex:1">Conseils (blog)</h2><button class="btn ghost" data-a="blog">Voir la page Conseils</button><button class="btn primary" data-a="artEdit">＋ Nouvel article</button></div>
+    <p class="muted" style="margin:0 0 14px">${pub} article${pub>1?'s':''} publié${pub>1?'s':''} · le meilleur moyen d’attirer des visiteurs depuis Google sur la durée.</p>
+    ${list.length?`<div class="panel tbl-wrap"><table><thead><tr><th>Article</th><th>Statut</th><th>Mis à jour</th><th>Produits</th><th></th></tr></thead><tbody>
+      ${list.map(a=>`<tr><td><b>${esc(a.title||'(sans titre)')}</b><div class="muted small">${esc(a.category||'')} · ${readMin(a.body)} min</div></td><td><span class="pill ${a.status==='published'?'ok':'warn'}">${a.status==='published'?'Publié':'Brouillon'}</span></td><td class="small">${dateFr(a.updatedAt||a.createdAt)}</td><td>${(a.productIds||[]).length}</td>
+        <td style="white-space:nowrap"><button class="btn ghost sm" data-a="article" data-id="${a.id}">Voir</button> <button class="btn ghost sm" data-a="artEdit" data-id="${a.id}">Modifier</button> <button class="btn ghost sm" data-a="artDel" data-id="${a.id}" aria-label="Supprimer">🗑</button></td></tr>`).join('')}</tbody></table></div>`:''}
+    <div class="panel"><h3>💡 Idées d’articles pour votre boutique</h3><p class="muted small" style="margin:0 0 8px">Chaque idée répond à une question que vos clients tapent sur Google, et renvoie vers vos produits. Touchez « Écrire » : le sujet et les produits sont déjà choisis.</p>
+      ${blogIdeas().map((i,n)=>`<div class="idea"><span>${esc(i.t)}${i.ids.length?` <span class="muted small">· ${i.ids.length} produit${i.ids.length>1?'s':''}</span>`:''}</span><button class="btn ghost sm" data-a="artIdea" data-v="${n}">Écrire</button></div>`).join('')||'<p class="muted">Ajoutez des produits avec une catégorie pour obtenir des idées.</p>'}</div>
+    <div class="panel"><h3>Les bonnes pratiques</h3><ul class="small" style="margin:0;padding-left:18px;line-height:1.7"><li>Un article = une question précise que se pose le client (« comment choisir… », « quel… pour… », « … à moins de … FCFA »).</li><li>600 à 1 000 mots, des sous-titres, des listes, et 2 à 5 de vos produits cités.</li><li>Relisez et ajoutez votre expérience : vos conseils de commerçant valent mieux qu’un texte générique.</li><li>Un article par semaine, régulièrement, et partagez chaque article sur WhatsApp et Facebook.</li></ul></div>`; }
+function autoArticle(topic, prods){
+  const city = S.settings.city||'Bamako', t = topic.trim().replace(/^./, c=>c.toUpperCase());
+  const body = [`Bien choisir, c’est éviter les mauvaises surprises et payer le juste prix. Voici l’essentiel à savoir avant d’acheter, avec livraison à ${city}.`, '',
+    '## Les critères à vérifier avant d’acheter', '- **Votre usage** : pour qui, combien de fois par jour, à la maison ou en déplacement ?', '- **Le budget** : fixez un montant, puis comparez ce que chaque modèle apporte à ce prix.',
+    '- **La qualité et la garantie** : regardez les photos, les caractéristiques et les avis des clients.', '- **Le service** : livraison, paiement à la réception, possibilité d’échange.', '',
+    ...(prods.length ? ['## Notre sélection', ...prods.flatMap(p=>[`### [[produit:${p.id}]]`, lines(p.highlights).slice(0,2).join('. ') || (p.description||'').slice(0,160) || 'Ajoutez ici votre avis sur ce produit.', ''])] : []),
+    '## Nos conseils de commerçant', '- Ajoutez ici votre expérience : ce que vos clients apprécient, les erreurs à éviter, l’entretien.', '',
+    '## En résumé', `Prenez le temps de comparer, vérifiez les avis et la garantie, et n’hésitez pas à nous écrire sur WhatsApp : nous vous conseillons gratuitement avant l’achat.`].join('\n');
+  return {title:t.slice(0,90), summary:`Nos conseils pour bien choisir${prods.length?' et notre sélection de '+prods.length+' produit'+(prods.length>1?'s':''):''}, avec livraison à ${city} et paiement à la réception.`, body};
+}
+function articleForm(a0){
+  const isNew = !a0 || !a0.id, id = (a0&&a0.id) || 'a'+Date.now().toString(36)+rnd(4).toLowerCase();
+  const a = Object.assign({title:'', category:'', summary:'', body:'', cover:'', productIds:[], status:'draft', seoTitle:'', seoDesc:''}, a0||{});
+  const cats = [...new Set([...S.articles.map(x=>x.category), 'Guides d’achat', 'Comparatifs', 'Astuces', 'Idées cadeaux', ...S.products.map(p=>p.category)].filter(Boolean))];
+  let cover = a.cover||'';
+  $('#overlay').innerHTML = `<div class="scrim"><div class="modal wide blog-ed" role="dialog" aria-modal="true" aria-label="Article"><div class="m-h"><h2>${isNew?'Nouvel article':'Modifier l’article'}</h2><button class="x" data-a="closeAll" aria-label="Fermer">×</button></div><div class="m-b">
+    <div class="panel" style="padding:12px 14px"><div class="field" style="margin:0"><label for="ar-topic">Sujet ou question visée (ce que le client tape sur Google)</label>
+      <div class="row" style="gap:8px"><input class="input" id="ar-topic" value="${esc(a0&&a0.topic||a.title)}" placeholder="ex. comment choisir un power bank pour les délestages" style="flex:1"><button class="btn primary sm" id="ar-gen" style="flex:0;white-space:nowrap">✨ ${isServer()?'Rédiger avec l’assistante':'Préparer le plan'}</button></div>
+      <div class="small" id="ar-genmsg" style="margin-top:6px"></div></div></div>
+    <div class="field"><label for="ar-title">Titre <span class="cnt" id="ar-title-c"></span></label><input class="input" id="ar-title" value="${esc(a.title)}" maxlength="110"></div>
+    <div class="row"><div class="field"><label for="ar-cat">Rubrique</label><input class="input" id="ar-cat" list="ar-cats" value="${esc(a.category)}"><datalist id="ar-cats">${cats.map(c=>`<option value="${esc(c)}">`).join('')}</datalist></div>
+      <div class="field" style="flex:0 1 180px"><label for="ar-status">Statut</label><select class="input" id="ar-status"><option value="draft" ${a.status!=='published'?'selected':''}>Brouillon</option><option value="published" ${a.status==='published'?'selected':''}>Publié</option></select></div></div>
+    <div class="field"><label>Image de couverture</label><div class="row" style="gap:10px;align-items:center"><span id="ar-cv" style="width:120px;height:68px;border-radius:10px;overflow:hidden;background:var(--surface-2);display:grid;place-items:center;flex:none">${cover?`<img src="${esc(cover)}" alt="" style="width:100%;height:100%;object-fit:cover">`:'📖'}</span>
+      <label class="btn ghost sm" style="flex:0;white-space:nowrap">Choisir une image<input type="file" accept="image/*" class="sr" id="ar-cvf"></label><button class="btn ghost sm" id="ar-cvdel" style="flex:0">Retirer</button><span class="muted small">Sans image : la photo du premier produit lié.</span></div></div>
+    <div class="field"><label for="ar-sum">Résumé (2 phrases, affiché en tête et dans les listes)</label><textarea class="input" id="ar-sum" style="min-height:70px">${esc(a.summary)}</textarea></div>
+    <div class="field"><label for="ar-body">Contenu</label><textarea class="input body" id="ar-body" placeholder="## Titre de section&#10;Un paragraphe…&#10;- une liste&#10;**en gras**">${esc(a.body)}</textarea>
+      <div class="row" style="gap:8px;margin-top:6px;align-items:center;flex-wrap:wrap"><span class="muted small" style="flex:1;min-width:200px">## titre · ### sous-titre · - liste · **gras** · [texte](lien)</span><select class="input" id="ar-ins" style="flex:0 1 240px"><option value="">Insérer un produit…</option>${S.products.filter(p=>p.active!==false).map(p=>`<option value="${p.id}">${esc(p.name)}</option>`).join('')}</select></div></div>
+    <div class="field"><label>Produits liés (affichés dans l’article et sur leur fiche)</label><input class="input" id="ar-pq" placeholder="Filtrer…" style="margin-bottom:6px"><div class="prod-pick" id="ar-pp">${S.products.filter(p=>p.active!==false).map(p=>`<label data-n="${esc(p.name.toLowerCase())}"><input type="checkbox" value="${p.id}" ${(a.productIds||[]).includes(p.id)?'checked':''}> ${esc(p.name)} <span class="muted small">· ${fmt(p.price)}</span></label>`).join('')}</div></div>
+    <details class="panel" style="padding:12px 14px" open><summary style="cursor:pointer;font-weight:800">🔎 Référencement Google</summary>
+      <div class="field" style="margin-top:10px"><label for="ar-seot">Titre SEO <span class="cnt" id="ar-seot-c"></span></label><input class="input" id="ar-seot" maxlength="70" value="${esc(a.seoTitle)}" placeholder="automatique"></div>
+      <div class="field"><label for="ar-seod">Méta-description <span class="cnt" id="ar-seod-c"></span></label><textarea class="input" id="ar-seod" maxlength="170" style="min-height:60px" placeholder="automatique">${esc(a.seoDesc)}</textarea></div><div id="ar-serp"></div></details>
+    <div class="small" id="ar-err" style="color:var(--danger)"></div></div>
+    <div class="m-f"><button class="btn ghost" data-a="closeAll">Annuler</button><button class="btn primary" id="ar-save">Enregistrer</button></div></div></div>`;
+  const autoSeoA = ()=>{ const t = $('#ar-title').value.trim(), sm = $('#ar-sum').value.trim(); return {title: [`${t} | ${S.settings.shopName}`, t].find(x=>x.length<=60) || cutWords(t,60), desc: cutWords(sm || `Nos conseils : ${t}.`, 155)}; };
+  const draw = ()=>{ const au = autoSeoA(); $('#ar-seot').placeholder = au.title; $('#ar-seod').placeholder = au.desc; seoCounter($('#ar-title'), 65, $('#ar-title-c'));
+    seoCounter($('#ar-seot'), 60, $('#ar-seot-c')); seoCounter($('#ar-seod'), 155, $('#ar-seod-c')); if(!$('#ar-seot').value){ $('#ar-seot-c').textContent = 'auto · '+au.title.length+' / 60'; $('#ar-seot-c').className='cnt ok'; } if(!$('#ar-seod').value){ $('#ar-seod-c').textContent = 'auto · '+au.desc.length+' / 155'; $('#ar-seod-c').className='cnt ok'; }
+    $('#ar-serp').innerHTML = serpHTML((isServer()?location.host:'votre-boutique')+' › conseils', $('#ar-seot').value||au.title, $('#ar-seod').value||au.desc); };
+  ['#ar-title','#ar-sum','#ar-seot','#ar-seod'].forEach(x=>$(x).addEventListener('input', draw)); draw();
+  const picked = ()=>[...document.querySelectorAll('#ar-pp input:checked')].map(i=>i.value);
+  $('#ar-pq').oninput = e=>{ const q = e.target.value.toLowerCase(); document.querySelectorAll('#ar-pp label').forEach(l=>l.style.display = l.dataset.n.includes(q)?'':'none'); };
+  $('#ar-ins').onchange = e=>{ const v = e.target.value; if(!v) return; const ta = $('#ar-body'), pos = ta.selectionStart ?? ta.value.length, tok = `\n[[produit:${v}]]\n`; ta.value = ta.value.slice(0,pos)+tok+ta.value.slice(pos); e.target.value='';
+    const cb = document.querySelector(`#ar-pp input[value="${v}"]`); if(cb) cb.checked = true; ta.focus(); };
+  $('#ar-cvf').onchange = async e=>{ const f = e.target.files[0]; if(!f) return; try{ cover = await compress(f); $('#ar-cv').innerHTML = `<img src="${esc(cover)}" alt="" style="width:100%;height:100%;object-fit:cover">`; }catch(err){ toast('Image illisible'); } };
+  $('#ar-cvdel').onclick = e=>{ e.preventDefault(); cover = ''; $('#ar-cv').textContent = '📖'; };
+  $('#ar-gen').onclick = async e=>{ e.preventDefault(); const topic = $('#ar-topic').value.trim(), msg = $('#ar-genmsg'), b = e.currentTarget; if(topic.length<5){ msg.textContent = 'Indiquez d’abord le sujet.'; msg.style.color='var(--danger)'; return; }
+    if($('#ar-body').value.trim() && !confirm('Remplacer le titre, le résumé et le contenu actuels ?')) return;
+    const ids = picked(), prods = ids.map(i=>S.products.find(p=>p.id===i)).filter(Boolean); b.disabled = true; msg.textContent = isServer() ? 'L’assistante rédige l’article (30 à 60 secondes)…' : 'Préparation…'; msg.style.color='var(--muted)';
+    let r = null, why = '';
+    if(window.articleAI){ try{ r = await window.articleAI({topic, productIds:ids}); }catch(err){ why = err.message||''; } }
+    if(!r){ r = autoArticle(topic, prods); }
+    $('#ar-title').value = r.title||''; $('#ar-sum').value = r.summary||''; $('#ar-body').value = r.body||''; if(r.category && !$('#ar-cat').value) $('#ar-cat').value = r.category;
+    if(r.seoTitle) $('#ar-seot').value = r.seoTitle; if(r.seoDesc) $('#ar-seod').value = r.seoDesc; draw(); b.disabled = false;
+    msg.textContent = r.seoTitle||window.articleAI&&!why ? '✓ Article rédigé par l’assistante : relisez-le et ajoutez votre expérience.' : `Plan prêt${why?' (assistante indisponible : '+why+')':''} : complétez les parties à écrire, puis publiez.`; msg.style.color='var(--kola)'; };
+  $('#ar-save').onclick = async e=>{ e.preventDefault(); const t = $('#ar-title').value.trim(), err = $('#ar-err'); if(t.length<10) return err.textContent = 'Le titre doit faire au moins 10 caractères.';
+    const body = $('#ar-body').value.trim(), status = $('#ar-status').value; if(status==='published' && body.split(/\s+/).length<80) return err.textContent = 'Un article publié doit faire au moins 80 mots (visez 600 et plus pour Google).';
+    if(status==='published' && /Ajoutez ici/.test(body)) return err.textContent = 'Complétez les passages « Ajoutez ici… » avant de publier (ou enregistrez en brouillon).';
+    const au = autoSeoA(), now = Date.now();
+    const doc = {title:t, category:$('#ar-cat').value.trim(), summary:$('#ar-sum').value.trim(), body, cover, productIds:picked().slice(0,12), status, seoTitle:$('#ar-seot').value.trim()||au.title, seoDesc:$('#ar-seod').value.trim()||au.desc,
+      createdAt:a.createdAt||now, updatedAt:now, publishedAt: status==='published' ? (a.publishedAt||now) : (a.publishedAt||0)};
+    try{ await put('articles', id, doc); closeAll(); toast(status==='published' ? 'Article publié ✓' : 'Brouillon enregistré'); }catch(e2){ dbErr(e2); } };
+}
 function viewAdmin(){
   const pending = S.orders.filter(o=>o.status==='en_attente'||(o.status==='payee'&&!o.stockApplied)).length;
-  const panes = {dash:paneDash, products:paneProducts, stock:paneStock, bundles:paneBundles, orders:paneOrders, promos:panePromos, affiliates:paneAffiliates, reviews:paneReviews, studio:paneStudio, audience:paneAudience, company:paneCompany, alerts:()=>window.paneAlerts?window.paneAlerts():'', carts:()=>window.paneCarts?window.paneCarts():'', payments:panePayments, team:paneTeam};
+  const panes = {dash:paneDash, products:paneProducts, stock:paneStock, bundles:paneBundles, orders:paneOrders, promos:panePromos, affiliates:paneAffiliates, reviews:paneReviews, blog:paneBlog, studio:paneStudio, audience:paneAudience, company:paneCompany, alerts:()=>window.paneAlerts?window.paneAlerts():'', carts:()=>window.paneCarts?window.paneCarts():'', payments:panePayments, team:paneTeam};
   return `<div class="admin"><nav class="side" aria-label="Gestion">${TABS.filter(([k])=>!['alerts','carts'].includes(k)||isServer()).map(([k,l])=>`<button data-a="tab" data-v="${k}" ${S.tab===k?'aria-current="page"':''}>${l}${k==='orders'&&pending?`<span class="pill warn">${pending}</span>`:''}</button>`).join('')}</nav>
     <section>${panes[S.tab]()}</section></div>`;
 }
@@ -3321,12 +3521,18 @@ function lpStatsPanel(){
     ${rows.map(r=>`<tr><td><b>${esc(r.p.name)}</b>${r.p.lpHook?`<div class="muted small">« ${esc(r.p.lpHook)} »</div>`:''}</td><td style="text-align:right">${r.views}</td><td style="text-align:right">${r.orders}</td><td style="text-align:right"><b style="color:${r.rate>=3?'var(--kola)':r.views>=20&&r.rate<1?'var(--danger)':'inherit'}">${r.rate.toFixed(1).replace('.',',')} %</b></td><td style="text-align:right">${fmt(r.rev)}</td><td><button class="btn ghost sm" data-a="openLanding" data-id="${r.p.id}">Voir</button></td></tr>`).join('')}</tbody></table>
     <p class="muted small" style="margin:10px 0 0">Repère : au-delà de 3 % de conversion, la page fonctionne bien. Une page très visitée mais qui convertit peu mérite une meilleure accroche, de meilleures photos, une vidéo ou une offre.</p></div>`;
 }
-function paneDash(){ return paneDashBase() + lpStatsPanel(); }
+function affPanel(){
+  const ps = S.products.filter(isPartner); if(!ps.length) return '';
+  const d30 = new Date(Date.now()-30*864e5).toISOString().slice(0,10);
+  const rows = ps.map(p=>{ const c = S.affClicks.find(x=>x.id===p.id)||{}; return {p, m:Object.entries(c.days||{}).filter(([k])=>k>=d30).reduce((t,[,n])=>t+n,0), all:c.count||0}; }).sort((a,b)=>b.m-a.m);
+  return `<div class="panel tbl-wrap"><h3>🔗 Liens partenaires · 30 derniers jours</h3><p class="muted small" style="margin:-4px 0 10px">${isServer()?`${rows.reduce((t,r)=>t+r.m,0)} clics vers les sites partenaires. Les ventes et commissions se consultent sur votre compte Amazon Partenaires ou AliExpress.`:'Les clics sont comptés sur la version Render.'}</p>
+    <table><thead><tr><th>Produit</th><th>Site</th><th style="text-align:right">Clics (30 j)</th><th style="text-align:right">Total</th></tr></thead><tbody>${rows.map(r=>`<tr><td><b>${esc(r.p.name)}</b></td><td>${esc(partnerName(r.p))}</td><td style="text-align:right">${r.m}</td><td style="text-align:right">${r.all}</td></tr>`).join('')}</tbody></table></div>`; }
+function paneDash(){ return paneDashBase() + lpStatsPanel() + affPanel(); }
 function paneDashBase(){
   const valid = S.orders.filter(o=>o.status!=='annulee' && o.status!=='en_attente');
   const revenue = valid.reduce((s,o)=>s+o.total,0);
   const avg = valid.length ? revenue/valid.length : 0;
-  const low = S.products.filter(p=>p.stock<=(p.lowStock||5));
+  const low = S.products.filter(p=>!isPartner(p) && p.stock<=(p.lowStock||5));
   const toValidate = S.orders.filter(o=>o.status==='payee'&&!o.stockApplied);
   const days = [...Array(14)].map((_,i)=>{ const d=new Date(); d.setHours(0,0,0,0); d.setDate(d.getDate()-13+i); return d; });
   const vals = days.map(d=>valid.filter(o=>{ const t=new Date(o.createdAt); t.setHours(0,0,0,0); return t.getTime()===d.getTime(); }).reduce((s,o)=>s+o.total,0));
@@ -3360,7 +3566,7 @@ function paneProducts(){
     <button class="btn ghost" data-a="seoAll">🔎 Compléter le SEO</button><button class="btn ghost" data-a="cnImport">🌍 Importer un produit</button><button class="btn ghost" data-a="scanImport">📷 Scanner un produit</button><button class="btn ghost" data-a="labelsAll">🏷️ Étiquettes</button>${isServer()?'<button class="btn ghost" data-a="fbCatalog">Catalogue Facebook</button>':''}${dl?'<button class="btn ghost" data-a="exportProducts">Exporter CSV</button>':''}<button class="btn primary" data-a="newProduct">Ajouter un produit</button></div>
     <div class="panel tbl-wrap">${list.length?`<table><thead><tr><th></th><th>Produit</th><th>Catégorie</th><th>Prix</th><th>Achat</th><th>Marge</th><th>Stock</th><th>En vente</th></tr></thead><tbody>
     ${list.map(p=>`<tr class="click" data-a="editProduct" data-id="${p.id}"><td><div class="li-img" style="width:40px;height:40px;font-size:20px">${pImg(p)}</div></td><td><b>${esc(p.name)}</b><div class="muted small">${esc(p.sku)}</div></td><td>${esc(p.category)}</td><td>${fmt(p.price)}</td><td class="small">${costOf(p.id)?fmt(costOf(p.id)):'<span class="muted">—</span>'}</td><td class="small">${costOf(p.id)?`<span class="${p.price-costOf(p.id)>=0?'amt-in':'amt-out'}">${pct(p.price-costOf(p.id),p.price)} %</span>`:'—'}</td>
-    <td><span class="pill ${p.stock<=0?'bad':p.stock<=(p.lowStock||5)?'warn':'ok'}">${p.stock}</span></td><td><span class="pill ${p.active!==false?'ok':''}">${p.active!==false?'Oui':'Masqué'}</span></td></tr>`).join('')}</tbody></table>`
+    <td>${isPartner(p)?`<span class="pill info">↗ ${esc(partnerName(p))}</span>`:`<span class="pill ${p.stock<=0?'bad':p.stock<=(p.lowStock||5)?'warn':'ok'}">${p.stock}</span>`}</td><td><span class="pill ${p.active!==false?'ok':''}">${p.active!==false?'Oui':'Masqué'}</span></td></tr>`).join('')}</tbody></table>`
     :`<div class="empty"><h3>${S.products.length?'Aucun résultat':'Aucun produit'}</h3><p>${S.products.length?'Modifiez votre recherche.':'Créez votre premier article pour ouvrir la boutique.'}</p></div>`}</div>`;
 }
 function paneBundles(){
@@ -3427,6 +3633,10 @@ function productForm(p){
         <div class="field" style="margin-top:10px"><label for="pf-emoji">Icône si pas de photo</label><input class="input" id="pf-emoji" value="${esc(p.emoji)}" maxlength="4"></div></div>
       <div style="flex:1 1 320px">
         <div class="field"><label for="pf-name">Nom du produit</label><input class="input" id="pf-name" value="${esc(p.name)}"></div>
+        <details class="panel" style="padding:12px 14px;margin:0 0 14px" ${isPartner(p)?'open':''}><summary style="cursor:pointer;font-weight:800">🔗 Produit partenaire (lien d’affiliation)</summary>
+          <p class="muted small" style="margin:8px 0 10px">Pour un produit que vous ne vendez pas vous-même : le bouton « Voir sur Amazon ↗ » remplace l’ajout au panier, et vous touchez une commission sur les achats. Le prix saisi plus bas devient un prix indicatif (0 = « Voir le prix »).</p>
+          <div class="row"><div class="field" style="flex:0 1 180px"><label for="pf-pplat">Site partenaire</label><select class="input" id="pf-pplat"><option value="">— Non (produit de la boutique)</option>${Object.entries(PARTNERS).map(([k,v])=>`<option value="${k}" ${isPartner(p)&&p.partner.platform===k?'selected':''}>${k==='autre'?'Autre site':v.n}</option>`).join('')}</select></div>
+          <div class="field"><label for="pf-purl">Votre lien partenaire (affilié)</label><input class="input" id="pf-purl" value="${esc(isPartner(p)?p.partner.url:'')}" placeholder="https://amzn.to/… ou https://s.click.aliexpress.com/…"></div></div></details>
         <div class="row"><div class="field"><label for="pf-cat">Catégorie</label><input class="input" id="pf-cat" list="pf-cats" value="${esc(p.category)}"><datalist id="pf-cats">${cats.map(c=>`<option value="${esc(c)}">`).join('')}</datalist></div>
         <div class="field"><label for="pf-sku">SKU (référence interne)</label><input class="input" id="pf-sku" value="${esc(p.sku)}"></div></div>
         <div class="panel" style="padding:14px;margin-bottom:14px"><h3 style="font-size:19px;margin-bottom:6px">Code-barres et QR code</h3>
@@ -3576,9 +3786,12 @@ function productForm(p){
       if(!r) r = autoSeo(cur()); $('#pf-seot').value = r.title||''; $('#pf-seod').value = r.desc||''; drawSerp(); b.disabled = false; b.textContent = '✨ Générer'+(isServer()?' avec l’assistante':' automatiquement'); }; }
   $('#pf-save').onclick = async ()=>{
     const v = id=>$(id).value.trim();
+    if($('#pf-pplat') && $('#pf-pplat').value && !/^https:\/\/\S+$/.test(v('#pf-purl'))){ $('#pf-err').textContent = 'Collez votre lien partenaire complet (il commence par https://).'; $('#pf-purl').focus(); return; }
     const data = {name:v('#pf-name'), category:v('#pf-cat')||'Divers', sku:v('#pf-sku'), barcode:(v('#pf-bc').replace(/\s/g,'')||pCode({id:pid})), price:Number(v('#pf-price').replace(/\s/g,'')), comparePrice:Number(v('#pf-cmp').replace(/\s/g,''))||0,
       stock:Math.max(0,parseInt(v('#pf-stock'))||0), ...(()=>{ readVars(); const opts = readOpts(); const keys = new Set(); return vars.length && opts.length ? {options:opts, variants:vars.filter(x=>!keys.has(x.key) && keys.add(x.key)).map(x=>({key:x.key, vals:x.vals, stock:Math.max(0,Number(x.stock)||0), price:Number(x.price)>0?Number(x.price):'', sku:x.sku||'', barcode:x.barcode||makeEan(pid+'|'+x.key)}))} : {options:[], variants:[]}; })(), lowStock:Math.max(0,parseInt(v('#pf-low'))||0), emoji:v('#pf-emoji')||'📦', description:v('#pf-desc'),
       condition:$('#pf-cond').value, conditionNote:$('#pf-cond').value==='neuf'?'':v('#pf-cnote'),
+      ...(()=>{ const plat = $('#pf-pplat') ? $('#pf-pplat').value : '', u = $('#pf-purl') ? v('#pf-purl') : ''; if(!plat) return {partner:null};
+        return {partner:{platform:plat, url:u.slice(0,600)}, stock:0}; })(),
       ...(()=>{ if(!$('#pf-seot')) return {}; const a = autoSeo({...p, name:v('#pf-name'), price:Number(v('#pf-price').replace(/\s/g,'')), comparePrice:Number(v('#pf-cmp').replace(/\s/g,''))||0, highlights:v('#pf-hl'), description:v('#pf-desc'), condition:$('#pf-cond').value}); return {seoTitle:v('#pf-seot')||a.title, seoDesc:v('#pf-seod')||a.desc, seoAuto:!v('#pf-seot') && !v('#pf-seod')}; })(),
       lpHook:v('#lp-hook'), lpSub:v('#lp-sub'), lpProblem:$('#lp-pb').value.trim(), lpSolution:$('#lp-so').value.trim(), lpUsages:$('#lp-us').value.trim(), lpFaq:$('#lp-faq').value.trim(), lpOffer:v('#lp-off'), lpUntil:$('#lp-until').value, lpVideo:(pv=>pv&&!pv.short)(parseVideo(v('#lp-vid')))?v('#lp-vid'):'', lpVideoTitle:v('#lp-vidt'),
       highlights:$('#pf-hl').value.trim(), details:$('#pf-details').value.trim(), specs:$('#pf-specs').value.trim(), warranty:v('#pf-war'), active:$('#pf-active').checked,
@@ -3587,7 +3800,8 @@ function productForm(p){
       carousel:({on:true, off:false})[$('#pf-car').value],
       affPct:v('#pf-aff')===''?'':Math.min(100,Math.max(0,Number(v('#pf-aff').replace(',','.'))||0)),
       createdAt:p.createdAt||Date.now(), updatedAt:Date.now()};
-    if(!data.name || !(data.price>0)){ $('#pf-err').textContent='Le nom et un prix supérieur à zéro sont obligatoires.'; return; }
+    if(data.partner && !(data.price>=0)) data.price = 0;
+    if(!data.name || !(data.price>0 || data.partner)){ $('#pf-err').textContent='Le nom et un prix supérieur à zéro sont obligatoires.'; return; }
     if(data.bulkMin>1 && !(data.bulkPrice>0 && data.bulkPrice<data.price)){ $('#pf-err').textContent='Le prix de gros doit être inférieur au prix de vente.'; return; }
     $('#pf-save').disabled=true;
     try{
@@ -3784,7 +3998,7 @@ const CO_FIELDS = [
   ['legalName','Raison sociale','ex. FOUFOUNI MARKET SARL'],['legalForm','Forme juridique','ex. SARL, SUARL, SA, Entreprise individuelle, GIE'],['capital','Capital social','ex. 1 000 000 FCFA'],
   ['rccm','N° RCCM','ex. MA.BKO.2026.B.1234'],['nif','NIF','ex. 084123456X'],
   ['address','Adresse','ex. Rue 312, Hamdallaye ACI 2000'],['city','Ville','Bamako'],['country','Pays','Mali'],
-  ['phone','Téléphone principal','ex. +223 70 00 00 00'],['phone2','Second téléphone',''],['whatsapp','WhatsApp','ex. +223 70 00 00 00'],['email','E-mail','ex. contact@foufouni.ml'],
+  ['phone','Téléphone principal','ex. +223 70 00 00 00'],['phone2','Second téléphone',''],['whatsapp','WhatsApp','ex. +223 70 00 00 00'],['email','E-mail','ex. contact@foufouni-market.com'],
   ['hours','Horaires','ex. Lun – sam, 8 h – 19 h'],['receiptNote','Message en bas des reçus','ex. Merci pour votre confiance !']];
 function paneCompany(){
   const st = S.settings, f = k => `<div class="field"><label for="co-${k}">${esc((CO_FIELDS.find(x=>x[0]===k)||[])[1])}</label><input class="input" id="co-${k}" data-co="${k}" value="${esc(st[k]||'')}" placeholder="${esc((CO_FIELDS.find(x=>x[0]===k)||[])[2]||'')}"></div>`;
@@ -3937,7 +4151,7 @@ document.addEventListener('click', async e=>{
   const id = el.dataset.id;
   switch(a){
     case 'closeAll': closeAll(); break;
-    case 'go': if(S.view==='product' || S.view==='landing' || S.view==='guide'){ try{ history.pushState({},'',homePath()); }catch(e){} } S.view=el.dataset.v; S.aq=''; closeAll(); schedule(); window.scrollTo(0,0); break;
+    case 'go': if(['product','landing','guide','blog','article'].includes(S.view)){ try{ history.pushState({},'',homePath()); }catch(e){} } S.view=el.dataset.v; S.aq=''; closeAll(); schedule(); window.scrollTo(0,0); break;
     case 'cat': S.facets={}; S.grades=[]; S.cat=el.dataset.v; if(prettyOn() && S.view==='shop'){ try{ history.replaceState({},'', S.products.some(p=>p.category===S.cat) ? catPathC(S.cat) : '/'); }catch(err){} } schedule(); if(el.closest('.sale')) setTimeout(()=>$('#catalogue')?.scrollIntoView({behavior:'smooth'}),60); break;
     case 'clearSearch': S.q=''; S.cat='Tout'; schedule(); break;
     case 'scroll': $('#catalogue').scrollIntoView({behavior:matchMedia('(prefers-reduced-motion:reduce)').matches?'auto':'smooth'}); break;
@@ -4082,6 +4296,13 @@ document.addEventListener('click', async e=>{
     case 'catDrawer': catDrawer(); break;
     case 'catPick': { closeAll(); S.facets={}; S.grades=[]; S.cat = el.dataset.v; S.q=''; S.view='shop'; try{ history.pushState({},'', S.cat==='Tout' ? homePath() : catPathC(S.cat)); }catch(err){} schedule(); setTimeout(()=>$('#catalogue')?.scrollIntoView({behavior:'smooth'}), 120); break; }
     case 'voiceSearch': voiceSearch(el); break;
+    case 'blog': openBlog(); break;
+    case 'blogCat': S.blogCat = el.dataset.v; schedule(); break;
+    case 'article': openArticle(id); break;
+    case 'artEdit': articleForm(id ? S.articles.find(x=>x.id===id) : null); break;
+    case 'artIdea': { const i = blogIdeas()[Number(el.dataset.v)]; if(i) articleForm({title:i.t, topic:i.t, productIds:i.ids}); break; }
+    case 'artDel': if(confirm('Supprimer cet article ? Son adresse ne fonctionnera plus.')){ try{ await del('articles', id); toast('Article supprimé'); }catch(err){ dbErr(err); } } break;
+    case 'copyArt': try{ await navigator.clipboard.writeText(el.dataset.v); toast('Lien copié'); }catch(err){ toast(el.dataset.v); } break;
     case 'copyPayNum': try{ await navigator.clipboard.writeText(el.dataset.v.replace(/\s/g,'')); toast('Numéro copié'); }catch(err){ toast(el.dataset.v); } break;
     case 'install': window.__instPopup = false; installGuide(); break;
     case 'instNever': try{ localStorage.setItem('ffm-inst-never','1'); }catch(err){} closeAll(); toast('D’accord, nous ne l’afficherons plus. Le guide reste disponible en bas de page.'); break;

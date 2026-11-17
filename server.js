@@ -11,6 +11,10 @@ const env = process.env;
 const PORT = Number(env.PORT || 3000);
 const BASE_URL = (env.BASE_URL || env.RENDER_EXTERNAL_URL || `http://localhost:${PORT}`).replace(/\/$/, '');
 const BASE_ORIGIN = new URL(BASE_URL).origin;
+/* Adresses autorisées : le domaine, sa version avec ou sans www, l'adresse Render, et ALLOWED_ORIGINS (séparées par des virgules) */
+const ALLOWED_ORIGINS = new Set([BASE_ORIGIN]);
+{ const u = new URL(BASE_ORIGIN), h = u.hostname; if (!/^(localhost|[\d.]+)$/.test(h)) ALLOWED_ORIGINS.add(`${u.protocol}//${h.startsWith('www.') ? h.slice(4) : 'www.' + h}${u.port ? ':' + u.port : ''}`);
+  for (const x of [env.RENDER_EXTERNAL_URL, ...String(env.ALLOWED_ORIGINS || '').split(',')]) { try { if (x && x.trim()) ALLOWED_ORIGINS.add(new URL(x.trim()).origin); } catch (e) {} } }
 const SECURE = BASE_URL.startsWith('https://');
 if (!env.SESSION_SECRET || env.SESSION_SECRET.length < 32) {
   console.error('SESSION_SECRET manquant ou trop court (32 caractères minimum).');
@@ -225,7 +229,7 @@ async function vapidKeys() {
   if (!k) { k = await WP.generateVapidKeys(); putDoc('push-config', 'vapid', k); await store.flush(); }
   return (VAPID = k);
 }
-const PUSH_SUBJECT = 'mailto:' + (env.ADMIN_EMAIL || 'contact@foufouni.ml');
+const PUSH_SUBJECT = 'mailto:' + (env.ADMIN_EMAIL || 'contact@foufouni-market.com');
 async function pushTo(subs, msg) {
   const v = await vapidKeys(); let sent = 0, failed = 0;
   for (let i = 0; i < subs.length; i += 20) {
@@ -295,6 +299,10 @@ function affCommission(lines, discPct) {
   return Math.round(lines.reduce((t, l) => t + l.price * l.qty * k * affPct(l.bundle ? getDoc('bundles', l.id.slice(2)) : getDoc('products', l.id)) / 100, 0));
 }
 
+/* Produits partenaires (liens d’affiliation) */
+const isPartnerS = p => !!(p && p.partner && /^https:\/\/\S+$/.test(p.partner.url || ''));
+const AFF_HOST_RE = /(^|\.)(amazon\.[a-z.]+|amzn\.to|aliexpress\.[a-z.]+|s\.click\.aliexpress\.com|temu\.com|jumia\.[a-z.]+)$/i;
+const isAffUrlS = u => { try { return AFF_HOST_RE.test(new URL(String(u).replace(/&amp;/g, '&')).hostname); } catch (e) { return false; } };
 function computeOrder(items, promoCode, delivery, ref) {
   if (!Array.isArray(items) || !items.length || items.length > 50) throw httpErr(400, 'Panier invalide.');
   const prodQty = new Map(), bundleQty = new Map();
@@ -309,6 +317,7 @@ function computeOrder(items, promoCode, delivery, ref) {
     const [id, v] = k.split('|');
     const p = getDoc('products', id);
     if (!p || p.active === false) throw httpErr(400, 'Un article de votre panier n’est plus disponible.');
+    if (isPartnerS(p)) throw httpErr(400, `« ${p.name} » est vendu par un site partenaire : il ne peut pas être commandé ici.`);
     if (hasVar(p)) {
       const vr = v && p.variants.find(x => x.key === v);
       if (!vr) throw httpErr(400, `Choisissez la variante de ${p.name}.`);
@@ -318,7 +327,7 @@ function computeOrder(items, promoCode, delivery, ref) {
   for (const [bid, qty] of bundleQty) {
     const b = getDoc('bundles', bid);
     if (!b || b.active === false || !Array.isArray(b.items) || !b.items.length) throw httpErr(400, 'Un lot de votre panier n’est plus disponible.');
-    for (const c of b.items) { const p = getDoc('products', c.id); if (!p || p.active === false) throw httpErr(400, `Le lot ${b.name} n’est plus disponible.`); }
+    for (const c of b.items) { const p = getDoc('products', c.id); if (!p || p.active === false || isPartnerS(p)) throw httpErr(400, `Le lot ${b.name} n’est plus disponible.`); }
     lines.push({ id: 'b:' + bid, bundle: true, name: 'Lot · ' + b.name, price: Math.round(Number(b.price) || 0), qty, components: b.items.map(c => ({ id: c.id, qty: Number(c.qty) || 1 })) });
   }
   const totals = {};
@@ -686,7 +695,7 @@ app.use(express.json({ limit: '3mb' }));
 app.use('/api', (req, res, next) => {
   if (req.method === 'GET') return next();
   const origin = req.headers.origin;
-  if (origin && origin !== BASE_ORIGIN) return res.status(403).json({ error: 'Origine refusée.' });
+  if (origin && !ALLOWED_ORIGINS.has(origin)) return res.status(403).json({ error: 'Origine refusée.' });
   next();
 });
 
@@ -698,7 +707,7 @@ function sold30(id) {
     soldCache = { at: Date.now(), map: m }; }
   return soldCache.map[id] || 0;
 }
-const publicProduct = p => ({ id: p.id, name: p.name, sku: p.sku, category: p.category, price: p.price, comparePrice: p.comparePrice, stock: p.stock, lowStock: p.lowStock, emoji: p.emoji, image: p.image, description: p.description, active: true, createdAt: p.createdAt, bulkMin: p.bulkMin || 0, bulkPrice: p.bulkPrice || 0, newUntil: p.newUntil || 0, ...(typeof p.carousel === 'boolean' ? { carousel: p.carousel } : {}),
+const publicProduct = p => ({ ...(isPartnerS(p) ? { partner: { platform: ['amazon', 'aliexpress', 'temu', 'jumia', 'autre'].includes(p.partner.platform) ? p.partner.platform : 'autre', url: p.partner.url } } : {}), id: p.id, name: p.name, sku: p.sku, category: p.category, price: p.price, comparePrice: p.comparePrice, stock: p.stock, lowStock: p.lowStock, emoji: p.emoji, image: p.image, description: p.description, active: true, createdAt: p.createdAt, bulkMin: p.bulkMin || 0, bulkPrice: p.bulkPrice || 0, newUntil: p.newUntil || 0, ...(typeof p.carousel === 'boolean' ? { carousel: p.carousel } : {}),
   condition: p.condition || 'neuf', conditionNote: p.conditionNote || '',
   lpHook: p.lpHook || '', lpSub: p.lpSub || '', lpProblem: p.lpProblem || '', lpSolution: p.lpSolution || '', lpUsages: p.lpUsages || '', lpFaq: p.lpFaq || '', lpOffer: p.lpOffer || '', lpUntil: p.lpUntil || '',
   angleCaps: Array.isArray(p.angleCaps) ? p.angleCaps : [], spin: Array.isArray(p.spin) ? p.spin : [],
@@ -709,7 +718,7 @@ const publicProduct = p => ({ id: p.id, name: p.name, sku: p.sku, category: p.ca
 app.get('/api/public/catalog', (req, res) => {
   const reviews = allDocs('reviews').filter(r => r.status !== 'hidden').sort((a, b) => b.createdAt - a.createdAt).slice(0, 1500)
     .map(r => ({ id: r.id, productId: r.productId, rating: r.rating, comment: r.comment, name: r.name, photos: r.photos || [], reply: r.reply || '', createdAt: r.createdAt, status: 'published' }));
-  res.json({ reviews, products: allDocs('products').filter(p => p.active !== false).map(publicProduct), bundles: allDocs('bundles').filter(b => b.active !== false), settings: publicSettings(), providers: providers() });
+  res.json({ reviews, articles: pubArticles().map(publicArticle), products: allDocs('products').filter(p => p.active !== false).map(publicProduct), bundles: allDocs('bundles').filter(b => b.active !== false), settings: publicSettings(), providers: providers() });
 });
 app.post('/api/promo/check', h((req, res) => {
   if (limited('promo:' + req.ip, 20, 60e3)) throw httpErr(429, 'Trop d’essais. Patientez une minute.');
@@ -1200,7 +1209,7 @@ app.get('/api/admin/state', requireStaff, (req, res) => {
     costs: allDocs('costs'), stockMoves: allDocs('stock-moves').sort((a, b) => b.createdAt - a.createdAt).slice(0, 1000),
     ai: !!env.ANTHROPIC_API_KEY,
     drivers: allDocs('drivers').sort((a, b) => a.name.localeCompare(b.name)),
-    lpStats: allDocs('lp-stats'),
+    lpStats: allDocs('lp-stats'), articles: allDocs('articles'), affClicks: allDocs('aff-clicks'),
     purchases: allDocs('purchases').sort((a, b) => b.createdAt - a.createdAt).slice(0, 500),
     campaigns: allDocs('campaigns').sort((a, b) => b.createdAt - a.createdAt).slice(0, 200), contactFlags: allDocs('contact-flags'),
     visits: allDocs('visits').map(v => ({ id: v.id, count: v.count || 0, count30: Object.entries(v.days || {}).filter(([k]) => k >= addDays(today(), -30)).reduce((t, [, n]) => t + n, 0) })),
@@ -1215,7 +1224,7 @@ app.get('/api/admin/state', requireStaff, (req, res) => {
     settings: s, users: store.users.list(), providers: providers(), configured: CONFIGURED, me: req.user
   });
 });
-const ADMIN_COLS = new Set(['products', 'product-images', 'costs', 'stock-moves', 'lp-stats', 'campaigns', 'contact-flags', 'drivers', 'delivery-photos', 'purchases', 'reviews', 'review-images', 'bundles', 'promos', 'orders', 'settings', 'affiliates', 'aff-payouts', 'aff-lookup', 'clients', 'suppliers', 'fin-moves', 'fin-ledger', 'fin-config']);
+const ADMIN_COLS = new Set(['articles', 'aff-clicks', 'products', 'product-images', 'costs', 'stock-moves', 'lp-stats', 'campaigns', 'contact-flags', 'drivers', 'delivery-photos', 'purchases', 'reviews', 'review-images', 'bundles', 'promos', 'orders', 'settings', 'affiliates', 'aff-payouts', 'aff-lookup', 'clients', 'suppliers', 'fin-moves', 'fin-ledger', 'fin-config']);
 function adminTarget(req) {
   const { col, id } = req.params;
   if (!ADMIN_COLS.has(col) || !validId(id)) throw httpErr(400, 'Requête invalide.');
@@ -1367,6 +1376,57 @@ const condSchema = c => !c || c === 'neuf' ? 'https://schema.org/NewCondition' :
 const jsonLd = o => `<script type="application/ld+json">${JSON.stringify(o).replace(/</g, '\\u003c')}</script>`;
 const lines2 = t => String(t || '').split('\n').map(x => x.trim()).filter(Boolean);
 
+/* ===================== Conseils (blog) ===================== */
+const pubArticles = () => allDocs('articles').filter(a => a.status === 'published' && a.title).sort((a, b) => (b.publishedAt || 0) - (a.publishedAt || 0));
+const articlePath = a => `/conseils/${slugify(a.title)}--${a.id}`;
+const articleCover = a => /^data:image\//.test(a.cover || '') ? `/img/a/${a.id}?v=${a.updatedAt || 0}` : (/^https?:\/\//.test(a.cover || '') ? a.cover : '');
+const publicArticle = a => ({ id: a.id, title: a.title, category: a.category || '', summary: a.summary || '', body: a.body || '', cover: articleCover(a), productIds: Array.isArray(a.productIds) ? a.productIds : [], status: 'published', publishedAt: a.publishedAt || a.createdAt || 0, updatedAt: a.updatedAt || 0, seoTitle: a.seoTitle || '', seoDesc: a.seoDesc || '' });
+const readMinutes = t => Math.max(1, Math.round(String(t || '').split(/\s+/).filter(Boolean).length / 200));
+function mdLiteS(src) {
+  const inl = t => escH(t).replace(/\*\*([^*]+)\*\*/g, '<strong>$1</strong>').replace(/\[([^\]]+)\]\(((?:https?:\/\/|\/)[^)\s]+)\)/g, (m, l, u) => `<a href="${u}"${isAffUrlS(u) ? ' rel="sponsored nofollow"' : ''}>${l}</a>`).replace(/\[\[produit:([A-Za-z0-9_-]+)\]\]/g, (m, id) => { const p = getDoc('products', id); return p && p.active !== false ? `<a href="${escH(canonPath({ ...p, id }))}">${escH(p.name)}</a>` : ''; });
+  const out = []; let list = null;
+  for (const raw of String(src || '').split('\n')) { const l = raw.trim();
+    if (/^[-*] /.test(l)) { (list = list || []).push(`<li>${inl(l.slice(2))}</li>`); continue; }
+    if (list) { out.push(`<ul>${list.join('')}</ul>`); list = null; }
+    if (!l) continue;
+    if (l.startsWith('### ')) out.push(`<h3>${inl(l.slice(4))}</h3>`); else if (l.startsWith('## ')) out.push(`<h2>${inl(l.slice(3))}</h2>`); else out.push(`<p>${inl(l)}</p>`); }
+  if (list) out.push(`<ul>${list.join('')}</ul>`);
+  return out.join('\n');
+}
+app.get('/go/:id', (req, res) => {
+  const id = String(req.params.id || ''), p = validId(id) && getDoc('products', id);
+  if (!p || p.active === false || !isPartnerS(p)) return res.redirect(302, '/');
+  if (!limited('go:' + req.ip + ':' + id, 1, 600e3) && !/bot|crawl|spider|preview/i.test(req.headers['user-agent'] || '')) {
+    const v = getDoc('aff-clicks', id) || { count: 0, days: {} }, d = today(), days = { ...(v.days || {}) };
+    days[d] = (days[d] || 0) + 1; for (const k of Object.keys(days)) if (k < addDays(d, -90)) delete days[k];
+    putDoc('aff-clicks', id, { count: (v.count || 0) + 1, days, lastAt: Date.now(), platform: p.partner.platform });
+  }
+  res.set({ 'X-Robots-Tag': 'noindex, nofollow', 'Cache-Control': 'no-store', 'Referrer-Policy': 'no-referrer-when-downgrade' }).redirect(302, p.partner.url);
+});
+app.get('/img/a/:id', (req, res) => {
+  const a = validId(req.params.id) && getDoc('articles', req.params.id);
+  const m = a && /^data:(image\/[a-z+.-]+);base64,(.+)$/i.exec(a.cover || '');
+  if (!m) return res.redirect(302, '/og-image.jpg');
+  res.set({ 'Content-Type': m[1], 'Cache-Control': 'public, max-age=604800' }).send(Buffer.from(m[2], 'base64'));
+});
+/* Rédaction d'un article de conseil par l'assistante */
+app.post('/api/admin/ai/article', requireStaff, h(async (req, res) => {
+  if (!env.ANTHROPIC_API_KEY) throw httpErr(503, 'Ajoutez la clé ANTHROPIC_API_KEY sur Render pour la rédaction par l’assistante.');
+  if (limited('art:' + req.user.id, 40, 3600e3)) throw httpErr(429, 'Trop d’articles demandés en une heure.');
+  const topic = String(req.body?.topic || '').trim().slice(0, 200); if (topic.length < 5) throw httpErr(400, 'Indiquez le sujet de l’article.');
+  const s = settings(), city = s.city || 'Bamako';
+  const prods = (Array.isArray(req.body?.productIds) ? req.body.productIds : []).slice(0, 8).map(id => validId(id) && getDoc('products', id)).filter(Boolean)
+    .map((p, i) => ({ id: (req.body.productIds || [])[i], nom: p.name, prix_fcfa: p.price, categorie: p.category, description: String(p.description || '').slice(0, 300), points_forts: String(p.highlights || '').slice(0, 300) }));
+  const system = `Tu écris un article de conseil pour le blog de la boutique en ligne malienne « ${s.shopName} » (${city}, Mali), afin d'attirer des visiteurs depuis Google.
+Français simple et chaleureux, adapté au Mali (FCFA, chaleur, délestages, fêtes, famille) quand c'est pertinent. Article utile et honnête : de vrais conseils, pas une publicité. N'invente aucune caractéristique, aucun chiffre ni aucune promesse de santé.
+Format du champ "body" : 600 à 900 mots, sections avec "## Titre", sous-sections "### ", listes "- ", gras **mot**. Une phrase d'introduction avant la première section. Pour citer un produit de la boutique, écris exactement [[produit:ID]] avec son identifiant. Termine par une section "## En résumé".
+Réponds UNIQUEMENT avec un objet JSON sur une ligne (retours à la ligne du body écrits \\n) :
+{"title":"titre accrocheur de 50 à 65 caractères, contenant le mot-clé","category":"thème court","summary":"2 phrases de résumé","body":"…","seoTitle":"45 à 60 caractères","seoDesc":"130 à 155 caractères"}`;
+  const txt = await askClaude(system, [{ role: 'user', content: JSON.stringify({ sujet: topic, produits_de_la_boutique: prods }) }], 4000, 90000);
+  let o; try { o = parseAIJson(txt); } catch (e) { throw httpErr(502, 'Réponse de l’assistante illisible, réessayez.'); }
+  const str = (v, n) => String(v || '').slice(0, n);
+  res.json({ title: str(o.title, 90), category: str(o.category, 40), summary: str(o.summary, 400), body: str(o.body, 12000), seoTitle: str(o.seoTitle, 70), seoDesc: str(o.seoDesc, 170) });
+}));
 function seoPage(req) {
   const s = settings(), q = req.query || {};
   let kind = 'home', p = null, cat = '', redirect = '';
@@ -1375,7 +1435,11 @@ function seoPage(req) {
   else if (mc) { const all = [...new Set(liveProducts().map(x => x.category).filter(Boolean))]; cat = all.find(c => slugify(c) === mc[1]) || ''; kind = cat ? 'category' : 'notfound'; }
   else if (q.p || q.lp) { const id = String(q.lp || q.p), f = validId(id) && getDoc('products', id); if (f && f.active !== false) { p = { ...f, id }; kind = q.lp ? 'offer' : 'product'; } }
   if (req.path.replace(/\/$/, '') === '/guide') kind = 'guide';
-  return { s, kind, p, cat, redirect };
+  let art = null; const ma = /^\/conseils\/([^/]+)$/.exec(req.path);
+  if (req.path.replace(/\/$/, '') === '/conseils') kind = 'blog';
+  else if (ma || q.conseil) { const id = ma ? ma[1].split('--').pop() : String(q.conseil); const a = validId(id) && getDoc('articles', id);
+    if (a && a.status === 'published') { art = { ...a, id }; kind = 'article'; if (ma && req.path !== articlePath(art)) redirect = articlePath(art); } else kind = 'notfound'; }
+  return { s, kind, p, cat, redirect, art };
 }
 function ssrMain(pg) {
   const { s, kind, p, cat } = pg, live = liveProducts(), cats = [...new Set(live.map(x => x.category).filter(Boolean))].sort();
@@ -1395,6 +1459,13 @@ ${p.warranty ? `<p>Garantie : ${escH(p.warranty)}</p>` : ''}
 ${rs.length ? `<h2>Avis clients</h2>${rs.slice(0, 5).map(r => `<blockquote>${'★'.repeat(r.rating)} ${escH(r.text || '')} — ${escH(r.name || 'Client')}</blockquote>`).join('')}` : ''}
 <p>Livraison à ${escH(s.city || 'Bamako')} et en Afrique de l’Ouest · Paiement Orange Money, Wave, Moov Money ou à la livraison.</p></article>`);
   }
+  if (kind === 'blog') { const list = pubArticles();
+    return wrap(`<nav><a href="/">${escH(s.shopName)}</a> › Conseils</nav><h1>Conseils et guides d’achat — ${escH(s.shopName)}</h1><p>Nos conseils pour bien choisir et bien acheter à ${escH(s.city || 'Bamako')}.</p>
+<ul>${list.map(a => `<li><a href="${escH(articlePath(a))}">${escH(a.title)}</a>${a.summary ? ` — ${escH(a.summary)}` : ''}</li>`).join('')}</ul>`); }
+  if (kind === 'article' && pg.art) { const a = pg.art, rel = (a.productIds || []).map(id => { const p = getDoc('products', id); return p && p.active !== false ? { ...p, id } : null; }).filter(Boolean);
+    return wrap(`<nav><a href="/">${escH(s.shopName)}</a> › <a href="/conseils">Conseils</a> › ${escH(a.title)}</nav><article><h1>${escH(a.title)}</h1>
+<p><small>${new Date(a.publishedAt || a.createdAt || Date.now()).toLocaleDateString('fr-FR')} · ${readMinutes(a.body)} min de lecture</small></p>${a.summary ? `<p><strong>${escH(a.summary)}</strong></p>` : ''}
+${mdLiteS(a.body)}${rel.length ? `<h2>Les produits de cet article</h2><ul>${rel.map(li).join('')}</ul>` : ''}</article>`); }
   if (kind === 'guide') return wrap(`<h1>Guide d’achat : commander chez ${escH(s.shopName)}, étape par étape</h1><ol>
 <li>Pas besoin de créer un compte : vos commandes restent dans « Mes commandes » et se retrouvent avec votre numéro de commande et votre téléphone.</li>
 <li>Choisissez votre produit, sa couleur, sa taille et la quantité.</li><li>Commandez sur le site, ou touchez « Commander sur WhatsApp » : votre panier part tout prêt.</li>
@@ -1416,7 +1487,7 @@ function seoJson(pg) {
     ...(s.phone ? { telephone: s.phone } : {}), ...(s.email ? { email: s.email } : {}), ...(s.legalName ? { legalName: s.legalName } : {}),
     address: { '@type': 'PostalAddress', ...(s.address ? { streetAddress: s.address } : {}), addressLocality: s.city || 'Bamako', addressCountry: 'ML' } };
   const out = [];
-  if ((kind === 'product' || kind === 'offer') && p) {
+  if ((kind === 'product' || kind === 'offer') && p && !isPartnerS(p)) {
     const rs = pubReviewsS(p.id), url = BASE_URL + canonPath(p), brand = (lines2(p.specs).find(x => /^marque\s*:/i.test(x)) || '').replace(/^marque\s*:\s*/i, '');
     const imgs = [productImage(p.id, p), ...(Array.isArray(p.gallery) ? p.gallery.slice(0, 5).map(g => `${BASE_URL}/img/pi/${encodeURIComponent(g)}`) : [])];
     out.push({ '@context': 'https://schema.org', '@type': 'Product', name: p.name, image: imgs, description: String(p.description || p.lpSub || p.name).slice(0, 500), sku: p.sku || p.id,
@@ -1425,6 +1496,14 @@ function seoJson(pg) {
       ...(rs.length ? { aggregateRating: { '@type': 'AggregateRating', ratingValue: (rs.reduce((t, r) => t + r.rating, 0) / rs.length).toFixed(1), reviewCount: rs.length },
         review: rs.slice(0, 5).map(r => ({ '@type': 'Review', author: { '@type': 'Person', name: r.name || 'Client' }, reviewRating: { '@type': 'Rating', ratingValue: r.rating, bestRating: 5 }, ...(r.text ? { reviewBody: String(r.text).slice(0, 500) } : {}), ...(r.createdAt ? { datePublished: new Date(r.createdAt).toISOString().slice(0, 10) } : {}) })) } : {}) });
     out.push({ '@context': 'https://schema.org', '@type': 'BreadcrumbList', itemListElement: [{ '@type': 'ListItem', position: 1, name: s.shopName, item: BASE_URL + '/' }, ...(p.category ? [{ '@type': 'ListItem', position: 2, name: p.category, item: BASE_URL + catPath(p.category) }] : []), { '@type': 'ListItem', position: p.category ? 3 : 2, name: p.name, item: url }] });
+  } else if (kind === 'article' && pg.art) {
+    const a = pg.art, url = BASE_URL + articlePath(a), cov = articleCover(a);
+    out.push({ '@context': 'https://schema.org', '@type': 'BlogPosting', headline: String(a.title).slice(0, 110), description: String(a.seoDesc || a.summary || '').slice(0, 300), url, mainEntityOfPage: url,
+      image: cov ? (cov.startsWith('http') ? cov : BASE_URL + cov) : BASE_URL + '/og-image.jpg', datePublished: new Date(a.publishedAt || a.createdAt || Date.now()).toISOString(), dateModified: new Date(a.updatedAt || a.publishedAt || Date.now()).toISOString(),
+      inLanguage: 'fr', author: { '@type': 'Organization', name: s.shopName, url: BASE_URL + '/' }, publisher: { '@type': 'Organization', name: s.shopName, logo: { '@type': 'ImageObject', url: BASE_URL + '/icon-512.png' } }, ...(a.category ? { articleSection: a.category } : {}), wordCount: String(a.body || '').split(/\s+/).filter(Boolean).length });
+    out.push({ '@context': 'https://schema.org', '@type': 'BreadcrumbList', itemListElement: [{ '@type': 'ListItem', position: 1, name: s.shopName, item: BASE_URL + '/' }, { '@type': 'ListItem', position: 2, name: 'Conseils', item: BASE_URL + '/conseils' }, { '@type': 'ListItem', position: 3, name: a.title, item: url }] });
+  } else if (kind === 'blog') {
+    out.push({ '@context': 'https://schema.org', '@type': 'Blog', name: `Conseils — ${s.shopName}`, url: BASE_URL + '/conseils', inLanguage: 'fr', blogPost: pubArticles().slice(0, 50).map(a => ({ '@type': 'BlogPosting', headline: a.title, url: BASE_URL + articlePath(a) })) });
   } else if (kind === 'category') {
     const list = liveProducts().filter(x => x.category === cat);
     out.push({ '@context': 'https://schema.org', '@type': 'CollectionPage', name: `${cat} — ${s.shopName}`, url: BASE_URL + catPath(cat), mainEntity: { '@type': 'ItemList', itemListElement: list.slice(0, 100).map((x, i) => ({ '@type': 'ListItem', position: i + 1, url: BASE_URL + canonPath(x), name: x.name })) } });
@@ -1438,19 +1517,19 @@ function sendPage(req, res) {
   if (!INDEX_HTML) return res.status(500).send('Page introuvable : le dossier public manque sur le serveur.');
   const pg = seoPage(req);
   if (pg.redirect) return res.redirect(301, pg.redirect + (req.originalUrl.includes('?') ? req.originalUrl.slice(req.originalUrl.indexOf('?')) : ''));
-  const { s, kind, p, cat } = pg, isLp = kind === 'offer';
-  const title = p && p.seoTitle ? String(p.seoTitle).slice(0, 70) : !p && kind === 'home' && s.seoTitle ? String(s.seoTitle).slice(0, 70) : p ? `${isLp && p.lpHook ? p.lpHook : p.name} — ${plain(p.price)} FCFA | ${s.shopName}` : kind === 'guide' ? `Guide d’achat : comment commander | ${s.shopName}` : kind === 'category' ? `${cat} : achat en ligne à ${s.city || 'Bamako'} | ${s.shopName}` : kind === 'notfound' ? `Page introuvable | ${s.shopName}` : `${s.shopName} — ${s.tagline || 'Boutique en ligne'}`;
-  const desc = (p && p.seoDesc ? String(p.seoDesc) : !p && kind === 'home' && s.seoDesc ? String(s.seoDesc) : p
+  const { s, kind, p, cat, art } = pg, isLp = kind === 'offer';
+  const title = art ? String(art.seoTitle || `${art.title} | ${s.shopName}`).slice(0, 70) : kind === 'blog' ? `Conseils et guides d’achat | ${s.shopName}` : p && p.seoTitle ? String(p.seoTitle).slice(0, 70) : !p && kind === 'home' && s.seoTitle ? String(s.seoTitle).slice(0, 70) : p ? `${isLp && p.lpHook ? p.lpHook : p.name} — ${plain(p.price)} FCFA | ${s.shopName}` : kind === 'guide' ? `Guide d’achat : comment commander | ${s.shopName}` : kind === 'category' ? `${cat} : achat en ligne à ${s.city || 'Bamako'} | ${s.shopName}` : kind === 'notfound' ? `Page introuvable | ${s.shopName}` : `${s.shopName} — ${s.tagline || 'Boutique en ligne'}`;
+  const desc = (art ? String(art.seoDesc || art.summary || art.title) : kind === 'blog' ? `Les conseils de ${s.shopName} pour bien choisir vos produits et acheter malin à ${s.city || 'Bamako'} : guides, comparatifs et astuces.` : p && p.seoDesc ? String(p.seoDesc) : !p && kind === 'home' && s.seoDesc ? String(s.seoDesc) : p
     ? `${p.condition && p.condition !== 'neuf' ? `Occasion · ${({ comme_neuf: 'Comme neuf', tres_bon: 'Très bon état', bon: 'Bon état', correct: 'État correct', reconditionne: 'Reconditionné' })[p.condition] || 'Occasion'}. ` : ''}${p.comparePrice > p.price ? `Promo : ${plain(p.price)} FCFA au lieu de ${plain(p.comparePrice)} FCFA. ` : `${plain(p.price)} FCFA. `}${p.lpSub || p.description || p.category || ''} Livraison à ${s.city || 'Bamako'}, paiement mobile money ou à la livraison.`
     : kind === 'guide' ? `Comment commander chez ${s.shopName} : choisir, commander sur le site ou WhatsApp, payer par mobile money ou à la livraison, suivre la livraison et donner son avis.`
     : kind === 'category' ? `Achetez ${cat.toLowerCase()} en ligne chez ${s.shopName} : livraison à ${s.city || 'Bamako'} et en Afrique de l’Ouest, paiement Orange Money, Wave ou à la livraison.`
     : (s.intro || 'Commandez en ligne, payez par mobile money ou à la livraison.')).replace(/\s+/g, ' ').trim().slice(0, 300);
-  const img = p ? productImage(p.id, p) : `${BASE_URL}/og-image.jpg`;
-  const url = p ? BASE_URL + canonPath(p) : kind === 'category' ? BASE_URL + catPath(cat) : kind === 'guide' ? `${BASE_URL}/guide` : `${BASE_URL}/`;
-  const noindex = kind === 'notfound' || ['espace', 'livreur', 'payer', 'livre', 'installer', 'pay'].some(k => req.query[k]);
+  const img = p ? productImage(p.id, p) : art && articleCover(art) ? (articleCover(art).startsWith('http') ? articleCover(art) : BASE_URL + articleCover(art)) : `${BASE_URL}/og-image.jpg`;
+  const url = art ? BASE_URL + articlePath(art) : kind === 'blog' ? `${BASE_URL}/conseils` : p ? BASE_URL + canonPath(p) : kind === 'category' ? BASE_URL + catPath(cat) : kind === 'guide' ? `${BASE_URL}/guide` : `${BASE_URL}/`;
+  const noindex = kind === 'notfound' || (p && isPartnerS(p)) || ['espace', 'livreur', 'payer', 'livre', 'installer', 'pay'].some(k => req.query[k]);
   const meta = [
     ...(/^[A-Za-z0-9_-]{20,80}$/.test(s.googleVerify || '') ? [['name', 'google-site-verification', s.googleVerify]] : []),
-    ['name', 'description', desc], ['name', 'robots', noindex ? 'noindex, follow' : 'index, follow, max-image-preview:large'], ['property', 'og:type', p ? 'product' : 'website'], ['property', 'og:site_name', s.shopName], ['property', 'og:locale', 'fr_FR'],
+    ['name', 'description', desc], ['name', 'robots', noindex ? 'noindex, follow' : 'index, follow, max-image-preview:large'], ['property', 'og:type', p ? 'product' : art ? 'article' : 'website'], ['property', 'og:site_name', s.shopName], ['property', 'og:locale', 'fr_FR'],
     ['property', 'og:title', title], ['property', 'og:description', desc], ['property', 'og:url', url], ['property', 'og:image', img],
     ...(img.endsWith('/og-image.jpg') ? [['property', 'og:image:width', '1200'], ['property', 'og:image:height', '630']] : []),
     ...(p ? [['property', 'product:price:amount', String(Math.round(p.price))], ['property', 'product:price:currency', 'XOF']] : []),
@@ -1462,9 +1541,9 @@ function sendPage(req, res) {
   res.status(kind === 'notfound' ? 404 : 200).set({ 'Content-Type': 'text/html; charset=utf-8', 'Cache-Control': 'no-cache' }).send(html);
 }
 app.get(['/', '/index.html'], sendPage);
-app.get(['/produit/:slug', '/offre/:slug', '/categorie/:slug', '/guide'], sendPage);
+app.get(['/produit/:slug', '/offre/:slug', '/categorie/:slug', '/guide', '/conseils', '/conseils/:slug'], sendPage);
 app.get('/robots.txt', (req, res) => {
-  res.type('text/plain').set('Cache-Control', 'public, max-age=3600').send(`User-agent: *\nAllow: /\nDisallow: /api/\nDisallow: /*?espace=\nDisallow: /*?livreur=\nDisallow: /*?payer=\nDisallow: /*?livre=\nDisallow: /*?pay=\n\nSitemap: ${BASE_URL}/sitemap.xml\n`);
+  res.type('text/plain').set('Cache-Control', 'public, max-age=3600').send(`User-agent: *\nAllow: /\nDisallow: /api/\nDisallow: /go/\nDisallow: /*?espace=\nDisallow: /*?livreur=\nDisallow: /*?payer=\nDisallow: /*?livre=\nDisallow: /*?pay=\n\nSitemap: ${BASE_URL}/sitemap.xml\n`);
 });
 app.get('/sitemap.xml', (req, res) => {
   const live = liveProducts(), cats = [...new Set(live.map(x => x.category).filter(Boolean))].sort();
@@ -1472,8 +1551,10 @@ app.get('/sitemap.xml', (req, res) => {
   const last = live.reduce((t, p) => Math.max(t, p.updatedAt || p.createdAt || 0), 0);
   const urls = [`<url><loc>${x(BASE_URL + '/')}</loc><lastmod>${d(last)}</lastmod><changefreq>daily</changefreq><priority>1.0</priority></url>`,
     `<url><loc>${x(BASE_URL + '/guide')}</loc><changefreq>monthly</changefreq><priority>0.5</priority></url>`,
+    ...(pubArticles().length ? [`<url><loc>${x(BASE_URL + '/conseils')}</loc><lastmod>${d(pubArticles()[0].updatedAt || pubArticles()[0].publishedAt)}</lastmod><changefreq>weekly</changefreq><priority>0.7</priority></url>`] : []),
+    ...pubArticles().map(a => `<url><loc>${x(BASE_URL + articlePath(a))}</loc><lastmod>${d(a.updatedAt || a.publishedAt)}</lastmod><changefreq>monthly</changefreq><priority>0.7</priority>${articleCover(a) ? `<image:image><image:loc>${x(articleCover(a).startsWith('http') ? articleCover(a) : BASE_URL + articleCover(a))}</image:loc><image:title>${x(a.title)}</image:title></image:image>` : ''}</url>`),
     ...cats.map(c => `<url><loc>${x(BASE_URL + catPath(c))}</loc><lastmod>${d(last)}</lastmod><changefreq>daily</changefreq><priority>0.7</priority></url>`),
-    ...live.map(p => `<url><loc>${x(BASE_URL + canonPath(p))}</loc><lastmod>${d(p.updatedAt || p.createdAt)}</lastmod><changefreq>weekly</changefreq><priority>0.8</priority><image:image><image:loc>${x(productImage(p.id, p))}</image:loc><image:title>${x(p.name)}</image:title></image:image></url>`)];
+    ...live.filter(p => !isPartnerS(p)).map(p => `<url><loc>${x(BASE_URL + canonPath(p))}</loc><lastmod>${d(p.updatedAt || p.createdAt)}</lastmod><changefreq>weekly</changefreq><priority>0.8</priority><image:image><image:loc>${x(productImage(p.id, p))}</image:loc><image:title>${x(p.name)}</image:title></image:image></url>`)];
   res.type('application/xml').set('Cache-Control', 'public, max-age=900').send(`<?xml version="1.0" encoding="UTF-8"?>\n<urlset xmlns="http://www.sitemaps.org/schemas/sitemap/0.9" xmlns:image="http://www.google.com/schemas/sitemap-image/1.1">\n${urls.join('\n')}\n</urlset>\n`);
 });
 app.get('/img/p/:id', (req, res) => {
@@ -1493,7 +1574,7 @@ app.get('/catalogue.csv', (req, res) => {
   const s = settings();
   const q = v => { const x = String(v ?? '').replace(/\s+/g, ' ').trim(); return /[",]/.test(x) ? '"' + x.replace(/"/g, '""') + '"' : x; };
   const rows = [['id', 'title', 'description', 'availability', 'condition', 'price', 'sale_price', 'link', 'image_link', 'additional_image_link', 'brand', 'product_type']];
-  for (const p of allDocs('products').filter(x => x.active !== false && x.name && x.price > 0)) {
+  for (const p of allDocs('products').filter(x => x.active !== false && x.name && x.price > 0 && !isPartnerS(x))) {
     const promo = p.comparePrice > p.price;
     rows.push([p.id, p.name.slice(0, 150), (p.description || `${p.name}${p.category ? ' — ' + p.category : ''}, disponible chez ${s.shopName}.`).slice(0, 5000),
       p.stock > 0 ? 'in stock' : 'out of stock', !p.condition || p.condition === 'neuf' ? 'new' : p.condition === 'reconditionne' ? 'refurbished' : 'used', `${Math.round(promo ? p.comparePrice : p.price)} XOF`, promo ? `${Math.round(p.price)} XOF` : '',
