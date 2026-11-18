@@ -4,6 +4,8 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
 <title>foûfoûni-Market</title>
+<link rel="icon" href="/favicon.ico" sizes="48x48">
+<link rel="icon" type="image/png" sizes="192x192" href="/icon-192.png">
 <link rel="icon" type="image/svg+xml" href="/icon.svg">
 <link rel="icon" type="image/png" sizes="32x32" href="/favicon-32.png">
 <link rel="apple-touch-icon" href="/apple-touch-icon.png">
@@ -1025,7 +1027,7 @@ function viewShop(){
   const hero = !S.q ? `<section class="hero"><div class="hero-txt">
       <h1>${esc(st.tagline)}</h1><p>${esc(st.intro)}</p>
       <button class="btn primary" data-a="scroll">Découvrir la collection</button>
-      <div class="trust"><span>Livraison à ${esc(st.city)}</span><span>Offerte dès ${fmt(st.freeFrom)}</span><span>Paiement mobile ou à la livraison</span></div>${payRow(true)}
+      <div class="trust"><span>Livraison à ${esc(st.city)}</span> <span>Offerte dès ${fmt(st.freeFrom)}</span> <span>Paiement mobile ou à la livraison</span></div>${payRow(true)}
     </div>${feat?`<aside class="vitrine" aria-label="Pièce du moment"><em>La pièce du moment</em>
       <button class="v-img" data-a="product" data-id="${feat.id}" aria-label="Voir ${esc(feat.name)}">${pImg(feat)}</button>
       <h3>${esc(feat.name)}</h3>
@@ -1974,7 +1976,7 @@ function viewLanding(){
     ${hasVar(p)?optionPicker(p):''}
     ${p.stock>0&&p.stock<=(p.lowStock||5)?`<p class="small" style="color:var(--danger);font-weight:700;margin:12px 0 0">Plus que ${p.stock} en stock</p>`:''}
     ${cta(false)}${parseVideo(p.lpVideo)||parseVideo(p.lpVideoFile)?'<button class="btn ghost sm" data-a="lpVideoGo" style="margin-top:10px">▶ Voir la vidéo</button>':''}${countdown}
-    <div class="trust-box" ${isPartner(p)?'hidden':''}><div><span>🚚</span><span><b>Livraison à ${esc(st.city)}</b>${st.freeFrom?`Offerte dès ${fmt(st.freeFrom)}`:fmt(st.deliveryFee)} · retrait en boutique possible</span></div><div><span>💳</span><span><b>Paiement sécurisé</b>${esc(enabledProcs().map(([k])=>PROCESSORS[k].name).join(', ')||'À la livraison')}${payRow(false)}</span></div>${p.warranty?`<div><span>🛡️</span><span><b>Garantie</b>${esc(p.warranty)}</span></div>`:''}</div>
+    <div class="trust-box" ${isPartner(p)?'hidden':''}><div><span>🚚</span><span><b>Livraison à ${esc(st.city)}</b> ${st.freeFrom?`Offerte dès ${fmt(st.freeFrom)}`:fmt(st.deliveryFee)} · retrait en boutique possible</span></div><div><span>💳</span><span><b>Paiement sécurisé</b>${esc(enabledProcs().map(([k])=>PROCESSORS[k].name).join(', ')||'À la livraison')}${payRow(false)}</span></div>${p.warranty?`<div><span>🛡️</span><span><b>Garantie</b>${esc(p.warranty)}</span></div>`:''}</div>
    </div></section>
   ${videoBlock(p)}
   ${p.lpProblem||p.lpSolution?`<section class="lp-sec"><h2>Pourquoi vous allez l’adorer</h2><div class="ps" style="margin-top:22px">${p.lpProblem?`<div><b style="color:var(--muted)">Le problème</b><p>${esc(p.lpProblem)}</p></div>`:''}${p.lpSolution?`<div><b style="color:var(--indigo)">Notre solution</b><p>${esc(p.lpSolution)}</p></div>`:''}</div></section>`:''}
@@ -2333,7 +2335,7 @@ function viewProduct(){
       ${isPartner(p)?partnerBox(p):out?'':`<div class="pdp-buy"><div class="qty big"><button data-a="pdpQty" data-d="-1" aria-label="Moins">−</button><span>${q}</span><button data-a="pdpQty" data-d="1" aria-label="Plus">+</button></div>
         <button class="btn primary btn-live" data-a="pdpAdd">Ajouter au panier</button><button class="btn ghost" data-a="pdpBuy">Acheter maintenant</button></div>
         ${shopWa()?`<button class="btn wa btn-live" data-a="waProduct" data-id="${p.id}" style="margin-top:10px;width:100%">${WA_ICON}Commander ce produit sur WhatsApp</button>`:''}`}
-      <div ${isPartner(p)?'hidden':''}><div class="trust-box"><div><span>🚚</span><span><b>Livraison à ${esc(st.city)}</b>${st.freeFrom?`Offerte dès ${fmt(st.freeFrom)} d’achat, sinon ${fmt(st.deliveryFee)}. `:''}Retrait en boutique possible.</span></div>
+      <div ${isPartner(p)?'hidden':''}><div class="trust-box"><div><span>🚚</span><span><b>Livraison à ${esc(st.city)}</b> ${st.freeFrom?`Offerte dès ${fmt(st.freeFrom)} d’achat, sinon ${fmt(st.deliveryFee)}. `:''}Retrait en boutique possible.</span></div>
         <div><span>💳</span><span><b>Paiement sécurisé</b>${esc(pays.join(', ')||'À la livraison')}${payRow(false)}</span></div>
         ${p.warranty?`<div><span>🛡️</span><span><b>Garantie et retour</b>${esc(p.warranty)}</span></div>`:''}
         ${st.phone?`<div><span>📞</span><span><b>Une question ?</b><a href="tel:${esc(st.phone.replace(/\s/g,''))}" style="color:var(--indigo)">${esc(st.phone)}</a></span></div>`:''}</div></div>

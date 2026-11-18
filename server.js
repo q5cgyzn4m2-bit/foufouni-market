@@ -1565,7 +1565,7 @@ function seoJson(pg) {
     out.push({ '@context': 'https://schema.org', '@type': 'CollectionPage', name: `${cat} — ${s.shopName}`, url: BASE_URL + catPath(cat), mainEntity: { '@type': 'ItemList', itemListElement: list.slice(0, 100).map((x, i) => ({ '@type': 'ListItem', position: i + 1, url: BASE_URL + canonPath(x), name: x.name })) } });
   } else {
     out.push({ '@context': 'https://schema.org', ...org });
-    out.push({ '@context': 'https://schema.org', '@type': 'WebSite', name: s.shopName, url: BASE_URL + '/', inLanguage: 'fr' });
+    out.push({ '@context': 'https://schema.org', '@type': 'WebSite', '@id': BASE_URL + '/#website', name: s.shopName, alternateName: [...new Set([String(s.shopName).normalize('NFD').replace(/[\u0300-\u036f]/g, ''), (() => { try { return new URL(BASE_URL).host.replace(/^www\./, ''); } catch (e) { return ''; } })()].filter(x => x && x !== s.shopName))], url: BASE_URL + '/', inLanguage: 'fr', publisher: { '@id': BASE_URL + '/#store' } });
   }
   return out.map(jsonLd).join('\n');
 }
