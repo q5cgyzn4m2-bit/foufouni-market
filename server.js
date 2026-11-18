@@ -658,7 +658,7 @@ app.delete('/api/admin/video/:id', requireStaff, h(async (req, res) => {
   await store.files.del(id); res.json({ ok: true });
 }));
 app.get('/media/:file', h(async (req, res) => {
-  const id = String(req.params.file || '').replace(/\.\w+$/, ''); if (!/^v[a-z0-9]{6,30}$/.test(id)) return res.status(404).end();
+  const id = String(req.params.file || '').replace(/\.\w+$/, ''); if (!/^(v|sp)[a-z0-9]{6,30}$/.test(id)) return res.status(404).end();
   const f = await store.files.get(id); if (!f) return res.status(404).end();
   const size = f.data.length, range = /bytes=(\d*)-(\d*)/.exec(req.headers.range || '');
   res.set({ 'Content-Type': f.mime, 'Accept-Ranges': 'bytes', 'Cache-Control': 'public, max-age=604800, immutable' });
@@ -670,6 +670,102 @@ app.get('/media/:file', h(async (req, res) => {
   }
   res.set('Content-Length', size).send(f.data);
 }));
+
+/* ===================== Calendrier réseaux : publications programmées ===================== */
+/* Facebook (Page) et Instagram (compte professionnel) : publication automatique par l'API Graph de Meta.
+   TikTok, Pinterest, WhatsApp, X, LinkedIn : rappel sur le téléphone du gérant à l'heure prévue (ces réseaux exigent une validation de l'application pour publier publiquement). */
+const GRAPH = (env.META_GRAPH_URL || 'https://graph.facebook.com').replace(/\/$/, '') + '/' + (env.META_GRAPH_VERSION || 'v25.0');
+const AUTO_NETS = new Set(['facebook', 'instagram']);
+const SOCIAL_NETS = new Set(['facebook', 'instagram', 'tiktok', 'pinterest', 'whatsapp', 'x', 'linkedin']);
+const metaCfg = () => getDoc('social-config', 'meta') || null;
+function socialStatus() { const m = metaCfg(); return { meta: m ? { connected: true, pageName: m.pageName, pageId: m.pageId, ig: m.igId ? { username: m.igUsername || '' } : null, at: m.connectedAt } : { connected: false } }; }
+async function graph(path, params = {}, method = 'POST') {
+  const u = new URL(GRAPH + '/' + path.replace(/^\//, ''));
+  let opt = { method, signal: AbortSignal.timeout(30000) };
+  if (method === 'GET') Object.entries(params).forEach(([k, v]) => u.searchParams.set(k, v));
+  else opt = { ...opt, headers: { 'Content-Type': 'application/x-www-form-urlencoded' }, body: new URLSearchParams(params).toString() };
+  let r, j; try { r = await fetch(u, opt); j = await r.json(); } catch (e) { throw httpErr(502, 'Meta ne répond pas : ' + e.message); }
+  if (!r.ok || j.error) { const e = httpErr(r.status >= 400 && r.status < 500 ? 400 : 502, (j.error && (j.error.error_user_msg || j.error.message)) || 'Erreur Meta ' + r.status); e.code = j.error && j.error.code; throw e; }
+  return j;
+}
+app.get('/api/admin/social/status', requireStaff, (req, res) => res.json(socialStatus()));
+app.post('/api/admin/social/meta', requireStaff, requireManager, express.json({ limit: '20kb' }), h(async (req, res) => {
+  if (limited('meta:' + req.user.id, 20, 3600e3)) throw httpErr(429, 'Trop d’essais en une heure.');
+  const appId = String(req.body?.appId || '').trim(), secret = String(req.body?.appSecret || '').trim(), tok = String(req.body?.userToken || '').trim(), want = String(req.body?.pageId || '');
+  if (!/^\d{5,25}$/.test(appId) || !/^[a-f0-9]{20,64}$/i.test(secret) || tok.length < 50) throw httpErr(400, 'Vérifiez l’identifiant de l’application, sa clé secrète et le jeton d’accès.');
+  const long = await graph('oauth/access_token', { grant_type: 'fb_exchange_token', client_id: appId, client_secret: secret, fb_exchange_token: tok }, 'GET');
+  const pages = (await graph('me/accounts', { fields: 'id,name,access_token,instagram_business_account{id,username}', limit: '50', access_token: long.access_token }, 'GET')).data || [];
+  if (!pages.length) throw httpErr(400, 'Aucune page Facebook trouvée : à la création du jeton, cochez votre page foûfoûni et les autorisations demandées.');
+  if (pages.length > 1 && !want) return res.json({ choose: pages.map(p => ({ id: p.id, name: p.name, ig: p.instagram_business_account ? p.instagram_business_account.username || 'Instagram relié' : '' })) });
+  const p = pages.find(x => x.id === want) || pages[0];
+  putDoc('social-config', 'meta', { pageId: p.id, pageName: p.name, pageToken: p.access_token, igId: p.instagram_business_account ? p.instagram_business_account.id : '', igUsername: p.instagram_business_account ? p.instagram_business_account.username || '' : '', appId, connectedAt: Date.now(), by: req.user.id });
+  res.json(socialStatus());
+}));
+app.delete('/api/admin/social/meta', requireStaff, requireManager, (req, res) => { store.del ? store.del('social-config', 'meta') : putDoc('social-config', 'meta', null); res.json(socialStatus()); });
+app.post('/api/admin/social/image', requireStaff, express.raw({ type: ['image/jpeg'], limit: '8mb' }), h(async (req, res) => {
+  const buf = req.body; if (!Buffer.isBuffer(buf) || buf.length < 500 || buf[0] !== 0xff || buf[1] !== 0xd8) throw httpErr(400, 'Image JPEG invalide.');
+  const u = await store.files.usage(); if (u.bytes + buf.length > 350 * 1024 * 1024) throw httpErr(413, 'Espace de stockage plein : supprimez d’anciennes publications ou vidéos.');
+  const id = 'sp' + Date.now().toString(36) + rnd(6).toLowerCase();
+  await store.files.save(id, 'image/jpeg', buf);
+  res.json({ id, url: `/media/${id}.jpg` });
+}));
+app.delete('/api/admin/social/post/:id', requireStaff, h(async (req, res) => {
+  const id = String(req.params.id || ''); const p = validId(id) && getDoc('social-posts', id); if (!p) throw httpErr(404, 'Publication introuvable.');
+  if (/^sp[a-z0-9]{6,30}$/.test(p.image || '') && !allDocs('social-posts').some(x => x.id !== id && x.image === p.image)) await store.files.del(p.image).catch(() => {});
+  store.del ? store.del('social-posts', id) : putDoc('social-posts', id, null); res.json({ ok: true });
+}));
+app.post('/api/admin/social/publish/:id', requireStaff, h(async (req, res) => {
+  const id = String(req.params.id || ''); const p = validId(id) && getDoc('social-posts', id); if (!p) throw httpErr(404, 'Publication introuvable.');
+  if (p.status === 'sending') throw httpErr(409, 'Publication déjà en cours.');
+  res.json(await runSocialPost(id, true));
+}));
+async function publishMeta(net, post, cfg) {
+  const img = `${BASE_URL}/media/${post.image}.jpg`, cap = String((post.captions && post.captions[net]) || post.caption || '').slice(0, 2200);
+  if (net === 'facebook') {
+    const r = await graph(`${cfg.pageId}/photos`, { url: img, message: cap, published: 'true', access_token: cfg.pageToken });
+    const pid = r.post_id || r.id; return { id: pid, url: `https://www.facebook.com/${pid}` };
+  }
+  if (!cfg.igId) throw httpErr(400, 'Aucun compte Instagram professionnel n’est relié à la page Facebook.');
+  const c = await graph(`${cfg.igId}/media`, { image_url: img, caption: cap, access_token: cfg.pageToken });
+  let out = null;
+  for (let i = 0; i < 6 && !out; i++) {
+    try { out = await graph(`${cfg.igId}/media_publish`, { creation_id: c.id, access_token: cfg.pageToken }); }
+    catch (e) { if (i === 5) throw e; await new Promise(r => setTimeout(r, i ? 10000 : 3000)); }
+  }
+  let url = ''; try { url = (await graph(out.id, { fields: 'permalink', access_token: cfg.pageToken }, 'GET')).permalink || ''; } catch (e) {}
+  return { id: out.id, url };
+}
+const NET_LABEL = { facebook: 'Facebook', instagram: 'Instagram', tiktok: 'TikTok', pinterest: 'Pinterest', whatsapp: 'WhatsApp', x: 'X', linkedin: 'LinkedIn' };
+async function runSocialPost(id, now) {
+  const post = getDoc('social-posts', id); if (!post) return null;
+  putDoc('social-posts', id, { ...post, status: 'sending' }); await store.flush();
+  const cfg = metaCfg(), results = { ...(post.results || {}) }, remind = [];
+  for (const net of (post.nets || []).filter(n => SOCIAL_NETS.has(n))) {
+    if (results[net] && results[net].ok) continue;
+    if (AUTO_NETS.has(net) && cfg) {
+      try { const r = await publishMeta(net, post, cfg); results[net] = { ok: true, auto: true, at: Date.now(), ...r }; }
+      catch (e) { results[net] = { ok: false, auto: true, at: Date.now(), err: String(e.message || e).slice(0, 300) }; }
+    } else if (!(results[net] && results[net].reminded)) { results[net] = { ok: false, reminded: true, at: Date.now() }; remind.push(net); }
+  }
+  const vals = Object.values(results), autoFail = vals.filter(r => r.auto && !r.ok).length, autoOk = vals.filter(r => r.auto && r.ok).length;
+  const status = autoFail ? (autoOk || remind.length ? 'partial' : 'error') : vals.every(r => r.ok) ? 'done' : 'reminder';
+  const upd = { ...getDoc('social-posts', id), results, status, sentAt: Date.now() }; putDoc('social-posts', id, upd); await store.flush();
+  const okN = Object.entries(results).filter(([, r]) => r.ok && r.auto).map(([n]) => NET_LABEL[n]), failN = Object.entries(results).filter(([, r]) => r.auto && !r.ok).map(([n]) => NET_LABEL[n]);
+  const msg = [okN.length ? '✅ Publié sur ' + okN.join(', ') : '', failN.length ? '⚠️ Échec : ' + failN.join(', ') + ' (voir Calendrier réseaux)' : '', remind.length ? '📲 À publier maintenant sur ' + remind.map(n => NET_LABEL[n]).join(', ') + ' : touchez pour ouvrir le visuel et le texte.' : ''].filter(Boolean).join('\n');
+  if (msg) notify({ title: `${now ? 'Publication' : 'Publication programmée'} · ${String(post.title || '').slice(0, 60)}`, message: msg, tags: [failN.length ? 'warning' : 'calendar'], priority: remind.length || failN.length ? 4 : 3, click: `${BASE_URL}/?social=${encodeURIComponent(id)}` });
+  return upd;
+}
+let socialBusy = false;
+setInterval(async () => {
+  if (socialBusy) return; socialBusy = true;
+  try {
+    const t = Date.now();
+    for (const p of allDocs('social-posts').filter(p => p.status === 'scheduled' && p.at <= t && p.at > t - 3 * 864e5).sort((a, b) => a.at - b.at).slice(0, 5)) await runSocialPost(p.id, false);
+    for (const p of allDocs('social-posts').filter(p => p.status === 'sending' && (p.sentAt || p.at) < t - 15 * 60e3)) putDoc('social-posts', p.id, { ...p, status: 'scheduled' });
+  } catch (e) { console.warn('Calendrier réseaux :', e.message); } finally { socialBusy = false; }
+}, 60e3).unref();
+/* Petit point de contact pour un service de réveil (cron-job.org, UptimeRobot) : garde la boutique éveillée pour publier à l'heure */
+app.get('/api/ping', (req, res) => res.set('Cache-Control', 'no-store').json({ ok: true, t: Date.now() }));
 
 /* Titre SEO et méta-description d'un produit, rédigés par l'assistante */
 app.post('/api/admin/ai/seo', requireStaff, h(async (req, res) => {
@@ -1261,7 +1357,7 @@ app.get('/api/admin/state', requireStaff, (req, res) => {
     products: allDocs('products').sort((a, b) => (b.createdAt || 0) - (a.createdAt || 0)),
     affiliates: allDocs('affiliates').sort((a, b) => a.name.localeCompare(b.name)), affPayouts: allDocs('aff-payouts').sort((a, b) => b.createdAt - a.createdAt),
     costs: allDocs('costs'), stockMoves: allDocs('stock-moves').sort((a, b) => b.createdAt - a.createdAt).slice(0, 1000),
-    ai: !!env.ANTHROPIC_API_KEY,
+    ai: !!env.ANTHROPIC_API_KEY, socialPosts: allDocs('social-posts').sort((a, b) => (a.at || 0) - (b.at || 0)), social: socialStatus(),
     drivers: allDocs('drivers').sort((a, b) => a.name.localeCompare(b.name)),
     lpStats: allDocs('lp-stats'), articles: allDocs('articles'), affClicks: allDocs('aff-clicks'),
     purchases: allDocs('purchases').sort((a, b) => b.createdAt - a.createdAt).slice(0, 500),
@@ -1278,7 +1374,7 @@ app.get('/api/admin/state', requireStaff, (req, res) => {
     settings: s, users: store.users.list(), providers: providers(), configured: CONFIGURED, me: req.user
   });
 });
-const ADMIN_COLS = new Set(['articles', 'aff-clicks', 'products', 'product-images', 'costs', 'stock-moves', 'lp-stats', 'campaigns', 'contact-flags', 'drivers', 'delivery-photos', 'purchases', 'reviews', 'review-images', 'bundles', 'promos', 'orders', 'settings', 'affiliates', 'aff-payouts', 'aff-lookup', 'clients', 'suppliers', 'fin-moves', 'fin-ledger', 'fin-config']);
+const ADMIN_COLS = new Set(['articles', 'aff-clicks', 'products', 'product-images', 'costs', 'stock-moves', 'lp-stats', 'campaigns', 'contact-flags', 'drivers', 'delivery-photos', 'purchases', 'reviews', 'review-images', 'bundles', 'promos', 'orders', 'settings', 'affiliates', 'aff-payouts', 'aff-lookup', 'clients', 'suppliers', 'fin-moves', 'fin-ledger', 'fin-config', 'social-posts']);
 function adminTarget(req) {
   const { col, id } = req.params;
   if (!ADMIN_COLS.has(col) || !validId(id)) throw httpErr(400, 'Requête invalide.');

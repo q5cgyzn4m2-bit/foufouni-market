@@ -18,7 +18,7 @@
     try {
       if (me) {
         const s = await api('GET', '/api/admin/state');
-        S.products = s.products; S.bundles = s.bundles || []; S.promos = s.promos; S.affiliates = s.affiliates || []; S.affPayouts = s.affPayouts || []; S.visits = s.visits || []; S.reviews = s.reviews || []; S.campaigns = s.campaigns || []; S.drivers = s.drivers || []; S.purchases = s.purchases || []; S.affClicks = s.affClicks || []; S.articles = s.articles || []; S.lpStats = s.lpStats || []; S.contactFlags = Object.fromEntries((s.contactFlags || []).map(f => [f.id, f])); S.costs = Object.fromEntries((s.costs || []).map(c => [c.id, Number(c.cost) || 0])); S.stockMoves = s.stockMoves || [];
+        S.products = s.products; S.bundles = s.bundles || []; S.promos = s.promos; S.affiliates = s.affiliates || []; S.affPayouts = s.affPayouts || []; S.visits = s.visits || []; S.reviews = s.reviews || []; S.campaigns = s.campaigns || []; S.drivers = s.drivers || []; S.purchases = s.purchases || []; S.affClicks = s.affClicks || []; S.articles = s.articles || []; S.lpStats = s.lpStats || []; S.socialPosts = s.socialPosts || []; S.social = s.social || { meta: { connected: false } }; S.contactFlags = Object.fromEntries((s.contactFlags || []).map(f => [f.id, f])); S.costs = Object.fromEntries((s.costs || []).map(c => [c.id, Number(c.cost) || 0])); S.stockMoves = s.stockMoves || [];
         S.clients = (s.clients||[]).sort((a,b)=>a.name.localeCompare(b.name)); S.suppliers = (s.suppliers||[]).sort((a,b)=>a.name.localeCompare(b.name));
         S.moves = s.moves || []; S.ledger = s.ledger || []; S.finConfig = s.finConfig || {}; S.orders = s.orders; S.users = s.users;
         S.settings = mergeSettings(s.settings); providers = s.providers; configured = s.configured || {}; notif = s.notifications || {};
@@ -308,6 +308,7 @@
   window.readInvoice = file => api('POST', '/api/admin/ai/invoice', { file });
   window.markWaCart = () => { clearTimeout(syncT); api('POST', `/api/carts/${encodeURIComponent(cartId)}/whatsapp`, {}).catch(() => {}); };
   window.importVideo = url => api('POST', '/api/admin/video-import', { url });
+  window.socialApi = async (method, path, body) => { if (!/^\/api\/admin\/social\//.test(path)) throw new Error('chemin'); const j = await api(method, path, body); reload(); return j; };
   window.deleteVideo = file => api('DELETE', '/api/admin/video/' + encodeURIComponent(file)).catch(() => {});
   window.seoAI = pid => api('POST', '/api/admin/ai/seo', { productId: pid });
   window.articleAI = body => api('POST', '/api/admin/ai/article', body);

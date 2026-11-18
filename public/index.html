@@ -589,6 +589,7 @@ tr.click:hover td{background:var(--surface-2)}
 
 /* Mobile nav */
 .bnav{display:none}
+.sp-card .row>*,.sp-card>.row>*{flex:0 0 auto}
 @media (max-width:980px){
   .admin{grid-template-columns:1fr}
   .side{position:static; flex-direction:row; overflow-x:auto; scrollbar-width:none; gap:4px}
@@ -602,6 +603,7 @@ tr.click:hover td{background:var(--surface-2)}
   .admin,.pos{grid-template-columns:minmax(0,1fr)}
   .admin>*,.pos>*,.kpi,.panel,.toolbar>*{min-width:0}
   .kpi b{overflow-wrap:anywhere}
+  .sp-card>.row>*{flex:0 0 auto}
   .tbl-wrap{overflow-x:auto; -webkit-overflow-scrolling:touch}
 }
 @media (max-width:760px){
@@ -888,6 +890,7 @@ function render(){
   if((S.view==='product' || S.view==='landing') && S._vc !== S.view+S.pid){ S._vc = S.view+S.pid; const pp = S.products.find(x=>x.id===S.pid); if(pp) ttTrack('ViewContent', {contents:[ttItem(pp)], value:Math.round(pp.price)}); }
   if(S.view!=='product' && S.view!=='landing') S._vc = '';
   if(S.view==='landing') setTimeout(lpAfterRender, 0);
+  if(S.spDeep && S.isAdmin && (S.socialPosts||[]).length){ const id = S.spDeep; S.spDeep = null; try{ history.replaceState({}, '', location.pathname); }catch(e){} S.view='admin'; S.tab='social'; setTimeout(()=>{ schedule(); setTimeout(()=>spOpen(id), 200); }, 0); }
   if(document.querySelector('video[data-hls]')) setTimeout(attachHls, 0);
   ['co-seoTitle','co-seoDesc'].forEach(id=>{ const el = $('#'+id); if(el && el.value) seoCounter(el, id==='co-seoTitle'?60:155, $('#'+id+'-c')); });
   if(S.view==='admin' && S.tab==='company') setTimeout(()=>{ companyPreview(); document.querySelectorAll('[data-co]').forEach(i=>{ if(!i.dataset.on){ i.dataset.on='1'; i.addEventListener('input', companyPreview); } }); }, 0);
@@ -2213,6 +2216,7 @@ function studioCaption(d, net){
   return `${head}${price?'\n💰 '+price:''}\n${d.sub?d.sub+'\n':''}🚚 Livraison à ${st.city}${st.freeFrom?', offerte dès '+fmt(st.freeFrom):''}\n💳 ${pay}\n👉 Commandez ici : ${link}${st.phone?'\n📞 '+st.phone:''}\n\n${tags}`;
 }
 S.studio = {subject:'shop', net:'facebook', fmt:'post'};
+try{ S.spDeep = new URLSearchParams(location.search).get('social') || null; }catch(e){}
 /* Publicités : catalogue automatique + ouverture des gestionnaires de publicités */
 const ADS_MGR = {facebook:'https://adsmanager.facebook.com/adsmanager/manage/campaigns', instagram:'https://adsmanager.facebook.com/adsmanager/manage/campaigns', tiktok:'https://ads.tiktok.com/'};
 function catalogPanel(){
@@ -2225,6 +2229,88 @@ function catalogPanel(){
     <ol class="small" style="margin:6px 0 0;padding-left:18px;line-height:1.7"><li><b>Facebook</b> : business.facebook.com › Commerce Manager › <i>Ajouter un catalogue</i> › E-commerce › <i>Sources de données › Flux de données › Lien vers un fichier</i> › collez l’adresse, mise à jour <b>quotidienne</b>, devise <b>XOF</b>. Puis reliez le catalogue à votre <b>pixel</b>.</li>
     <li><b>TikTok</b> : ads.tiktok.com › Ressources › <i>Catalogues</i> › Créer › <i>Ajouter des produits › Flux de données</i> › collez l’adresse, mise à jour quotidienne.</li>
     <li>Lancez une campagne <b>Ventes du catalogue</b> (Facebook) ou <b>Catalogue / Shopping Ads</b> (TikTok) : les publicités se créent toutes seules à partir de vos produits.</li></ol></details>`;
+}
+/* ===================== Calendrier réseaux : programmer et publier ===================== */
+const SP_NETS = ['facebook','instagram','tiktok','pinterest','whatsapp','x','linkedin'];
+const SP_AUTO = n => (n==='facebook' || n==='instagram') && S.social?.meta?.connected && (n==='facebook' || S.social.meta.ig);
+const SP_OPEN = {tiktok:'https://www.tiktok.com/tiktokstudio/upload', pinterest:'https://www.pinterest.com/pin-creation-tool/', facebook:'https://business.facebook.com/latest/composer', instagram:'https://business.facebook.com/latest/composer', linkedin:'https://www.linkedin.com/feed/'};
+const spLocal = t => { const d = new Date(t - new Date(t).getTimezoneOffset()*60e3); return d.toISOString().slice(0,16); };
+const spDate = t => new Date(t).toLocaleString('fr-FR',{weekday:'short', day:'numeric', month:'short', hour:'2-digit', minute:'2-digit'});
+function spPlanBox(ss){
+  if(!isServer()) return `<p class="muted small" style="margin:12px 0 0">🗓️ La programmation des publications fonctionne sur la boutique en ligne.</p>`;
+  const next = Math.ceil((Date.now()+30*60e3)/(30*60e3))*30*60e3;
+  return `<div class="panel" style="margin:12px 0 0"><h3 style="margin:0 0 8px">🗓️ Programmer cette publication</h3>
+    <div class="field"><label for="sp-at">Date et heure de publication</label><input type="datetime-local" class="input" id="sp-at" value="${spLocal(next)}" min="${spLocal(Date.now())}"></div>
+    <p class="co-lbl" style="margin:4px 0 6px">Réseaux</p><div class="row" style="flex-wrap:wrap;gap:6px 14px;margin-bottom:8px">${SP_NETS.map(n=>`<label class="row small" style="gap:6px;font-weight:700"><input type="checkbox" class="sp-net" value="${n}" ${n===ss.net?'checked':''}> ${esc(NETS[n])} <span class="pill ${SP_AUTO(n)?'ok':''}" style="font-size:10.5px">${SP_AUTO(n)?'auto':'rappel'}</span></label>`).join('')}</div>
+    <p class="muted small" style="margin:0 0 10px"><b>auto</b> : publié tout seul à l’heure prévue. <b>rappel</b> : notification sur votre téléphone à l’heure prévue, avec le visuel et le texte prêts à publier.${S.social?.meta?.connected?'':' Reliez Facebook et Instagram dans <b>Gestion › Calendrier réseaux</b> pour la publication automatique.'}</p>
+    <div class="row" style="gap:8px;flex-wrap:wrap"><button class="btn primary" data-a="spSchedule">🗓️ Programmer</button><button class="btn ghost" data-a="spSchedule" data-v="now">⚡ Publier maintenant</button></div></div>`;
+}
+async function spJpeg(blob){ const bmp = await createImageBitmap(blob), c = document.createElement('canvas'); c.width = bmp.width; c.height = bmp.height; const g = c.getContext('2d'); g.fillStyle = '#fff'; g.fillRect(0,0,c.width,c.height); g.drawImage(bmp,0,0);
+  return await new Promise(r=>c.toBlob(r,'image/jpeg',0.9)); }
+async function spSchedule(now){
+  const ss = S.studio, d = subjectData(ss.subject), nets = [...document.querySelectorAll('.sp-net:checked')].map(x=>x.value);
+  if(!nets.length) return toast('Cochez au moins un réseau.');
+  const at = now ? Date.now() : new Date($('#sp-at').value).getTime();
+  if(!now && !(at > Date.now() - 60e3)) return toast('Choisissez une date et une heure à venir.');
+  const [, , W, H] = FORMATS[ss.net].find(f=>f[0]===ss.fmt) || FORMATS[ss.net][0];
+  if(nets.includes('instagram') && (H/W > 1.25 || W/H > 1.91)) return toast('Instagram accepte seulement les formats carré ou portrait 4:5 : choisissez « Publication carrée » ou « Portrait » (ou décochez Instagram).');
+  if(!S._sdBlob || !d) return toast('Le visuel n’est pas encore prêt : patientez une seconde.');
+  const btns = document.querySelectorAll('[data-a="spSchedule"]'); btns.forEach(b=>b.disabled=true);
+  try{
+    const jpg = await spJpeg(S._sdBlob);
+    const r = await fetch('/api/admin/social/image', {method:'POST', credentials:'same-origin', headers:{'Content-Type':'image/jpeg'}, body:jpg}); const j = await r.json().catch(()=>({}));
+    if(!r.ok) throw new Error(j.error || 'Envoi de l’image impossible.');
+    const id = newId('sp'), captions = Object.fromEntries(nets.map(n=>[n, studioCaption(d, n)]));
+    await put('social-posts', id, {id, at, nets, captions, image:j.id, title:d.title, subject:ss.subject, fmt:ss.fmt, size:`${W}×${H}`, status:'scheduled', createdAt:Date.now(), by:S.uid||''});
+    if(now){ toast('Publication en cours…'); const res = await window.socialApi('POST', '/api/admin/social/publish/'+encodeURIComponent(id)); spToastResult(res); }
+    else toast(`Programmé pour ${spDate(at)} ✓ Retrouvez-le dans Gestion › Calendrier réseaux.`);
+  }catch(e){ toast(e.message || 'Programmation impossible.'); }
+  btns.forEach(b=>b.disabled=false);
+}
+function spToastResult(p){ if(!p) return; const R = p.results||{}, ok = Object.keys(R).filter(n=>R[n].ok && R[n].auto), ko = Object.keys(R).filter(n=>R[n].auto && !R[n].ok), rm = Object.keys(R).filter(n=>R[n].reminded && !R[n].ok);
+  toast([ok.length?'✅ Publié sur '+ok.map(n=>NETS[n]).join(', '):'', ko.length?'⚠️ Échec : '+ko.map(n=>NETS[n]+' ('+R[n].err+')').join(', '):'', rm.length?'📲 À publier vous-même : '+rm.map(n=>NETS[n]).join(', '):''].filter(Boolean).join(' · ') || 'Terminé');
+  if(rm.length) setTimeout(()=>spOpen(p.id), 400); }
+function spChip(p, n){ const r = (p.results||{})[n];
+  if(!r) return `<span class="pill" title="Prévu">🕒 ${esc(NETS[n])}</span>`;
+  if(r.ok) return r.url ? `<a class="pill ok" target="_blank" rel="noopener" href="${esc(r.url)}">✅ ${esc(NETS[n])} ↗</a>` : `<span class="pill ok">✅ ${esc(NETS[n])}</span>`;
+  if(r.auto) return `<span class="pill bad" title="${esc(r.err||'')}">⚠️ ${esc(NETS[n])}</span>`;
+  return `<span class="pill warn">📲 ${esc(NETS[n])} à publier</span>`; }
+function paneSocial(){
+  if(!isServer()) return `<div class="toolbar"><h2 style="font-size:24px;flex:1">Calendrier réseaux</h2></div><div class="panel"><p>Le calendrier fonctionne sur la boutique en ligne (foufouni-market.com).</p></div>`;
+  const m = S.social?.meta || {connected:false}, base = location.origin, L = S.socialPosts||[];
+  const up = L.filter(p=>p.status==='scheduled'||p.status==='sending').sort((a,b)=>a.at-b.at), past = L.filter(p=>p.status!=='scheduled'&&p.status!=='sending').sort((a,b)=>(b.sentAt||b.at)-(a.sentAt||a.at)).slice(0,40);
+  const todo = past.filter(p=>Object.values(p.results||{}).some(r=>r.reminded && !r.ok)).length;
+  const card = p => `<div class="row sp-card" style="gap:12px;align-items:flex-start;padding:12px 0;border-top:1px solid var(--line);flex-wrap:wrap"><img src="/media/${esc(p.image)}.jpg" alt="" loading="lazy" style="width:64px;height:64px;object-fit:cover;border-radius:10px;flex:none;background:var(--line)">
+    <div style="flex:1 1 200px;min-width:0"><b>${esc(p.title||'Publication')}</b><div class="muted small">${spDate(p.at)}${p.size?' · '+esc(p.size):''}</div><div class="row" style="gap:6px;flex-wrap:wrap;margin-top:6px">${(p.nets||[]).map(n=>spChip(p,n)).join('')}</div></div>
+    <div class="row" style="gap:6px;flex-wrap:wrap;justify-content:flex-end;flex:0 0 auto"><button class="btn ghost sm" data-a="spOpen" data-id="${esc(p.id)}">Ouvrir</button>${p.status!=='done'&&p.status!=='sending'?`<button class="btn ghost sm" data-a="spPub" data-id="${esc(p.id)}">⚡ Publier</button>`:''}<button class="btn ghost sm" data-a="spDel" data-id="${esc(p.id)}" aria-label="Supprimer">🗑</button></div></div>`;
+  return `<div class="toolbar"><h2 style="font-size:24px;flex:1">Calendrier réseaux</h2><button class="btn primary" data-a="tab" data-v="studio">＋ Nouvelle publication</button></div>
+  ${todo?`<div class="alert"><span>📲 <b>${todo} publication${todo>1?'s':''}</b> à publier vous-même (TikTok, Pinterest, WhatsApp…) : ouvrez-les, le visuel et le texte sont prêts.</span></div>`:''}
+  <div class="panel"><h3>Facebook et Instagram : publication automatique</h3>
+  ${m.connected?`<p style="margin:0">✅ Page Facebook <b>${esc(m.pageName)}</b>${m.ig?` · Instagram <b>@${esc(m.ig.username||'relié')}</b>`:' · <span style="color:var(--danger)">aucun Instagram professionnel relié à cette page</span>'} <span class="muted small">(depuis le ${dateFr(m.at)})</span></p><button class="btn ghost sm" style="margin-top:10px" data-a="spMetaOff">Déconnecter</button>`
+  :`<p class="muted small" style="margin:0 0 10px">À faire une seule fois, sur ordinateur de préférence (10 minutes). Réservé au gérant.</p>
+    <ol class="small" style="margin:0 0 12px;padding-left:18px;line-height:1.75">
+      <li>Votre <b>Instagram</b> doit être un compte <b>professionnel</b> relié à votre <b>page Facebook</b> foûfoûni (Instagram › Paramètres › Type de compte, puis Comptes liés).</li>
+      <li>Ouvrez <b>developers.facebook.com</b> › <i>Mes apps › Créer une app</i>. Choisissez le cas d’usage <b>« Gérer tout sur votre Page »</b> et ajoutez <b>« Gérer les messages et le contenu sur Instagram »</b>. Nom : « foufouni publications ».</li>
+      <li>Dans l’app : <i>Paramètres › Général</i> : copiez <b>l’identifiant de l’app</b> et la <b>clé secrète</b> (bouton Afficher).</li>
+      <li>Ouvrez <b>l’Explorateur de l’API Graph</b> (menu Outils) : choisissez votre app, <i>Jeton d’utilisateur</i>, et cochez : <code>pages_show_list</code>, <code>pages_read_engagement</code>, <code>pages_manage_posts</code>, <code>instagram_basic</code>, <code>instagram_content_publish</code>, <code>business_management</code>. Cliquez sur <b>Generate Access Token</b>, acceptez votre page et votre Instagram, puis copiez le jeton.</li>
+      <li>Collez les trois éléments ci-dessous. La boutique les échange contre un accès permanent à votre page ; la clé secrète n’est pas conservée.</li></ol>
+    <div class="row" style="gap:8px;flex-wrap:wrap"><div class="field" style="flex:1 1 180px;margin:0"><label for="mt-app">Identifiant de l’app</label><input class="input" id="mt-app" inputmode="numeric" autocomplete="off"></div><div class="field" style="flex:1 1 220px;margin:0"><label for="mt-sec">Clé secrète de l’app</label><input class="input" id="mt-sec" type="password" autocomplete="off"></div></div>
+    <div class="field" style="margin:10px 0"><label for="mt-tok">Jeton d’accès (Explorateur de l’API Graph)</label><input class="input" id="mt-tok" type="password" autocomplete="off"></div>
+    ${S._spPages?`<div class="field"><label for="mt-page">Quelle page publier ?</label><select class="input" id="mt-page">${S._spPages.map(p=>`<option value="${esc(p.id)}">${esc(p.name)}${p.ig?' · Instagram @'+esc(p.ig):''}</option>`).join('')}</select></div>`:''}
+    <button class="btn primary" data-a="spMeta">🔗 Relier Facebook et Instagram</button>`}</div>
+  <div class="panel"><h3>⏰ Publier à l’heure exacte</h3><p class="small" style="margin:0">La boutique gratuite sur Render <b>s’endort</b> sans visite : une publication prévue pendant son sommeil part à son réveil. Pour publier à l’heure, créez un compte gratuit sur <b>cron-job.org</b> (ou UptimeRobot) et une tâche qui ouvre <code>${esc(base)}/api/ping</code> <b>toutes les 5 minutes</b>.</p></div>
+  <div class="panel"><h3>À venir · ${up.length}</h3>${up.length?up.map(card).join(''):'<p class="muted">Aucune publication programmée. Ouvrez le <b>Studio réseaux</b>, préparez un visuel puis « 🗓️ Programmer ».</p>'}</div>
+  ${past.length?`<div class="panel"><h3>Déjà parties</h3>${past.map(card).join('')}</div>`:''}`;
+}
+function spOpen(id){ const p = (S.socialPosts||[]).find(x=>x.id===id); if(!p) return toast('Publication introuvable (supprimée ?).');
+  const img = `/media/${p.image}.jpg`, file = `foufouni-${p.id}.jpg`;
+  $('#overlay').innerHTML = `<div class="scrim" data-a="closeAll"><div class="modal wide" role="dialog" aria-modal="true" aria-label="Publication"><div class="toolbar"><h3 style="flex:1;margin:0">${esc(p.title||'Publication')}</h3><button class="icon-btn" data-a="closeAll" aria-label="Fermer">✕</button></div>
+    <p class="muted small" style="margin:0 0 10px">${spDate(p.at)} · ${(p.nets||[]).map(n=>spChip(p,n)).join(' ')}</p>
+    <div class="row" style="gap:14px;align-items:flex-start;flex-wrap:wrap"><div style="flex:1 1 220px"><img src="${img}" alt="Visuel" style="width:100%;border-radius:12px;border:1px solid var(--line)"><a class="btn primary" style="margin-top:8px;width:100%" href="${img}" download="${file}">⬇️ Télécharger l’image</a></div>
+    <div style="flex:2 1 280px">${(p.nets||[]).map(n=>{ const r=(p.results||{})[n]||{}, cap=(p.captions||{})[n]||'';
+      return `<div class="panel" style="margin:0 0 10px"><div class="toolbar" style="margin-bottom:6px"><b style="flex:1">${esc(NETS[n])}</b>${spChip(p,n)}</div>${r.err?`<p class="small" style="color:var(--danger);margin:0 0 6px">${esc(r.err)}</p>`:''}
+        <textarea class="input" readonly id="spc-${n}" style="min-height:90px;font-size:13px">${esc(cap)}</textarea>
+        <div class="row" style="gap:6px;flex-wrap:wrap;margin-top:6px"><button class="btn ghost sm" data-a="spCopy" data-v="${n}">Copier le texte</button>${n==='whatsapp'?`<a class="btn ghost sm" target="_blank" rel="noopener" href="https://wa.me/?text=${encodeURIComponent(cap)}">Ouvrir WhatsApp</a>`:n==='x'?`<a class="btn ghost sm" target="_blank" rel="noopener" href="https://x.com/intent/post?text=${encodeURIComponent(cap)}">Ouvrir X</a>`:SP_OPEN[n]&&!r.ok?`<a class="btn ghost sm" target="_blank" rel="noopener" href="${SP_OPEN[n]}">Ouvrir ${esc(NETS[n])}</a>`:''}${!r.ok?`<button class="btn ghost sm" data-a="spDone" data-id="${esc(p.id)}" data-v="${n}">✓ Publié</button>`:''}</div></div>`; }).join('')}</div></div></div></div>`;
 }
 function paneStudio(){
   const ss = S.studio, subj = subjectList(); if(!subj.some(x=>x[0]===ss.subject)) ss.subject='shop';
@@ -2241,6 +2327,7 @@ function paneStudio(){
     <div class="panel" style="flex:1 1 320px"><div class="field"><label for="sd-cap">Texte de publication (${esc(NETS[ss.net])})</label><textarea class="input" id="sd-cap" style="min-height:200px">${esc(d?studioCaption(d, ss.net):'')}</textarea></div>
       <div class="field"><label>Lien suivi pour ${esc(NETS[ss.net])}</label><div class="row" style="gap:8px"><input class="input" id="sd-link" value="${esc(link)}" readonly style="flex:1"><button class="btn ghost sm" data-a="sdCopyLink" style="flex:0">Copier</button></div></div>
       <div class="fin-actions"><button class="btn primary" data-a="sdDl">⬇️ Télécharger l’image</button>${navigator.canShare?'<button class="btn ghost" data-a="sdShare">↗ Partager</button>':''}<button class="btn ghost" data-a="sdCopy">Copier le texte</button></div>
+      ${spPlanBox(ss)}
       ${ADS_MGR[ss.net]?`<div class="panel" style="margin:12px 0 0;background:var(--surface-2,rgba(255,255,255,.03))"><button class="btn primary" data-a="sdAds" style="width:100%">📣 Lancer une publicité ${esc(NETS[ss.net])}</button><p class="muted small" style="margin:8px 0 0">Télécharge l’image, copie le texte et le lien suivi, puis ouvre ${ss.net==='tiktok'?'TikTok Ads Manager':'le Gestionnaire de publicités Meta'}. Là-bas : objectif <b>Ventes</b>, pixel ${ss.net==='tiktok'?'TikTok':'Meta'} de la boutique, votre budget, puis collez le texte et le lien.</p></div>`:''}
       <p class="muted small" style="margin:0">Chaque réseau a son propre lien : les visites et les commandes qu’il apporte s’affichent ci-dessous.</p></div></div>
   <div class="panel tbl-wrap"><h3>Résultats par réseau (30 derniers jours)</h3><table><thead><tr><th>Réseau</th>${isServer()?'<th style="text-align:right">Visites</th>':''}<th style="text-align:right">Commandes</th><th style="text-align:right">Chiffre d’affaires</th></tr></thead><tbody>
@@ -3616,7 +3703,7 @@ function paneTransport(){
   ${Object.keys(CITIES).map(k=>`<datalist id="tr-cities-${k}">${CITIES[k].map(v=>`<option value="${esc(v)}">`).join('')}</datalist>`).join('')}
   <div class="row" style="gap:8px;flex-wrap:wrap"><button class="btn ghost" data-a="trAddCar">+ Ajouter une compagnie</button>${CARRIER_SUGG.some(([n])=>!list.some(c=>normCity(c.name)===normCity(n)))?'<button class="btn ghost" data-a="trSugg">📋 Ajouter des compagnies connues (à vérifier)</button>':''}<button class="btn primary" data-a="trSave">Enregistrer</button></div>`;
 }
-const TABS = [['dash','Tableau de bord'],['products','Produits'],['stock','Stock & inventaire'],['bundles','Lots'],['orders','Commandes'],['promos','Codes promo'],['affiliates','Ambassadeurs'],['reviews','Avis clients'],['blog','Conseils (blog)'],['studio','Studio réseaux'],['audience','Clients & retargeting'],['alerts','Alertes clients'],['carts','Assistant & paniers'],['company','Société'],['transport','Transport'],['payments','Paiements'],['team','Équipe']];
+const TABS = [['dash','Tableau de bord'],['products','Produits'],['stock','Stock & inventaire'],['bundles','Lots'],['orders','Commandes'],['promos','Codes promo'],['affiliates','Ambassadeurs'],['reviews','Avis clients'],['blog','Conseils (blog)'],['studio','Studio réseaux'],['audience','Clients & retargeting'],['alerts','Alertes clients'],['carts','Assistant & paniers'],['company','Société'],['social','Calendrier réseaux'],['transport','Transport'],['payments','Paiements'],['team','Équipe']];
 /* --- Gestion › Conseils --- */
 function blogIdeas(){
   const city = S.settings.city||'Bamako', live = S.products.filter(p=>p.active!==false), cats = [...new Set(live.map(p=>p.category).filter(Boolean))];
@@ -3703,7 +3790,7 @@ function articleForm(a0){
 }
 function viewAdmin(){
   const pending = S.orders.filter(o=>o.status==='en_attente'||(o.status==='payee'&&!o.stockApplied)).length;
-  const panes = {dash:paneDash, products:paneProducts, stock:paneStock, bundles:paneBundles, orders:paneOrders, promos:panePromos, affiliates:paneAffiliates, reviews:paneReviews, blog:paneBlog, studio:paneStudio, audience:paneAudience, company:paneCompany, transport:paneTransport, alerts:()=>window.paneAlerts?window.paneAlerts():'', carts:()=>window.paneCarts?window.paneCarts():'', payments:panePayments, team:paneTeam};
+  const panes = {dash:paneDash, products:paneProducts, stock:paneStock, bundles:paneBundles, orders:paneOrders, promos:panePromos, affiliates:paneAffiliates, reviews:paneReviews, blog:paneBlog, studio:paneStudio, audience:paneAudience, company:paneCompany, social:paneSocial, transport:paneTransport, alerts:()=>window.paneAlerts?window.paneAlerts():'', carts:()=>window.paneCarts?window.paneCarts():'', payments:panePayments, team:paneTeam};
   return `<div class="admin"><nav class="side" aria-label="Gestion">${TABS.filter(([k])=>!['alerts','carts'].includes(k)||isServer()).map(([k,l])=>`<button data-a="tab" data-v="${k}" ${S.tab===k?'aria-current="page"':''}>${l}${k==='orders'&&pending?`<span class="pill warn">${pending}</span>`:''}</button>`).join('')}</nav>
     <section>${panes[S.tab]()}</section></div>`;
 }
@@ -4423,6 +4510,17 @@ document.addEventListener('click', async e=>{
     case 'sdFmt': S.studio.fmt = el.dataset.v; schedule(); break;
     case 'sdCopyLink': try{ await navigator.clipboard.writeText($('#sd-link').value); toast('Lien copié'); }catch(err){ toast($('#sd-link').value); } break;
     case 'sdCopy': try{ await navigator.clipboard.writeText($('#sd-cap').value); toast('Texte copié'); }catch(err){} break;
+    case 'spSchedule': spSchedule(el.dataset.v==='now'); break;
+    case 'spOpen': spOpen(id); break;
+    case 'spCopy': try{ await navigator.clipboard.writeText($('#spc-'+el.dataset.v).value); toast('Texte copié'); }catch(err){ $('#spc-'+el.dataset.v).select(); } break;
+    case 'spDone': { const p=(S.socialPosts||[]).find(x=>x.id===id); if(!p) break; const R={...(p.results||{})}; R[el.dataset.v]={...(R[el.dataset.v]||{}), ok:true, manual:true, at:Date.now()}; const all=(p.nets||[]).every(n=>R[n]&&R[n].ok);
+      await patch('social-posts', id, {results:R, ...(all?{status:'done'}:{})}); toast('Marqué comme publié'); setTimeout(()=>spOpen(id), 300); break; }
+    case 'spPub': { if(!confirm('Publier maintenant ?')) break; el.disabled=true; try{ spToastResult(await window.socialApi('POST','/api/admin/social/publish/'+encodeURIComponent(id))); }catch(err){ toast(err.message); el.disabled=false; } break; }
+    case 'spDel': { if(!confirmTwice(el)) break; try{ await window.socialApi('DELETE','/api/admin/social/post/'+encodeURIComponent(id)); toast('Publication supprimée'); }catch(err){ toast(err.message); } break; }
+    case 'spMeta': { const body={appId:$('#mt-app').value.trim(), appSecret:$('#mt-sec').value.trim(), userToken:$('#mt-tok').value.trim(), pageId:$('#mt-page')?.value||''}; el.disabled=true; el.textContent='Connexion…';
+      try{ const r = await window.socialApi('POST','/api/admin/social/meta', body); if(r.choose){ S._spPages=r.choose; S._spForm=body; schedule(); toast('Choisissez la page, puis cliquez de nouveau sur Relier.'); setTimeout(()=>{ $('#mt-app').value=body.appId; $('#mt-sec').value=body.appSecret; $('#mt-tok').value=body.userToken; }, 120); } else { S._spPages=null; S.social=r; toast('Facebook et Instagram reliés ✓'); schedule(); } }
+      catch(err){ toast(err.message); } el.disabled=false; el.textContent='🔗 Relier Facebook et Instagram'; break; }
+    case 'spMetaOff': { if(!confirm('Déconnecter Facebook et Instagram ? Les publications programmées deviendront des rappels.')) break; try{ S.social = await window.socialApi('DELETE','/api/admin/social/meta'); schedule(); toast('Déconnecté'); }catch(err){ toast(err.message); } break; }
     case 'catCopy': try{ await navigator.clipboard.writeText($('#cat-'+el.dataset.v).value); toast('Adresse du catalogue copiée'); }catch(err){ toast($('#cat-'+el.dataset.v).value); } break;
     case 'sdAds': { const url = ADS_MGR[S.studio.net]; const w = window.open(url, '_blank', 'noopener'); try{ await navigator.clipboard.writeText($('#sd-cap').value + '\n\n' + $('#sd-link').value); }catch(err){} $('[data-a="sdDl"]')?.click(); toast('Image téléchargée, texte et lien copiés : collez-les dans votre publicité.'); if(!w) location.href = url; break; }
     case 'promote': { const p = S.products.find(x=>x.id===id); if(!p) break; closeAll(); S.studio = {...(S.studio||{}), subject:'product:'+id, net:S.studio?.net && ADS_MGR[S.studio.net] ? S.studio.net : 'facebook'}; S.view='admin'; S.tab='studio'; schedule(); window.scrollTo(0,0); break; }
