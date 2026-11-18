@@ -2054,6 +2054,7 @@ const FORMATS = {
   instagram:[['post45','Publication',1080,1350],['post','Publication carrée',1080,1080],['story','Story / Reel',1080,1920]],
   whatsapp:[['story','Statut',1080,1920],['post','Image à partager',1080,1080]],
   tiktok:[['story','Vidéo / photo',1080,1920]],
+  pinterest:[['pin','Épingle',1000,1500],['pinlong','Épingle longue',1000,2100],['pinsq','Épingle carrée',1000,1000]],
   x:[['wide','Publication',1600,900]],
   linkedin:[['wide2','Publication',1200,627]],
   qr:[['post45','Affiche avec QR code',1080,1350]]
@@ -2075,7 +2076,7 @@ function subjectData(key){
   const pics = a => withImg(a).slice(0,4).map(p=>p.image||p.emoji||'📦');
   const [kind, id] = key.split(':');
   if(kind==='product'){ const p = S.products.find(x=>x.id===id); if(!p) return null; const off = p.comparePrice>p.price ? Math.round((1-p.price/p.comparePrice)*100) : 0;
-    return {kicker:(p.category||'')+(isUsed(p)?' · Occasion · '+condLabel(p):''), title:p.name, sub:p.description||lines(p.highlights).slice(0,2).join(' · '), price:hasVar(p)&&minPrice(p)<p.price?'Dès '+fmt(minPrice(p)):fmt(p.price), old:off?fmt(p.comparePrice):'', badge:off?`−${off}%`:isNew(p)?'NOUVEAU':'', imgs:[p.image||p.emoji||'📦', ...(p.gallery||[]).map(extraSrc).filter(Boolean)].slice(0,1), link:'lp='+encodeURIComponent(p.id), tag:p.category, pid:p.id}; }
+    return {kicker:(isPartner(p)?'Sélection '+partnerName(p)+' · ':'')+(p.category||'')+(isUsed(p)?' · Occasion · '+condLabel(p):''), title:p.name, sub:p.description||lines(p.highlights).slice(0,2).join(' · '), partner:isPartner(p), price:isPartner(p)&&!(p.price>0)?'':hasVar(p)&&minPrice(p)<p.price?'Dès '+fmt(minPrice(p)):fmt(p.price), old:off?fmt(p.comparePrice):'', badge:off?`−${off}%`:isNew(p)?'NOUVEAU':'', imgs:[p.image||p.emoji||'📦', ...(p.gallery||[]).map(extraSrc).filter(Boolean)].slice(0,1), link:'lp='+encodeURIComponent(p.id), tag:p.category, pid:p.id}; }
   if(kind==='bundle'){ const b = S.bundles.find(x=>x.id===id); if(!b) return null; const bi = bundleInfo(b); const off = bi.regular>b.price ? Math.round((1-b.price/bi.regular)*100) : 0;
     return {kicker:'Lot · Achat groupé', title:b.name, sub:bi.comps.map(c=>`${c.qty} × ${c.p.name}`).join(' · '), price:fmt(b.price), old:off?fmt(bi.regular):'', badge:off?`−${off}%`:'', imgs:bi.comps.slice(0,4).map(c=>c.p.image||c.p.emoji||'📦'), link:'cat=Lots', tag:'Lots'}; }
   if(kind==='promo'){ const pr = S.promos.find(x=>x.code===id); if(!pr) return null; const lab = pr.type==='percent'?`−${pr.value} %`:pr.type==='fixed'?`−${fmt(pr.value)}`:'Livraison offerte';
@@ -2131,6 +2132,7 @@ async function drawPoster(d, W, H, net){
     const ks = 26*u*Math.max(0.8,f); y += ks; if(draw){ ctx.fillStyle=gold; ctx.font=`800 ${Math.round(ks)}px ${SANS}`; ctx.fillText(String(d.kicker||'').toUpperCase(), X, y); }
     y += 22*u*f;
     const ts = (wide ? 78 : H>1500 ? 96 : 84)*u*f; ctx.font=`700 ${ts}px ${SERIF}`; const tl = wrapLines(ctx, d.title, tw, 2);
+    if(!draw && f>0.7 && /…$/.test(tl[tl.length-1]||'') && !/…$/.test(String(d.title))) return 1e9; /* titre coupé : on réduit la taille */
     for(const l of tl){ y += ts*0.98; if(draw){ ctx.fillStyle=ivory; ctx.font=`700 ${ts}px ${SERIF}`; ctx.fillText(l, X, y); } }
     if(d.sub){ const ss = 31*u*Math.max(0.85,f); ctx.font=`500 ${ss}px ${SANS}`; const sl = wrapLines(ctx, d.sub, tw, wide?3:2); y += 14*u*f;
       for(const l of sl){ y += ss*1.35; if(draw){ ctx.fillStyle=muted; ctx.font=`500 ${ss}px ${SANS}`; ctx.fillText(l, X, y); } } }
@@ -2150,7 +2152,7 @@ async function drawPoster(d, W, H, net){
   else layout(f,true);
   // pied : appel à l'action + QR code éventuel
   const host = (()=>{ try{ return new URL(shopUrl()).host; }catch(e){ return ''; } })();
-  const cta = net==='qr' ? 'Commandez en ligne' : 'Commandez sur '+(host||st.shopName), fy = H-band-pad*0.9;
+  const cta = net==='qr' ? 'Commandez en ligne' : d.partner ? 'Voir le bon plan sur '+(host||st.shopName) : 'Commandez sur '+(host||st.shopName), fy = H-band-pad*0.9;
   if(net==='qr'){ const qs = Math.round(300*u), qx = W-pad-qs, qy = H-band-pad-qs; await drawQR(ctx, studioLink(d,'qr'), qx, qy, qs); ctx.fillStyle=muted; ctx.textAlign='center'; ctx.font=`600 ${Math.round(24*u)}px ${SANS}`; ctx.fillText('Scannez pour commander', qx+qs/2, qy-14*u); ctx.textAlign='left'; }
   let cfs = 32*u*(centerStory?1.3:1); ctx.font=`800 ${Math.round(cfs)}px ${SANS}`; const maxW = net==='qr'?W-2*pad-330*u:tw; while(ctx.measureText(cta).width+70*u > maxW && cfs>14){ cfs-=1; ctx.font=`800 ${Math.round(cfs)}px ${SANS}`; }
   const bw = Math.min(maxW, ctx.measureText(cta).width+70*u), bh = 82*u*(centerStory?1.2:1), bx = centerStory ? W/2-bw/2 : (wide?tx:pad), by = ctaTop-(centerStory?16*u:0);
@@ -2172,6 +2174,10 @@ function studioCaption(d, net){
   const price = d.price ? `${d.price}${d.old?' au lieu de '+d.old:''}` : '';
   const head = d.code ? `🎁 ${d.title} avec le code ${d.code}` : `${d.kicker&&d.kicker!==d.title?'✨ '+d.kicker+' : ':''}${d.title}`;
   const pay = 'Orange Money, Wave ou paiement à la livraison';
+  if(net==='pinterest'){ const kw = [d.tag, st.city, st.country||'Mali'].filter(Boolean), tl = `${d.title}${price&&!d.partner?' – '+d.price:''} | ${d.partner?'Bon plan':'Livraison '+st.city}`.slice(0,100);
+    const desc = [d.code?`Profitez de ${d.title.toLowerCase()} avec le code ${d.code}.`:'', d.sub ? String(d.sub).replace(/\s+/g,' ').slice(0,220)+(/[.!?]$/.test(d.sub)?'':'.') : '', price?`Prix : ${price}.`:'',
+      d.partner ? `Notre sélection du moment, à commander en ligne. Lien partenaire #affilié.` : `Commandez en ligne chez ${st.shopName} : livraison à ${st.city}, ${pay}.`, kw.map(k=>'#'+String(k).normalize('NFD').replace(/[^A-Za-z0-9]/g,'')).join(' ')].filter(Boolean).join(' ').slice(0,500);
+    return `📌 TITRE (à coller dans « Titre ») :\n${tl}\n\n📝 DESCRIPTION (à coller dans « Description ») :\n${desc}\n\n🔗 LIEN (à coller dans « Lien ») :\n${link}`; }
   if(net==='x') return `${head}${price?' — '+price:''}\n${link}\n#Bamako #Mali`.slice(0,280);
   if(net==='whatsapp') return `${head}${price?'\n💰 '+price:''}\n👉 ${link}${st.phone?'\n📞 '+st.phone:''}`;
   if(net==='linkedin') return `${head}${price?' — '+price+'.':'.'}\n${d.sub||st.intro||''}\nCommande en ligne, livraison à ${st.city}, ${pay}.\n${link}`;
@@ -4406,7 +4412,7 @@ document.addEventListener('click', async e=>{
   }
 });
 
-const NETS = {facebook:'Facebook', instagram:'Instagram', whatsapp:'WhatsApp', tiktok:'TikTok', x:'X (Twitter)', linkedin:'LinkedIn', qr:'Affiche / QR code'};
+const NETS = {facebook:'Facebook', instagram:'Instagram', whatsapp:'WhatsApp', tiktok:'TikTok', pinterest:'Pinterest', x:'X (Twitter)', linkedin:'LinkedIn', qr:'Affiche / QR code'};
 function captureSrc(){
   try{ const q = new URLSearchParams(location.search), src = (q.get('src')||'').toLowerCase().replace(/[^a-z0-9_-]/g,'').slice(0,20);
     if(src){ localStorage.setItem('ffm-src', JSON.stringify({src, at:Date.now()})); window.__ffmNewSrc = src; }
