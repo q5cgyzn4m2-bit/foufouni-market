@@ -2532,17 +2532,29 @@ async function applyStock(list, sign){
       await patch('products', pid, {variants:vars, stock:Math.max(0, tot)}); }
     else { const q = by[pid].reduce((t,x)=>t+x.qty,0); await patch('products', pid, {stock:Math.max(0, p.stock - sign*q)}); } }
 }
-function computeTotals(cart, promo, delivery){
+/* ===================== Transport hors de la ville : compagnies routières, aériennes et express ===================== */
+const SHIP_MODES = {route:['🚌','Car / camion (route)'], air:['✈️','Avion (fret aérien)'], express:['📦','Express / coursier']};
+const normCity = x => String(x||'').normalize('NFD').replace(/[̀-ͯ]/g,'').toLowerCase().replace(/[^a-z0-9]+/g,' ').trim();
+function isLocalDest(st, country, city){ if((country||'ML')!=='ML') return false; const loc = [st.city||'Bamako', ...String(st.localCities||'').split(/[,;\n]/)].map(normCity).filter(Boolean); return !city || loc.includes(normCity(city)); }
+function shipOffers(st, country, city){ country = country||'ML'; const out = [];
+  for(const c of (st.carriers||[])){ if(!c || !c.active || !c.name) continue;
+    const rs = (c.rates||[]).filter(r=>(r.country||'ML')===country && r.price!=null && r.price!=='' && Number(r.price)>=0), r = rs.find(x=>x.city && normCity(x.city)===normCity(city)) || rs.find(x=>!x.city);
+    if(r) out.push({id:c.id, name:c.name, mode:c.mode||'route', price:Math.round(Number(r.price)||0), days:r.days||'', note:c.note||'', dest:r.city||country}); }
+  return out.sort((a,b)=>a.price-b.price); }
+function computeTotals(cart, promo, delivery, dest){
   const lines = cartLines(cart);
   const subtotal = lines.reduce((s,l)=>s+l.unit*l.qty,0);
   let shipping = delivery==='livraison' ? (subtotal>=S.settings.freeFrom ? 0 : Number(S.settings.deliveryFee)||0) : 0;
+  let carrier = null, remote = false, quote = false, offers = [];
+  if(delivery==='livraison' && dest && !isLocalDest(S.settings, dest.country, dest.city)){ remote = true; offers = shipOffers(S.settings, dest.country, dest.city);
+    carrier = offers.find(x=>x.id===dest.carrier) || null; shipping = carrier ? carrier.price : 0; quote = !offers.length; }
   let discount = 0;
   if(promo){
     if(promo.type==='percent') discount = Math.round(subtotal*promo.value/100);
     else if(promo.type==='fixed') discount = Math.min(promo.value, subtotal);
     else if(promo.type==='shipping'){ discount = shipping; }
   }
-  return {lines, subtotal, shipping, discount, total:Math.max(0, subtotal+shipping-discount)};
+  return {lines, subtotal, shipping, discount, total:Math.max(0, subtotal+shipping-discount), carrier, remote, quote, offers};
 }
 function cartBody(){
   const t = computeTotals(S.cart, S.appliedPromo, 'livraison');
@@ -2588,7 +2600,7 @@ async function validatePromo(code, subtotal){
 /* --- Commande --- */
 let CO = null;
 try{ if(localStorage.getItem('ffm-inst-hide')) S.instHide = true; }catch(e){}
-document.addEventListener('change', e=>{ if(e.target && e.target.id==='co-city' && CO){ const before = CO.city; readCO(); if(CO.city!==before || !(QUARTIERS[CO.city]||[]).length) drawCheckout(); } });
+document.addEventListener('change', e=>{ if(e.target && e.target.id==='co-city' && CO){ const before = CO.city; readCO(); if(CO.city!==before || !(QUARTIERS[CO.city]||[]).length) setTimeout(()=>{ if($('#co-city') || CO.step===2) drawCheckout(); }, 0); } });
 function openCheckout(){
   { const t0 = computeTotals(S.cart, S.appliedPromo, 'livraison'); ttTrack('InitiateCheckout', {value:Math.round(t0.subtotal), contents:t0.lines.filter(l=>l.kind==='product').map(l=>ttItem(l.p, l.qty, l.unit))}); }
   CO = {step:1, delivery:'livraison', name:S.myName && S.myName!=='Mode démo'?S.myName:'', phone:'', address:'', city:S.settings.city, note:'', method:null};
@@ -2632,7 +2644,8 @@ function sendWaOrder(lines, extra){
 }
 function enabledProcs(){ return Object.entries(S.settings.processors).filter(([k,v])=>v.enabled && PROCESSORS[k]); }
 function drawCheckout(){
-  const t = computeTotals(S.cart, S.appliedPromo, CO.delivery);
+  const t = computeTotals(S.cart, S.appliedPromo, CO.delivery, CO);
+  if(t.remote && CO.carrier && !t.carrier) CO.carrier = '';
   let body = '';
   if(CO.step===1) body = `${shopWa()?`<h3 style="margin-bottom:10px">Comment voulez-vous commander ?</h3><div class="how">
       <button aria-pressed="${CO.how!=='wa'}" data-a="coHow" data-v="site"><span style="font-size:22px">🧾</span><span><b>Commander ici</b><span class="muted small">Remplissez vos informations : nous recevons votre commande tout de suite.</span></span></button>
@@ -2646,16 +2659,18 @@ function drawCheckout(){
     <div class="field"><label for="co-phone">Téléphone</label><input class="input" id="co-phone" value="${esc(CO.phone)}" inputmode="tel" autocomplete="tel" placeholder="+223 …"></div>`}`;
   if(CO.step===2) body = `<h3 style="margin-bottom:14px">Livraison</h3>
     <div class="pay-opts" style="margin-bottom:14px">
-      <button class="pay-opt" data-a="coDelivery" data-v="livraison" aria-pressed="${CO.delivery==='livraison'}"><span class="pay-logo" style="background:var(--indigo)">🚚</span><span><b>Livraison à domicile</b><br><span class="muted small">${t.subtotal>=S.settings.freeFrom?'Offerte':fmt(S.settings.deliveryFee)}</span></span></button>
+      <button class="pay-opt" data-a="coDelivery" data-v="livraison" aria-pressed="${CO.delivery==='livraison'}"><span class="pay-logo" style="background:var(--indigo)">🚚</span><span><b>${t.remote?'Livraison / expédition':'Livraison à domicile'}</b><br><span class="muted small">${t.remote?(t.carrier?fmt(t.carrier.price)+' · '+esc(t.carrier.name):t.quote?'Transport sur devis':'Selon la compagnie choisie'):t.subtotal>=S.settings.freeFrom?'Offerte':fmt(S.settings.deliveryFee)}</span></span></button>
       <button class="pay-opt" data-a="coDelivery" data-v="retrait" aria-pressed="${CO.delivery==='retrait'}"><span class="pay-logo" style="background:var(--kola)">🏪</span><span><b>Retrait en boutique</b><br><span class="muted small">Gratuit</span></span></button>
     </div>
     ${CO.delivery==='livraison'?(()=>{ const ctry = CO.country||'ML', list = (S.settings.shipCountries||['ML']).filter(c=>WA[c]); if(!CO.city && ctry==='ML') CO.city = S.settings.city||'Bamako';
       const qs = QUARTIERS[CO.city] || [];
       return `<p class="co-lbl">Pays de livraison${list.length>1?' · possible d’expédier hors du Mali':''}</p>
       <div class="ctry-grid">${list.map(c=>`<button class="ctry" data-a="coCountry" data-v="${c}" aria-pressed="${ctry===c}">${flagSVG(c)}<span>${esc(WA[c])}</span></button>`).join('')}</div>
-      ${ctry!=='ML'?'<p class="small" style="margin:-4px 0 12px;color:var(--indigo)">🌍 Livraison internationale : le délai et les frais d’envoi vous seront confirmés par notre équipe sur WhatsApp avant l’expédition.</p>':''}
       <div class="field"><label for="co-city">Ville *</label><input class="input" id="co-city" list="co-cities" value="${esc(CO.city)}" placeholder="ex. ${esc((CITIES[ctry]||['Bamako'])[0])}" autocomplete="address-level2"><datalist id="co-cities">${(CITIES[ctry]||[]).map(v=>`<option value="${esc(v)}">`).join('')}</datalist></div>
-      <div class="field"><label for="co-address" style="display:flex;justify-content:space-between;gap:8px"><span>📍 Quartier *</span>${qs.length?'<span class="small" style="color:var(--indigo);font-weight:700">Quartier introuvable ? Tapez-le</span>':''}</label><input class="input" id="co-address" list="co-quarts" value="${esc(CO.address)}" placeholder="${qs.length?'Tapez votre quartier (ex. Faladié, ACI 2000…)':'Quartier, rue ou adresse'}" autocomplete="off"><datalist id="co-quarts">${qs.map(v=>`<option value="${esc(v)}">`).join('')}</datalist></div>
+      ${t.remote && CO.city ? (t.offers.length ? `<p class="co-lbl">🚚 Transport vers ${esc(CO.city)} · choisissez la compagnie *</p>
+        <div class="pay-opts ship-opts" style="margin-bottom:14px;grid-template-columns:1fr">${t.offers.map((o,i)=>`<button class="pay-opt" data-a="coCarrier" data-v="${esc(o.id)}" aria-pressed="${CO.carrier===o.id}"><span class="pay-logo" style="background:${o.mode==='air'?'#2563eb':o.mode==='express'?'#b45309':'var(--kola)'};font-size:20px">${SHIP_MODES[o.mode][0]}</span><span style="flex:1;text-align:left"><b>${esc(o.name)}</b>${i===0&&t.offers.length>1?' <span class="pill ok" style="font-size:11px">Le moins cher</span>':''}<br><span class="muted small">${esc(SHIP_MODES[o.mode][1])}${o.days?' · '+esc(o.days):''}${o.note?' · '+esc(o.note):''}</span></span><b style="white-space:nowrap">${fmt(o.price)}</b></button>`).join('')}</div>`
+        : `<p class="small" style="margin:-4px 0 12px;color:var(--indigo)">🌍 Livraison hors de ${esc(S.settings.city||'Bamako')} : le prix du transport et le délai vous seront confirmés par notre équipe sur WhatsApp avant l’expédition.</p>`) : ''}
+      <div class="field"><label for="co-address" style="display:flex;justify-content:space-between;gap:8px"><span>📍 ${t.remote?'Quartier ou adresse de réception *':'Quartier *'}</span>${qs.length?'<span class="small" style="color:var(--indigo);font-weight:700">Quartier introuvable ? Tapez-le</span>':''}</label><input class="input" id="co-address" list="co-quarts" value="${esc(CO.address)}" placeholder="${qs.length?'Tapez votre quartier (ex. Faladié, ACI 2000…)':'Quartier, rue ou adresse'}" autocomplete="off"><datalist id="co-quarts">${qs.map(v=>`<option value="${esc(v)}">`).join('')}</datalist></div>
       <div class="field"><label for="co-note">Indications ou repère (facultatif)</label><input class="input" id="co-note" value="${esc(CO.note)}" placeholder="ex. derrière la pharmacie, portail bleu, 2e étage"></div>
       <div class="geo-box">${CO.geo?`<span style="flex:1"><b style="color:var(--kola)">✓ Position exacte enregistrée</b><br><span class="muted small">Précision d’environ ${Math.round(CO.geo.acc||0)} m · <a href="${esc(mapsLink({geo:CO.geo}))}" target="_blank" rel="noopener" style="color:var(--indigo)">voir sur la carte</a></span></span><button class="btn ghost sm" data-a="coGeoDel" style="flex:0">Retirer</button>`
         :`<span style="flex:1;min-width:180px"><b>Livraison plus rapide</b><br><span class="muted small">Si vous êtes à l’adresse de livraison, partagez votre position : le livreur arrive directement chez vous.</span></span><button class="btn primary sm" data-a="coGeo" style="flex:0;white-space:nowrap">📍 Partager ma position</button>`}</div>`; })():`<div class="field"><label for="co-note">Instructions (facultatif)</label><input class="input" id="co-note" value="${esc(CO.note)}" placeholder="Horaire de passage…"></div>`}`;
@@ -2679,7 +2694,8 @@ function drawCheckout(){
     ${S.settings.testMode?'<div class="test-note"><b>Mode test.</b> Aucun débit réel n’est effectué : le paiement est simulé.</div>':''}
     <div class="totals" style="margin-top:18px"><div><span>Sous-total</span><span>${fmt(t.subtotal)}</span></div>
     ${t.discount?`<div style="color:var(--kola)"><span>Remise</span><span>−${fmt(t.discount)}</span></div>`:''}
-    <div><span>Livraison</span><span>${t.shipping?fmt(t.shipping):'Offerte'}</span></div><div class="grand"><span>À payer</span><span>${fmt(t.total)}</span></div></div>`;
+    <div><span>${t.carrier?'Transport · '+esc(t.carrier.name):'Livraison'}</span><span>${t.quote?'Sur devis':t.shipping?fmt(t.shipping):'Offerte'}</span></div><div class="grand"><span>À payer</span><span>${fmt(t.total)}</span></div></div>
+    ${t.quote?`<p class="muted small" style="margin:8px 0 0">Le transport vers ${esc(CO.city)} n’est pas inclus : nous vous confirmons son prix sur WhatsApp avant l’expédition.</p>`:''}`;
   }
   $('#overlay').innerHTML = `<div class="scrim" data-a="closeAll"><div class="modal" role="dialog" aria-modal="true" aria-label="Commande">
     <div class="m-h"><h2>Commande</h2><button class="x" data-a="closeAll" aria-label="Fermer">×</button></div>
@@ -2709,16 +2725,17 @@ async function coNext(){
   readCO(); const err = $('#co-err');
   if(CO.step===1){ if(!CO.name || CO.phone.replace(/\D/g,'').length<8){ err.textContent='Indiquez votre nom et un numéro de téléphone valide.'; return; } }
   if(CO.step===2 && CO.delivery==='livraison' && (!CO.city || !CO.address)){ err.textContent = !CO.city ? 'Indiquez votre ville.' : 'Indiquez votre quartier.'; ($(!CO.city?'#co-city':'#co-address')||{}).focus?.(); return; }
+  if(CO.step===2 && CO.delivery==='livraison'){ const tt = computeTotals(S.cart, S.appliedPromo, 'livraison', CO); if(tt.remote && tt.offers.length && !tt.carrier){ if(!$('.ship-opts')){ drawCheckout(); } $('#co-err').textContent='Choisissez la compagnie de transport ci-dessus 👆'; $('.ship-opts')?.scrollIntoView({behavior:'smooth', block:'center'}); return; } }
   if(CO.step<3){ CO.step++; drawCheckout(); return; }
   if(!payCheck()) return;
   { const si = stockIssue(S.cart); if(si){ err.textContent = si; return; } }
-  runPayment(CO.method, computeTotals(S.cart, S.appliedPromo, CO.delivery).total, async (ref)=>{
-    const t = computeTotals(S.cart, S.appliedPromo, CO.delivery);
+  runPayment(CO.method, computeTotals(S.cart, S.appliedPromo, CO.delivery, CO).total, async (ref)=>{
+    const t = computeTotals(S.cart, S.appliedPromo, CO.delivery, CO);
     const id = newId('o');
     const order = {
       number:'FM-'+new Date().toISOString().slice(2,10).replace(/-/g,'')+'-'+rnd(4),
       items:orderItems(t.lines),
-      subtotal:t.subtotal, discount:t.discount, shipping:t.shipping, total:t.total,
+      subtotal:t.subtotal, discount:t.discount, shipping:t.shipping, total:t.total, ...(t.carrier?{carrier:t.carrier}:{}), ...(t.quote?{shipQuote:true}:{}),
       promoCode:S.appliedPromo?S.appliedPromo.code:'',
       source:srcCode(), campaign:cmpCode(), lpPids:lpSeen().filter(id=>S.cart.some(l=>l.id===id)),
       affiliate:S.appliedPromo&&S.appliedPromo.affiliate?{id:S.appliedPromo.affiliate.id, code:S.appliedPromo.code, discountPct:S.appliedPromo.value, commission:affCommission(t.lines, S.appliedPromo.value)}:null,
@@ -2772,7 +2789,7 @@ function receiptHTML(o){
     <div style="border-top:2px dashed var(--line); margin:10px 0"></div>
     <div class="rr"><span>Sous-total</span><span>${fmt(o.subtotal)}</span></div>
     ${o.discount?`<div class="rr"><span>Remise ${esc(o.promoCode)}</span><span>−${fmt(o.discount)}</span></div>`:''}
-    ${o.shipping?`<div class="rr"><span>Livraison</span><span>${fmt(o.shipping)}</span></div>`:''}
+    ${o.carrier?`<div class="rr"><span>Transport · ${esc(o.carrier.name)}${o.carrier.days?' ('+esc(o.carrier.days)+')':''}</span><span>${fmt(o.shipping)}</span></div>`:o.shipping?`<div class="rr"><span>Livraison</span><span>${fmt(o.shipping)}</span></div>`:''}${o.shipQuote?`<div class="rr"><span>Transport</span><span>Sur devis</span></div>`:''}
     <div class="rr" style="font:800 18px var(--f-d); margin-top:6px"><span>Total</span><span>${fmt(o.total)}</span></div>
     <div class="rr muted small"><span>Paiement</span><span>${esc(PROCESSORS[o.payment?.method]?.name || (o.payment?.method==='cash'?'Espèces':o.payment?.method==='credit'?'À crédit':o.payment?.method))}</span></div>
     ${o.payment?.received?`<div class="rr muted small"><span>Reçu / rendu</span><span>${fmt(o.payment.received)} / ${fmt(Math.max(0,o.payment.received-o.total))}</span></div>`:''}
@@ -3538,7 +3555,39 @@ function billForm(type, x){
 }
 
 /* --- Gestion --- */
-const TABS = [['dash','Tableau de bord'],['products','Produits'],['stock','Stock & inventaire'],['bundles','Lots'],['orders','Commandes'],['promos','Codes promo'],['affiliates','Ambassadeurs'],['reviews','Avis clients'],['blog','Conseils (blog)'],['studio','Studio réseaux'],['audience','Clients & retargeting'],['alerts','Alertes clients'],['carts','Assistant & paniers'],['company','Société'],['payments','Paiements'],['team','Équipe']];
+/* --- Gestion › Transport : compagnies et tarifs hors de la ville --- */
+const CARRIER_SUGG = [['Diarra Transport','route'],['Bani Transport','route'],['Sonef','route'],['Nour Transport','route'],['Africa Tours','route'],['Binké Transport','route'],['Gana Transport','route'],
+  ['Sky Mali','air'],['Air Sénégal','air'],['ASKY Airlines','air'],['Air Côte d’Ivoire','air'],['Royal Air Maroc Cargo','air'],['DHL Express','express'],['EMS · Poste du Mali','express']];
+function readTransport(){ const out = [];
+  document.querySelectorAll('.tr-car').forEach(box=>{ const g = k => box.querySelector(`[data-k="${k}"]`);
+    const rates = [...box.querySelectorAll('.tr-rate')].map(r=>({country:r.querySelector('[data-r="country"]').value, city:r.querySelector('[data-r="city"]').value.trim(), price:r.querySelector('[data-r="price"]').value.replace(/\D/g,'')===''?null:Number(r.querySelector('[data-r="price"]').value.replace(/\D/g,'')), days:r.querySelector('[data-r="days"]').value.trim()}));
+    out.push({id:box.dataset.id, name:g('name').value.trim(), mode:g('mode').value, active:g('active').checked, phone:g('phone').value.trim(), note:g('note').value.trim(), rates}); });
+  return out; }
+function paneTransport(){
+  if(!S.trFresh && document.querySelector('.tr-car')){ S.trDraft = readTransport(); S.trLocal = $('#tr-local')?.value; } S.trFresh = false; /* un rafraîchissement ne perd pas la saisie */
+  const st = S.settings, list = S.trDraft || structuredClone(st.carriers||[]); S.trDraft = list;
+  const ctryOpts = sel => Object.entries(WA).map(([k,l])=>`<option value="${k}" ${k===(sel||'ML')?'selected':''}>${l}</option>`).join('');
+  const act = list.filter(c=>c.active && (c.rates||[]).some(r=>r.price!=null)).length;
+  return `<div class="toolbar"><h2 style="font-size:24px;flex:1">Transport hors de ${esc(st.city||'Bamako')}</h2><button class="btn primary" data-a="trSave">Enregistrer</button></div>
+  <div class="panel"><p style="margin:0 0 10px">Quand un client commande pour une ville <b>hors de votre zone de livraison</b> (régions du Mali, autres pays), il voit la liste des <b>compagnies actives</b> qui ont un tarif pour sa ville, <b>de la moins chère à la plus chère</b>, et il choisit. Le prix du transport s’ajoute à sa commande.</p>
+    <p class="muted small" style="margin:0 0 12px">Sans tarif pour sa ville, le client voit « Transport sur devis » et vous confirmez le prix sur WhatsApp. ${act?`<b>${act} compagnie${act>1?'s':''} active${act>1?'s':''}</b>.`:'<b>Aucune compagnie active pour l’instant.</b>'}</p>
+    <div class="field" style="margin:0"><label for="tr-local">Villes livrées par vos propres livreurs, au tarif normal (${fmt(st.deliveryFee)})</label><input class="input" id="tr-local" value="${esc(S.trLocal!=null?S.trLocal:(st.localCities||''))}" placeholder="ex. Kati, Kalaban Coro, Senou (${esc(st.city||'Bamako')} est toujours incluse)"></div></div>
+  <div class="alert" style="margin-bottom:14px"><span>⚠️ Les tarifs et les lignes changent souvent (sécurité sur les routes, vols suspendus, carburant). Appelez chaque compagnie pour connaître <b>son prix colis réel</b> avant d’activer, et désactivez-la si elle suspend ses départs.</span></div>
+  ${list.map(c=>`<div class="panel tr-car" data-id="${esc(c.id)}">
+    <div class="row" style="gap:8px;align-items:flex-end;flex-wrap:wrap">
+      <div class="field" style="margin:0;flex:2;min-width:180px"><label>Compagnie</label><input class="input" data-k="name" value="${esc(c.name||'')}" placeholder="Nom de la compagnie"></div>
+      <div class="field" style="margin:0;flex:1;min-width:170px"><label>Type</label><select class="input" data-k="mode">${Object.entries(SHIP_MODES).map(([k,[i,l]])=>`<option value="${k}" ${c.mode===k?'selected':''}>${i} ${l}</option>`).join('')}</select></div>
+      <div class="field" style="margin:0;flex:1;min-width:140px"><label>Téléphone (interne)</label><input class="input" data-k="phone" value="${esc(c.phone||'')}" inputmode="tel" placeholder="+223 …"></div>
+      <label class="row small" style="gap:6px;margin-bottom:10px;font-weight:700"><input type="checkbox" data-k="active" ${c.active?'checked':''}> Active</label></div>
+    <div class="field" style="margin:10px 0"><label>Info pour le client (dépôt, retrait…)</label><input class="input" data-k="note" value="${esc(c.note||'')}" placeholder="ex. Retrait du colis à la gare d’arrivée avec votre pièce d’identité"></div>
+    <div class="tbl-wrap"><table><thead><tr><th>Pays</th><th>Ville (vide = tout le pays)</th><th>Prix du transport (FCFA)</th><th>Délai</th><th></th></tr></thead><tbody>
+    ${(c.rates||[]).map((r,i)=>`<tr class="tr-rate"><td><select class="input" data-r="country" style="min-width:120px">${ctryOpts(r.country)}</select></td><td><input class="input" data-r="city" value="${esc(r.city||'')}" list="tr-cities-${esc(r.country||'ML')}" placeholder="ex. Ségou"></td><td><input class="input" data-r="price" value="${r.price!=null?esc(r.price):''}" inputmode="numeric" placeholder="à demander" style="max-width:140px"></td><td><input class="input" data-r="days" value="${esc(r.days||'')}" placeholder="ex. 1 à 2 jours" style="max-width:130px"></td><td><button class="btn ghost sm" data-a="trDelRate" data-id="${esc(c.id)}" data-v="${i}" aria-label="Supprimer ce tarif">×</button></td></tr>`).join('')}
+    </tbody></table></div>
+    <div class="row" style="gap:8px;margin-top:8px;flex-wrap:wrap"><button class="btn ghost sm" data-a="trAddRate" data-id="${esc(c.id)}">+ Ajouter une destination</button>${c.mode!=='air'?`<button class="btn ghost sm" data-a="trAddRegions" data-id="${esc(c.id)}">+ Toutes les régions du Mali</button>`:''}<span style="flex:1"></span><button class="btn ghost sm" data-a="trDelCar" data-id="${esc(c.id)}" style="color:var(--danger)">Supprimer la compagnie</button></div></div>`).join('')}
+  ${Object.keys(CITIES).map(k=>`<datalist id="tr-cities-${k}">${CITIES[k].map(v=>`<option value="${esc(v)}">`).join('')}</datalist>`).join('')}
+  <div class="row" style="gap:8px;flex-wrap:wrap"><button class="btn ghost" data-a="trAddCar">+ Ajouter une compagnie</button>${CARRIER_SUGG.some(([n])=>!list.some(c=>normCity(c.name)===normCity(n)))?'<button class="btn ghost" data-a="trSugg">📋 Ajouter des compagnies connues (à vérifier)</button>':''}<button class="btn primary" data-a="trSave">Enregistrer</button></div>`;
+}
+const TABS = [['dash','Tableau de bord'],['products','Produits'],['stock','Stock & inventaire'],['bundles','Lots'],['orders','Commandes'],['promos','Codes promo'],['affiliates','Ambassadeurs'],['reviews','Avis clients'],['blog','Conseils (blog)'],['studio','Studio réseaux'],['audience','Clients & retargeting'],['alerts','Alertes clients'],['carts','Assistant & paniers'],['company','Société'],['transport','Transport'],['payments','Paiements'],['team','Équipe']];
 /* --- Gestion › Conseils --- */
 function blogIdeas(){
   const city = S.settings.city||'Bamako', live = S.products.filter(p=>p.active!==false), cats = [...new Set(live.map(p=>p.category).filter(Boolean))];
@@ -3625,7 +3674,7 @@ function articleForm(a0){
 }
 function viewAdmin(){
   const pending = S.orders.filter(o=>o.status==='en_attente'||(o.status==='payee'&&!o.stockApplied)).length;
-  const panes = {dash:paneDash, products:paneProducts, stock:paneStock, bundles:paneBundles, orders:paneOrders, promos:panePromos, affiliates:paneAffiliates, reviews:paneReviews, blog:paneBlog, studio:paneStudio, audience:paneAudience, company:paneCompany, alerts:()=>window.paneAlerts?window.paneAlerts():'', carts:()=>window.paneCarts?window.paneCarts():'', payments:panePayments, team:paneTeam};
+  const panes = {dash:paneDash, products:paneProducts, stock:paneStock, bundles:paneBundles, orders:paneOrders, promos:panePromos, affiliates:paneAffiliates, reviews:paneReviews, blog:paneBlog, studio:paneStudio, audience:paneAudience, company:paneCompany, transport:paneTransport, alerts:()=>window.paneAlerts?window.paneAlerts():'', carts:()=>window.paneCarts?window.paneCarts():'', payments:panePayments, team:paneTeam};
   return `<div class="admin"><nav class="side" aria-label="Gestion">${TABS.filter(([k])=>!['alerts','carts'].includes(k)||isServer()).map(([k,l])=>`<button data-a="tab" data-v="${k}" ${S.tab===k?'aria-current="page"':''}>${l}${k==='orders'&&pending?`<span class="pill warn">${pending}</span>`:''}</button>`).join('')}</nav>
     <section>${panes[S.tab]()}</section></div>`;
 }
@@ -3990,6 +4039,7 @@ function orderDetail(o){
       <div>${o.affiliate?`<div class="panel"><h3>Ambassadeur</h3><p style="margin:0"><b>${esc(o.affiliate.code)}</b> · ${esc((S.affiliates.find(a=>a.id===o.affiliate.id)||{}).name||'')}<br>Commission ${fmt(o.affiliate.commission)} <span class="pill ${AFF_ST[affState(o)].c}">${AFF_ST[affState(o)].l}</span></p></div>`:''}<div class="panel"><h3>Client</h3><p style="margin:0">${esc(c.name||'—')}<br>${esc(c.phone||'')}<br>${o.delivery==='livraison'?esc([c.address, c.city, c.country&&c.country!=='ML'?WA[c.country]:''].filter(Boolean).join(', ')):'Retrait en boutique'}${c.note?`<br><span class="muted">Repère : ${esc(c.note)}</span>`:''}</p>
       <div class="fin-actions" style="margin:10px 0 0">${c.phone?`<a class="btn ghost sm" href="tel:${esc(c.phone.replace(/\s/g,''))}">Appeler</a>`:''}
       ${o.delivery==='livraison'&&mapsLink(c)?`<a class="btn ghost sm" href="${esc(mapsLink(c))}" target="_blank" rel="noopener">📍 Google Maps${c.geo?' (position exacte)':''}</a><button class="btn ghost sm" data-a="copyMaps" data-v="${esc(mapsLink(c))}">Copier le lien</button>`:''}</div></div>
+      ${o.delivery==='livraison'&&(o.carrier||o.shipQuote)?`<div class="panel"><h3>${o.carrier?SHIP_MODES[o.carrier.mode||'route'][0]:'🌍'} Transport vers ${esc(o.customer?.city||'')}</h3>${o.carrier?`<p style="margin:0"><b>${esc(o.carrier.name)}</b> · ${esc(SHIP_MODES[o.carrier.mode||'route'][1])} · <b>${fmt(o.carrier.price)}</b>${o.carrier.days?' · '+esc(o.carrier.days):''}</p>${o.carrier.note?`<p class="muted small" style="margin:6px 0 0">${esc(o.carrier.note)}</p>`:''}${(()=>{ const c=(S.settings.carriers||[]).find(x=>x.id===o.carrier.id); return c&&c.phone?`<a class="btn ghost sm" style="margin-top:8px" href="tel:${esc(String(c.phone).replace(/\s/g,''))}">📞 Appeler ${esc(c.name)}</a>`:''; })()}`:`<p style="margin:0">Transport <b>sur devis</b> : aucune compagnie n’a de tarif pour cette destination. Confirmez le prix au client sur WhatsApp.</p>`}</div>`:''}
       ${o.delivery==='livraison'?`<div class="panel"><h3>🛵 Livraison</h3>
         <div class="row" style="align-items:flex-end;gap:8px"><div class="field" style="margin:0"><label for="od-drv">Livreur</label><select class="input" id="od-drv"><option value="">— Choisir —</option>${S.drivers.filter(d=>d.active!==false||(o.driver&&o.driver.id===d.id)).map(d=>`<option value="${d.id}" ${o.driver&&o.driver.id===d.id?'selected':''}>${esc(d.name)} · ${esc(d.phone)}</option>`).join('')}</select></div><button class="btn ghost sm" data-a="drivers" style="flex:0;white-space:nowrap">＋ Livreurs</button></div>
         ${o.driver?`<div class="fin-actions" style="margin:10px 0 0"><a class="btn ghost sm" href="tel:${esc(String(o.driver.phone).replace(/\s/g,''))}">📞 Appeler ${esc(o.driver.name)}</a><a class="btn ghost sm" target="_blank" rel="noopener" href="https://wa.me/${waNumber(o.driver.phone)}?text=${encodeURIComponent(courseText(o, S.drivers.find(d=>d.id===o.driver.id)))}">💬 Envoyer la course</a></div>`:''}
@@ -4442,6 +4492,17 @@ document.addEventListener('click', async e=>{
     case 'voiceSearch': voiceSearch(el); break;
     case 'blog': openBlog(); break;
     case 'about': openAbout(); break;
+    case 'coCarrier': readCO(); CO.carrier = el.dataset.v; drawCheckout(); break;
+    case 'trAddCar': { const L = readTransport(); L.push({id:newId('tc'), name:'', mode:'route', active:false, phone:'', note:'', rates:[{country:'ML', city:'', price:null, days:''}]}); S.trDraft = L; S.trFresh = true; S.trLocal = $('#tr-local')?.value; schedule(); break; }
+    case 'trSugg': { const L = readTransport(); CARRIER_SUGG.forEach(([n,m])=>{ if(!L.some(c=>normCity(c.name)===normCity(n))) L.push({id:newId('tc'), name:n, mode:m, active:false, phone:'', note:'', rates:[]}); }); S.trDraft = L; S.trFresh = true; S.trLocal = $('#tr-local')?.value; schedule(); toast('Compagnies ajoutées, désactivées : appelez-les pour leurs tarifs, puis activez-les.'); break; }
+    case 'trDelCar': { const L = readTransport(); const c = L.find(x=>x.id===id); if(c && (c.name||c.rates.some(r=>r.price!=null)) && !confirm(`Supprimer ${c.name||'cette compagnie'} et ses tarifs ?`)) break; S.trDraft = L; S.trFresh = true; S.trLocal = $('#tr-local')?.value.filter(x=>x.id!==id); schedule(); break; }
+    case 'trAddRate': { const L = readTransport(); const c = L.find(x=>x.id===id); if(c){ const last = c.rates[c.rates.length-1]; c.rates.push({country:last?last.country:'ML', city:'', price:null, days:''}); } S.trDraft = L; S.trFresh = true; S.trLocal = $('#tr-local')?.value; schedule(); break; }
+    case 'trAddRegions': { const L = readTransport(); const c = L.find(x=>x.id===id); if(c){ const have = new Set(c.rates.filter(r=>r.country==='ML').map(r=>normCity(r.city))); const loc = [S.settings.city||'Bamako', ...String($('#tr-local')?.value||'').split(/[,;\n]/)].map(normCity);
+      CITIES.ML.filter(v=>!have.has(normCity(v)) && !loc.includes(normCity(v))).forEach(v=>c.rates.push({country:'ML', city:v, price:null, days:''})); c.rates = c.rates.filter(r=>r.city || r.price!=null); } S.trDraft = L; S.trFresh = true; S.trLocal = $('#tr-local')?.value; schedule(); toast('Villes ajoutées : remplissez les prix (laissez vide les villes non desservies).'); break; }
+    case 'trDelRate': { const L = readTransport(); const c = L.find(x=>x.id===id); if(c) c.rates.splice(Number(el.dataset.v),1); S.trDraft = L; S.trFresh = true; S.trLocal = $('#tr-local')?.value; schedule(); break; }
+    case 'trSave': { const L = readTransport(); for(const c of L){ if(!c.name){ toast('Donnez un nom à chaque compagnie (ou supprimez-la).'); return; } if(c.active && !c.rates.some(r=>r.price!=null)){ toast(`${c.name} : ajoutez au moins un prix avant de l’activer.`); return; } }
+      const s2 = {...S.settings, carriers:L.map(c=>({...c, rates:c.rates.filter(r=>r.price!=null || r.city)})), localCities:($('#tr-local')?.value||'').trim().slice(0,400)};
+      el.disabled = true; try{ await put('settings','main',s2); S.trDraft = null; S.trLocal = null; toast('Transport enregistré'); }catch(e){ dbErr(e); toast('Enregistrement impossible : réservé aux gérants.'); } el.disabled = false; break; }
     case 'aboutTpl': { const t = $('#co-aboutText'); if(t){ if(t.value.trim() && !confirm('Remplacer le texte actuel par le texte modèle ?')) break; t.value = aboutDefault(); t.focus(); } break; }
     case 'blogCat': S.blogCat = el.dataset.v; schedule(); break;
     case 'article': openArticle(id); break;

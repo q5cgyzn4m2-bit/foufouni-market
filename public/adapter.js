@@ -328,6 +328,7 @@
     readCO(); const err = $('#co-err');
     if (CO.step === 1 && (!CO.name || CO.phone.replace(/\D/g, '').length < 8)) { err.textContent = 'Indiquez votre nom et un numéro de téléphone valide.'; return; }
     if (CO.step === 2 && CO.delivery === 'livraison' && (!CO.city || !CO.address)) { err.textContent = !CO.city ? 'Indiquez votre ville.' : 'Indiquez votre quartier.'; return; }
+    if (CO.step === 2 && CO.delivery === 'livraison') { const tt = computeTotals(S.cart, S.appliedPromo, 'livraison', CO); if (tt.remote && tt.offers.length && !tt.carrier) { if (!$('.ship-opts')) drawCheckout(); $('#co-err').textContent = 'Choisissez la compagnie de transport ci-dessus 👆'; $('.ship-opts')?.scrollIntoView({ behavior: 'smooth', block: 'center' }); return; } }
     if (CO.step === 1) { contact = { name: CO.name, phone: CO.phone }; syncCart(true); }
     if (CO.step < 3) { CO.step++; drawCheckout(); return; }
     if (!payCheck()) return;
@@ -336,10 +337,10 @@
       const r = await api('POST', '/api/orders', {
         items: S.cart.map(l => l.b ? { bundle: l.b, qty: l.qty } : (l.v ? { id: l.id, qty: l.qty, v: l.v } : { id: l.id, qty: l.qty })), promoCode: S.appliedPromo ? S.appliedPromo.code : '',
         customer: { name: CO.name, phone: CO.phone, address: CO.address, city: CO.city, note: CO.note, country: CO.country || 'ML', ...(CO.geo ? { geo: CO.geo } : {}) }, payRef: CO.payRef || '',
-        delivery: CO.delivery, method: CO.method, cartId, ref: refCode(), source: srcCode(), campaign: cmpCode(), lpPids: lpSeen().filter(id => S.cart.some(l => l.id === id))
+        delivery: CO.delivery, carrier: CO.carrier || '', method: CO.method, cartId, ref: refCode(), source: srcCode(), campaign: cmpCode(), lpPids: lpSeen().filter(id => S.cart.some(l => l.id === id))
       });
       addMine(r.id, r.token); syncAlerts();
-      { const tt = computeTotals(S.cart, S.appliedPromo, CO.delivery); ttTrack('PlaceAnOrder', { transaction_id: (r.order && r.order.number) || r.id, value: Math.round(tt.total), contents: tt.lines.filter(l => l.kind === 'product').map(l => ttItem(l.p, l.qty, l.unit)) }); ttIdentify(CO.phone); }
+      { const tt = computeTotals(S.cart, S.appliedPromo, CO.delivery, CO); ttTrack('PlaceAnOrder', { transaction_id: (r.order && r.order.number) || r.id, value: Math.round(tt.total), contents: tt.lines.filter(l => l.kind === 'product').map(l => ttItem(l.p, l.qty, l.unit)) }); ttIdentify(CO.phone); }
       clearTimeout(syncT); cartId = newCartId(); contact = null; try { localStorage.setItem('ffm-cart-id', cartId); } catch (e) {}
       S.cart = []; S.appliedPromo = null; saveCart(); schedule();
       if (r.redirect) {

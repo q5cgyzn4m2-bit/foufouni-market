@@ -142,7 +142,7 @@ function publicSettings() {
   return { shopName: s.shopName, tagline: s.tagline, intro: s.intro, currency: s.currency, deliveryFee: s.deliveryFee, freeFrom: s.freeFrom, city: s.city, phone: s.phone, processors: procs,
     carouselOn: s.carouselOn !== false, carouselMode: ['both', 'new', 'sale'].includes(s.carouselMode) ? s.carouselMode : 'both', carouselSpeed: ['lent', 'normal', 'rapide'].includes(s.carouselSpeed) ? s.carouselSpeed : 'normal',
     showTrust: s.showTrust !== false, deliveryPromise: String(s.deliveryPromise || '').slice(0, 40), returnPolicy: String(s.returnPolicy || '').slice(0, 40),
-    manualPay: manualPay(), shipCountries: Array.isArray(s.shipCountries) ? s.shipCountries : ['ML'],
+    manualPay: manualPay(), shipCountries: Array.isArray(s.shipCountries) ? s.shipCountries : ['ML'], carriers: cleanCarriers(s.carriers).filter(c => c.active).map(({ phone, ...c }) => c), localCities: String(s.localCities || '').slice(0, 400),
     headerSub: s.headerSub || '', legalName: s.legalName || '', legalForm: s.legalForm || '', capital: s.capital || '', rccm: s.rccm || '', nif: s.nif || '', address: s.address || '', country: s.country || '', whatsapp: s.whatsapp || '', phone2: s.phone2 || '', email: s.email || '', hours: s.hours || '', receiptNote: s.receiptNote || '',
     affDays: s.affDays || 30, siteUrl: s.siteUrl || '', aboutText: String(s.aboutText || '').slice(0, 6000),
     assistant: !!env.ANTHROPIC_API_KEY && s.assistantOn !== false, assistantName: s.assistantName || 'Fanta',
@@ -304,7 +304,31 @@ function affCommission(lines, discPct) {
 const isPartnerS = p => !!(p && p.partner && /^https:\/\/\S+$/.test(p.partner.url || ''));
 const AFF_HOST_RE = /(^|\.)(amazon\.[a-z.]+|amzn\.to|aliexpress\.[a-z.]+|s\.click\.aliexpress\.com|temu\.com|jumia\.[a-z.]+)$/i;
 const isAffUrlS = u => { try { return AFF_HOST_RE.test(new URL(String(u).replace(/&amp;/g, '&')).hostname); } catch (e) { return false; } };
-function computeOrder(items, promoCode, delivery, ref) {
+/* ===================== Transport hors de la ville (compagnies routières, aériennes, express) ===================== */
+const normCity = x => String(x || '').normalize('NFD').replace(/[̀-ͯ]/g, '').toLowerCase().replace(/[^a-z0-9]+/g, ' ').trim();
+function cleanCarriers(list) {
+  return (Array.isArray(list) ? list : []).slice(0, 40).map(c => ({
+    id: String(c && c.id || '').replace(/[^A-Za-z0-9_-]/g, '').slice(0, 30), name: String(c && c.name || '').trim().slice(0, 60),
+    mode: ['route', 'air', 'express'].includes(c && c.mode) ? c.mode : 'route', active: !!(c && c.active), phone: String(c && c.phone || '').slice(0, 30), note: String(c && c.note || '').trim().slice(0, 160),
+    rates: (Array.isArray(c && c.rates) ? c.rates : []).slice(0, 80).map(r => ({ country: /^[A-Z]{2}$/.test(r && r.country) ? r.country : 'ML', city: String(r && r.city || '').trim().slice(0, 50),
+      price: r && r.price !== '' && r.price != null && Number.isFinite(Number(r.price)) && Number(r.price) >= 0 ? Math.round(Number(r.price)) : null, days: String(r && r.days || '').trim().slice(0, 20) })).filter(r => r.price != null)
+  })).filter(c => c.id && c.name);
+}
+function isLocalDest(s, country, city) {
+  if ((country || 'ML') !== 'ML') return false;
+  const loc = [s.city || 'Bamako', ...String(s.localCities || '').split(/[,;\n]/)].map(normCity).filter(Boolean);
+  return !city || loc.includes(normCity(city));
+}
+function shipOffers(s, country, city) {
+  country = country || 'ML'; const out = [];
+  for (const c of cleanCarriers(s.carriers)) {
+    if (!c.active) continue;
+    const rs = c.rates.filter(r => r.country === country), r = rs.find(x => x.city && normCity(x.city) === normCity(city)) || rs.find(x => !x.city);
+    if (r) out.push({ id: c.id, name: c.name, mode: c.mode, price: r.price, days: r.days, note: c.note, phone: c.phone, dest: r.city || country });
+  }
+  return out.sort((a, b) => a.price - b.price);
+}
+function computeOrder(items, promoCode, delivery, ref, dest) {
   if (!Array.isArray(items) || !items.length || items.length > 50) throw httpErr(400, 'Panier invalide.');
   const prodQty = new Map(), bundleQty = new Map();
   for (const it of items) {
@@ -340,7 +364,16 @@ function computeOrder(items, promoCode, delivery, ref) {
   for (const id in totals) { const p = getDoc('products', id); if (totals[id] > (p.stock || 0)) throw httpErr(409, `Stock insuffisant pour ${p.name} (${p.stock || 0} disponible).`); }
   const s = settings();
   const subtotal = lines.reduce((t, l) => t + l.price * l.qty, 0);
-  const shipping = delivery === 'livraison' ? (subtotal >= Number(s.freeFrom || 0) ? 0 : Math.round(Number(s.deliveryFee) || 0)) : 0;
+  let shipping = delivery === 'livraison' ? (subtotal >= Number(s.freeFrom || 0) ? 0 : Math.round(Number(s.deliveryFee) || 0)) : 0;
+  let carrier = null, shipQuote = false;
+  if (delivery === 'livraison' && dest && !isLocalDest(s, dest.country, dest.city)) {
+    const offers = shipOffers(s, dest.country, dest.city);
+    if (offers.length) {
+      const o = offers.find(x => x.id === String(dest.carrier || ''));
+      if (!o) throw httpErr(400, 'Choisissez une compagnie de transport pour la livraison hors de ' + (s.city || 'Bamako') + '.');
+      shipping = o.price; carrier = { id: o.id, name: o.name, mode: o.mode, price: o.price, days: o.days, dest: o.dest, note: o.note };
+    } else { shipping = 0; shipQuote = true; }
+  }
   let discount = 0, code = '', affiliate = null;
   const aff = findAffiliate(promoCode);
   if (aff) {
@@ -355,7 +388,7 @@ function computeOrder(items, promoCode, delivery, ref) {
   }
   if (!affiliate) { const r = findAffiliate(ref); if (r) affiliate = { id: r.id, code: r.code, discountPct: 0 }; }
   if (affiliate) affiliate.commission = affCommission(lines, affiliate.discountPct);
-  return { lines, subtotal, shipping, discount, total: Math.max(0, subtotal + shipping - discount), promoCode: code, affiliate };
+  return { lines, subtotal, shipping, discount, total: Math.max(0, subtotal + shipping - discount), promoCode: code, affiliate, carrier, shipQuote };
 }
 
 /* Passage en « payée » : idempotent, déduit le stock une seule fois */
@@ -1044,13 +1077,13 @@ app.post('/api/orders', h(async (req, res) => {
   if (manual && !String(b.payRef || '').trim()) throw httpErr(400, 'Indiquez la référence de la transaction.');
   if (!customer.name || customer.phone.replace(/\D/g, '').length < 8) throw httpErr(400, 'Nom et numéro de téléphone valides requis.');
   if (delivery === 'livraison' && !customer.address) throw httpErr(400, 'Adresse de livraison requise.');
-  const t = computeOrder(b.items, b.promoCode, delivery, b.ref);
+  const t = computeOrder(b.items, b.promoCode, delivery, b.ref, { country: customer.country, city: customer.city, carrier: b.carrier });
   if (method !== 'cod' && t.total < 100) throw httpErr(400, 'Montant trop faible pour un paiement mobile.');
 
   const id = newOrderId();
   const order = {
     number: 'FM-' + new Date().toISOString().slice(2, 10).replace(/-/g, '') + '-' + rnd(4),
-    items: t.lines, subtotal: t.subtotal, discount: t.discount, shipping: t.shipping, total: t.total, promoCode: t.promoCode, affiliate: t.affiliate,
+    items: t.lines, subtotal: t.subtotal, discount: t.discount, shipping: t.shipping, total: t.total, promoCode: t.promoCode, affiliate: t.affiliate, ...(t.carrier ? { carrier: t.carrier } : {}), ...(t.shipQuote ? { shipQuote: true } : {}),
     lpPids: (Array.isArray(b.lpPids) ? b.lpPids : []).map(String).filter(x => validId(x) && t.lines.some(l => l.id === x)).slice(0, 20),
     source: String(b.source || '').toLowerCase().replace(/[^a-z0-9_-]/g, '').slice(0, 20), campaign: String(b.campaign || '').replace(/[^A-Za-z0-9_-]/g, '').slice(0, 30),
     customer, delivery, payment: { method, status: method === 'cod' ? 'à encaisser' : manual ? 'à vérifier' : 'en attente', ref: manual ? String(b.payRef || '').trim().slice(0, 60) : '', manual: !!manual, to: manual || '' },
@@ -1060,7 +1093,7 @@ app.post('/api/orders', h(async (req, res) => {
   const cartId = String(b.cartId || '');
   if (/^[a-z0-9]{8,40}$/.test(cartId) && getDoc('carts', cartId)) patchDoc('carts', cartId, { converted: true, orderId: id });
   if (method === 'cod') notify({ title: `Nouvelle commande : ${money(order.total)}`, tags: ['shopping_bags'], priority: 4, click: waLink(customer.phone, `Bonjour ${customer.name}, merci pour votre commande ${order.number} chez ${settings().shopName}.`) || BASE_URL,
-    message: `${order.number} · paiement à la livraison\n${customer.name} ${customer.phone}\n${delivery === 'livraison' ? 'Livraison : ' + customer.address + ', ' + customer.city : 'Retrait en boutique'}\n${order.items.map(i => `${i.qty} × ${i.name}`).join(', ')}${order.affiliate ? `\nVia l’ambassadeur ${order.affiliate.code} (commission ${money(order.affiliate.commission)})` : ''}` });
+    message: `${order.number} · paiement à la livraison\n${customer.name} ${customer.phone}\n${delivery === 'livraison' ? 'Livraison : ' + customer.address + ', ' + customer.city + (t.carrier ? ` · ${t.carrier.name} (${money(t.carrier.price)})` : t.shipQuote ? ' · transport sur devis' : '') : 'Retrait en boutique'}\n${order.items.map(i => `${i.qty} × ${i.name}`).join(', ')}${order.affiliate ? `\nVia l’ambassadeur ${order.affiliate.code} (commission ${money(order.affiliate.commission)})` : ''}` });
 
   let redirect = null;
   try {
