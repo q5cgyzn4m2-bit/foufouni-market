@@ -1392,7 +1392,7 @@ const offerPath = p => `/offre/${slugify(p.name)}--${p.id}`;
 const canonPath = p => hasLandingS(p) ? offerPath(p) : productPath(p);
 const catPath = c => `/categorie/${slugify(c)}`;
 const liveProducts = () => allDocs('products').filter(p => p.active !== false && p.name);
-const pubReviewsS = id => allDocs('reviews').filter(r => r.productId === id && !r.hidden && r.rating);
+const pubReviewsS = id => allDocs('reviews').filter(r => r.productId === id && !r.hidden && r.status !== 'hidden' && r.rating);
 const condSchema = c => !c || c === 'neuf' ? 'https://schema.org/NewCondition' : c === 'reconditionne' ? 'https://schema.org/RefurbishedCondition' : 'https://schema.org/UsedCondition';
 const jsonLd = o => `<script type="application/ld+json">${JSON.stringify(o).replace(/</g, '\\u003c')}</script>`;
 const lines2 = t => String(t || '').split('\n').map(x => x.trim()).filter(Boolean);

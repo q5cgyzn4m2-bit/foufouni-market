@@ -1189,16 +1189,29 @@ function reviewForm(orderId){
     paint(); });
 }
 /* Gestion des avis */
+/* Filtres des avis dans la Gestion */
+const RV_F = {all:['Tous',()=>true], neg:['😞 Négatifs (1-2★)',r=>r.rating<=2], mid:['😐 Moyens (3★)',r=>r.rating===3], pos:['😊 Positifs (4-5★)',r=>r.rating>=4],
+  noreply:['💬 Sans réponse',r=>!r.reply], photos:['📷 Avec photos',r=>(r.photos||[]).length>0], hidden:['🙈 Masqués',r=>r.status==='hidden']};
 function paneReviews(){
-  const list = S.reviews; const ids=[]; list.forEach(r=>(r.photos||[]).forEach(i=>ids.push(i))); loadReviewImgs(ids);
-  const avg = list.filter(r=>r.status!=='hidden'); const m = avg.length ? avg.reduce((t,r)=>t+r.rating,0)/avg.length : 0;
+  const all = S.reviews, f = RV_F[S.rvAdm] ? S.rvAdm : 'all', q = (S.rvQ||'').trim().toLowerCase();
+  const pname = r => (S.products.find(x=>x.id===r.productId)||{}).name || '';
+  let list = all.filter(RV_F[f][1]); if(S.rvAdm2==='noreply' && f!=='noreply') list = list.filter(r=>!r.reply);
+  if(q) list = list.filter(r=>[r.name, r.comment, r.reply, pname(r)].join(' ').toLowerCase().includes(q));
+  if(S.rvSort==='low') list = [...list].sort((a,b)=>a.rating-b.rating || b.createdAt-a.createdAt);
+  const ids=[]; list.slice(0,100).forEach(r=>(r.photos||[]).forEach(i=>ids.push(i))); loadReviewImgs(ids);
+  const avg = all.filter(r=>r.status!=='hidden'); const m = avg.length ? avg.reduce((t,r)=>t+r.rating,0)/avg.length : 0;
+  const negOpen = all.filter(r=>r.rating<=2 && !r.reply && r.status!=='hidden');
   return `<div class="toolbar"><h2 style="font-size:24px;flex:1">Avis clients</h2></div>
-  <div class="kpis" style="grid-template-columns:repeat(3,1fr)"><div class="kpi"><span>Avis publiés</span><b>${avg.length}</b></div><div class="kpi"><span>Note moyenne</span><b>${avg.length?(Math.round(m*10)/10).toString().replace('.',',')+' / 5':'—'}</b></div><div class="kpi"><span>Avis masqués</span><b>${list.length-avg.length}</b></div></div>
-  <div class="panel">${list.length?list.map(r=>{ const p=S.products.find(x=>x.id===r.productId); return `<div class="rv"><div class="rv-h">${starsHTML(r.rating)}<b>${esc(r.name||'Client')}</b><span class="muted">sur</span><b>${esc(p?p.name:'(produit supprimé)')}</b><span class="muted">${dateFr(r.createdAt)}</span>${r.status==='hidden'?'<span class="pill bad">Masqué</span>':'<span class="pill ok">Publié</span>'}</div>
+  ${negOpen.length?`<div class="alert"><span><b>${negOpen.length} avis négatif${negOpen.length>1?'s':''}</b> sans réponse. Répondre poliment et proposer une solution rassure les futurs clients.</span><button class="btn primary sm" data-a="rvAdm" data-v="neg" data-w="noreply">Voir</button></div>`:''}
+  <div class="kpis" style="grid-template-columns:repeat(4,1fr)"><div class="kpi"><span>Avis publiés</span><b>${avg.length}</b></div><div class="kpi"><span>Note moyenne</span><b>${avg.length?(Math.round(m*10)/10).toString().replace('.',',')+' / 5':'—'}</b></div><div class="kpi"><span>Avis négatifs (1-2★)</span><b style="color:${all.some(r=>r.rating<=2)?'var(--danger)':'inherit'}">${all.filter(r=>r.rating<=2).length}</b></div><div class="kpi"><span>Avis masqués</span><b>${all.length-avg.length}</b></div></div>
+  ${all.length?`<div class="cats" role="group" aria-label="Filtrer les avis" style="margin-bottom:10px">${Object.entries(RV_F).map(([k,[l,fn]])=>`<button aria-pressed="${f===k&&!(S.rvAdm2&&k!=='noreply')}" data-a="rvAdm" data-v="${k}">${l} (${all.filter(fn).length})</button>`).join('')}</div>
+  <div class="row" style="gap:8px;margin-bottom:12px"><input class="input" id="rv-q" placeholder="Rechercher un client, un produit, un mot…" value="${esc(S.rvQ||'')}" style="flex:1"><select class="input" id="rv-sort" style="max-width:220px"><option value="new">Plus récents d’abord</option><option value="low" ${S.rvSort==='low'?'selected':''}>Notes les plus basses d’abord</option></select></div>
+  ${S.rvAdm2==='noreply'&&f!=='noreply'?`<p class="muted small" style="margin:-4px 0 10px">Filtre : ${RV_F[f][0]} · sans réponse <button class="btn ghost sm" data-a="rvAdm" data-v="${f}">Afficher aussi ceux avec réponse</button></p>`:''}`:''}
+  <div class="panel">${list.length?list.slice(0,100).map(r=>{ const p=S.products.find(x=>x.id===r.productId); return `<div class="rv"><div class="rv-h">${starsHTML(r.rating)}<b>${esc(r.name||'Client')}</b><span class="muted">sur</span><b>${esc(p?p.name:'(produit supprimé)')}</b><span class="muted">${dateFr(r.createdAt)}</span>${r.status==='hidden'?'<span class="pill bad">Masqué</span>':'<span class="pill ok">Publié</span>'}</div>
     ${r.comment?`<p>${esc(r.comment)}</p>`:''}${(r.photos||[]).length?`<div class="rv-ph">${r.photos.map(id=>reviewImgSrc(id)?`<button data-a="rvZoom" data-v="${esc(id)}"><img src="${esc(reviewImgSrc(id))}" alt=""></button>`:'').join('')}</div>`:''}
     ${r.reply?`<div class="rv-reply"><b>Votre réponse</b><br>${esc(r.reply)}</div>`:''}
     <div class="fin-actions" style="margin:10px 0 0"><button class="btn ghost sm" data-a="rvReply" data-id="${r.id}">${r.reply?'Modifier la réponse':'Répondre'}</button><button class="btn ghost sm" data-a="rvToggle" data-id="${r.id}">${r.status==='hidden'?'Publier à nouveau':'Masquer'}</button></div></div>`; }).join('')
-  :'<div class="empty"><h3>Aucun avis pour l’instant</h3><p>Après une livraison, vos clients peuvent noter les produits et ajouter leurs photos depuis « Mes commandes ».</p></div>'}</div>`;
+  :all.length?'<div class="empty"><h3>Aucun avis dans ce filtre</h3><p>Choisissez un autre filtre ou effacez la recherche.</p></div>':'<div class="empty"><h3>Aucun avis pour l’instant</h3><p>Après une livraison, vos clients peuvent noter les produits, écrire un commentaire et ajouter jusqu’à 3 photos depuis le lien d’avis ou « Mes commandes ».</p></div>'}${list.length>100?`<p class="muted small">100 premiers avis affichés sur ${list.length} : affinez avec un filtre ou la recherche.</p>`:''}</div>`;
 }
 
 /* --- Codes-barres EAN-13, QR code de paiement, recherche par code --- */
@@ -4267,6 +4280,8 @@ document.addEventListener('change', async e=>{
   if(t.dataset.studio==='subject'){ S.studio.subject=t.value; schedule(); }
   if(t.dataset.stk==='cat'){ S.stCat=t.value; schedule(); }
   if(t.dataset.fin==='acc'){ S.trAcc=t.value; schedule(); }
+  if(t.id==='rv-q'){ S.rvQ=t.value; schedule(); }
+  if(t.id==='rv-sort'){ S.rvSort=t.value; schedule(); }
   if(t.dataset.fin==='type'){ S.trType=t.value; schedule(); }
   if(a==='role'){ const m=structuredClone(S.team.members); m[+t.dataset.i].role=t.value; saveTeam(m); }
 });
@@ -4345,6 +4360,7 @@ document.addEventListener('click', async e=>{
     case 'rvStart': startReview(id); break;
     case 'rvZoom': { const src = reviewImgSrc(el.dataset.v); if(src) lightbox(src); break; }
     case 'rvFilter': S.rvPhotos = el.dataset.v==='1'; schedule(); break;
+    case 'rvAdm': S.rvAdm = el.dataset.v; S.rvAdm2 = el.dataset.w||''; if(el.dataset.w) S.rvSort='new'; schedule(); break;
     case 'rvMore': S.rvMore = true; schedule(); break;
     case 'rvGo': $('#avis')?.scrollIntoView({behavior:'smooth'}); break;
     case 'rvToggle': { const r=S.reviews.find(x=>x.id===id); if(!r) break; try{ await patch('reviews', id, {status:r.status==='hidden'?'published':'hidden'}); toast(r.status==='hidden'?'Avis publié':'Avis masqué'); }catch(err){ dbErr(err); } break; }
