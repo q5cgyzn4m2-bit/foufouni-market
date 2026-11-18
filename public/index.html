@@ -3124,6 +3124,60 @@ const ACCOUNTS = {caisse:'Caisse boutique', banque:'Banque', momo:'Mobile money'
 const EXP_CATS = ['Achat de marchandises','Commissions ambassadeurs','Loyer','Salaires','Électricité et eau','Transport et livraison','Téléphone et internet','Taxes et impôts','Fournitures','Entretien et réparations','Autre'];
 const MOVE_TYPES = {vente:'Vente', encaissement:'Encaissement', depense:'Dépense', virement:'Virement', reg_fournisseur:'Règlement fournisseur', reg_client:'Règlement client'};
 const accountFor = m => m==='cash' ? 'caisse' : ['orange','moov','wave'].includes(m) ? 'momo' : 'banque';
+/* Encaissement des commandes en ligne : choix du compte (caisse, mobile money, banque) ou argent gardé par le livreur jusqu'au reversement */
+const CASH_DEST = {caisse:'Caisse boutique', momo:'Mobile money', banque:'Banque', livreur:'Chez le livreur (à reverser en caisse)'};
+const isOnlineOrder = o => o && o.channel!=='caisse' && (o.total||0)>0;
+const isCod = o => o.payment?.method==='cod';
+const cashDue = (o, st) => isCod(o) ? st==='livree' : ['payee','preparation','expediee','livree'].includes(st);
+const cashPending = o => isOnlineOrder(o) && !o.cashed && cashDue(o, o.status);
+const atDriver = o => !!(o.cashed && o.cashed.account==='livreur' && !o.cashed.remittedAt);
+const cashDefault = o => isCod(o) ? (o.delivery==='livraison' && o.driver ? 'livreur' : 'caisse') : accountFor(o.payment?.method);
+const cashOpts = (o, sel, noDriver) => Object.entries(CASH_DEST).filter(([k])=>k!=='livreur' || (isCod(o) && !noDriver)).map(([k,l])=>`<option value="${k}" ${k===sel?'selected':''}>${l}</option>`).join('');
+const payName = o => PROCESSORS[o.payment?.method]?.name || (o.payment?.method==='cash'?'Espèces':'—');
+async function cashOrder(o, dest){
+  const amt = Math.round(o.total||0), by = S.uid||'local', at = Date.now();
+  if(dest==='ignore'){ await patch('orders', o.id, {cashed:{account:'ignore', amount:0, at, by}}); return; }
+  if(dest==='livreur'){ await patch('orders', o.id, {cashed:{account:'livreur', amount:amt, at, by, driverId:o.driver?.id||'', driverName:o.driver?.name||''}}); return; }
+  if(!ACCOUNTS[dest]) throw new Error('compte');
+  const mid = newId('m');
+  await put('fin-moves', mid, {date:today(), ref:o.number, orderId:o.id, createdAt:at, createdBy:by, type:'vente', account:dest, amount:amt, label:`Vente en ligne ${o.number}`, method:o.payment?.method||''});
+  await patch('orders', o.id, {cashed:{account:dest, amount:amt, at, by, moveId:mid}, ...(o.payment?.status==='à encaisser'?{payment:{status:'encaissé'}}:{})});
+}
+async function remitOrder(o, dest){
+  if(!ACCOUNTS[dest]) throw new Error('compte');
+  const mid = newId('m'), amt = Number(o.cashed.amount)||Math.round(o.total||0), at = Date.now();
+  await put('fin-moves', mid, {date:today(), ref:o.number, orderId:o.id, createdAt:at, createdBy:S.uid||'local', type:'vente', account:dest, amount:amt, label:`Vente en ligne ${o.number} · reversée par ${o.cashed.driverName||'le livreur'}`, method:'cod'});
+  await patch('orders', o.id, {cashed:{...o.cashed, remittedAt:at, remitAccount:dest, moveId:mid}, ...(o.payment?.status==='à encaisser'?{payment:{status:'encaissé'}}:{})});
+}
+async function uncashOrder(o){ if(o.cashed?.moveId && S.moves.some(m=>m.id===o.cashed.moveId)) await del('fin-moves', o.cashed.moveId); await patch('orders', o.id, {cashed:null}); }
+function cashPanel(o){
+  if(!isOnlineOrder(o)) return '';
+  const c = o.cashed, d = c ? dateFr(c.remittedAt||c.at) : '';
+  let body;
+  if(c && c.account==='ignore') body = `<p style="margin:0">Encaissement non suivi en trésorerie (déjà enregistré à la main).</p><button class="btn ghost sm" style="margin-top:8px" id="od-uncash">Annuler ce choix</button>`;
+  else if(atDriver(o)) body = `<p style="margin:0">💵 <b>${fmt(c.amount)}</b> chez <b>${esc(c.driverName||'le livreur')}</b> depuis le ${dateFr(c.at)} : à reverser.</p>
+    <div class="row" style="align-items:flex-end;gap:8px;margin-top:10px"><div class="field" style="margin:0"><label for="od-rem">Reversé dans</label><select class="input" id="od-rem">${cashOpts(o,'caisse',true)}</select></div><button class="btn primary sm" id="od-remit" style="flex:0;white-space:nowrap">✓ Le livreur a reversé</button></div>
+    <button class="btn ghost sm" style="margin-top:8px" id="od-uncash">Corriger</button>`;
+  else if(c) body = `<p style="margin:0">✅ <b>${fmt(c.amount)}</b> enregistré en <b>${esc(ACCOUNTS[c.remitAccount||c.account]||'')}</b> le ${d}${c.remittedAt?` (reversé par ${esc(c.driverName||'le livreur')})`:''}.</p><button class="btn ghost sm" style="margin-top:8px" id="od-uncash">Corriger le compte</button>`;
+  else body = `<div class="field" style="margin:0"><label for="od-cash">Où va l’argent (${fmt(o.total)}, ${esc(payName(o))}) ?</label><select class="input" id="od-cash">${cashOpts(o, cashDefault(o))}</select></div>
+    <p class="muted small" style="margin:6px 0 0">${isCod(o)?'Enregistré automatiquement en trésorerie quand la commande passe en « Livrée ».':'Enregistré automatiquement en trésorerie quand la commande passe en « Payée » ou au-delà.'}</p>
+    ${cashDue(o,o.status)?'<button class="btn primary sm" style="margin-top:8px" id="od-cashnow">Enregistrer l’encaissement</button>':''}`;
+  return `<div class="panel"><h3>💰 Encaissement</h3>${body}</div>`;
+}
+function onlineCashBlock(){
+  const pend = S.orders.filter(cashPending), drv = S.orders.filter(atDriver);
+  if(!pend.length && !drv.length) return '';
+  const byDrv = {}; drv.forEach(o=>{ const k=o.cashed.driverName||'Livreur'; (byDrv[k]=byDrv[k]||[]).push(o); });
+  return `${pend.length?`<div class="panel"><div class="toolbar"><h3 style="flex:1;margin:0">🛒 Ventes en ligne à enregistrer · ${pend.length} · ${fmt(pend.reduce((t,o)=>t+o.total,0))}</h3><button class="btn primary sm" data-a="cashAll">Tout enregistrer</button></div>
+    <p class="muted small" style="margin:4px 0 10px">Commandes en ligne payées ou livrées dont l’argent n’est pas encore rangé dans un compte. Choisissez le compte, puis enregistrez. « Déjà compté » : vous l’avez déjà saisi à la main.</p>
+    <div class="tbl-wrap"><table><thead><tr><th>Commande</th><th>Paiement</th><th style="text-align:right">Montant</th><th>Compte</th><th></th></tr></thead><tbody>
+    ${pend.slice(0,60).map(o=>`<tr><td><b class="small click" data-a="orderDetail" data-id="${o.id}">${esc(o.number)}</b><div class="muted small">${esc(o.customer?.name||'')} · ${dateFr(o.createdAt)}${o.driver?' · 🛵 '+esc(o.driver.name):''}</div></td><td class="small">${esc(payName(o))}</td><td style="text-align:right"><b>${fmt(o.total)}</b></td>
+      <td><label class="sr" for="cs-${o.id}">Compte</label><select class="input" id="cs-${o.id}" style="min-width:150px">${cashOpts(o, cashDefault(o))}<option value="ignore">Déjà compté</option></select></td><td><button class="btn primary sm" data-a="cashOrder" data-id="${o.id}">Enregistrer</button></td></tr>`).join('')}</tbody></table></div></div>`:''}
+  ${drv.length?`<div class="panel"><h3>🛵 Argent chez les livreurs · ${fmt(drv.reduce((t,o)=>t+(o.cashed.amount||0),0))}</h3><p class="muted small" style="margin:4px 0 10px">Paiements à la livraison encaissés par les livreurs. Quand le livreur vous remet l’argent, choisissez le compte et validez : il entre dans la trésorerie.</p>
+    ${Object.entries(byDrv).map(([n,os])=>`<div style="margin-bottom:12px"><div class="toolbar"><b style="flex:1">${esc(n)} · ${fmt(os.reduce((t,o)=>t+(o.cashed.amount||0),0))}</b>${os.length>1?`<button class="btn ghost sm" data-a="remitAll" data-v="${esc(n)}">Tout reversé en caisse</button>`:''}</div>
+      <div class="tbl-wrap"><table><tbody>${os.map(o=>`<tr><td><b class="small click" data-a="orderDetail" data-id="${o.id}">${esc(o.number)}</b><div class="muted small">${esc(o.customer?.name||'')} · livré le ${dateFr(o.cashed.at)}</div></td><td style="text-align:right"><b>${fmt(o.cashed.amount)}</b></td>
+        <td><label class="sr" for="rm-${o.id}">Reversé dans</label><select class="input" id="rm-${o.id}">${cashOpts(o,'caisse',true)}</select></td><td><button class="btn primary sm" data-a="remitOrder" data-id="${o.id}">Reversé</button></td></tr>`).join('')}</tbody></table></div></div>`).join('')}</div>`:''}`;
+}
 function balances(){
   const c = S.finConfig||{}, b = {caisse:Number(c.openCaisse)||0, banque:Number(c.openBanque)||0, momo:Number(c.openMomo)||0};
   S.moves.forEach(m=>{ if(m.account in b) b[m.account] += Number(m.amount)||0; });
@@ -3205,6 +3259,7 @@ function viewTreasury(){
   const rl = reminders().late;
   return `${rl.length?`<div class="alert"><span><b>${rl.length} client${rl.length>1?'s':''}</b> ${rl.length>1?'ont':'a'} une créance arrivée à échéance, pour un total de <b>${fmt(rl.reduce((t,r)=>t+r.amount,0))}</b>.</span><button class="btn primary sm" data-a="reminders">Voir les rappels</button></div>`:''}
   <div class="sec-h"><h2>Trésorerie</h2><span class="muted small">Disponible au total : <b>${fmt(total)}</b></span></div>
+  ${onlineCashBlock()}
   <div class="kpis">${Object.entries(ACCOUNTS).map(([k,l])=>`<div class="kpi acct"><span>${l}</span><b style="color:${b[k]<0?'var(--danger)':'inherit'}">${fmt(b[k])}</b></div>`).join('')}
     <div class="kpi"><span>Créances clients</span><b>${fmt(recv)}</b></div></div>
   <div class="kpis" style="grid-template-columns:repeat(3,1fr)"><div class="kpi"><span>Dettes fournisseurs</span><b style="color:${debt?'var(--danger)':'inherit'}">${fmt(debt)}</b></div>
@@ -3224,7 +3279,7 @@ function viewTreasury(){
     <div class="tbl-wrap">${list.length?`<table><thead><tr><th>Date</th><th>Libellé</th><th>Compte</th><th style="text-align:right">Montant</th><th></th></tr></thead><tbody>
     ${list.map(m=>`<tr><td class="small" style="white-space:nowrap">${dateOnly(m.date)}</td><td><b class="small">${esc(m.label||MOVE_TYPES[m.type])}</b><div class="muted small">${MOVE_TYPES[m.type]||''}${m.category?' · '+esc(m.category):''}${m.partyId?' · '+esc(partyName(m.type==='reg_client'||m.type==='vente'?'client':'supplier',m.partyId)):''}${m.ref?' · '+esc(m.ref):''}</div></td>
       <td class="small">${ACCOUNTS[m.account]||''}</td><td style="text-align:right">${signAmt(m.amount)}</td><td><button class="btn sm ghost" data-a="delMove" data-id="${m.id}" aria-label="Supprimer l’écriture">×</button></td></tr>`).join('')}</tbody></table>`
-    :'<div class="empty"><h3>Aucun mouvement</h3><p>Les ventes en caisse s’inscrivent ici automatiquement. Ajoutez vos dépenses, virements et règlements avec les boutons ci-dessus.</p></div>'}</div></div>
+    :'<div class="empty"><h3>Aucun mouvement</h3><p>Les ventes en caisse et les ventes en ligne encaissées s’inscrivent ici automatiquement. Ajoutez vos dépenses, virements et règlements avec les boutons ci-dessus.</p></div>'}</div></div>
   <div class="panel"><h3>Dépenses du mois par catégorie</h3>${cats.length?cats.map(([c,v])=>`<div class="catbar"><span>${esc(c)}</span><b>${fmt(v)}</b><i><b style="width:${Math.round(v/maxC*100)}%"></b></i></div>`).join(''):'<p class="muted">Aucune dépense ce mois-ci.</p>'}</div></div>`;
 }
 
@@ -3930,22 +3985,26 @@ function orderDetail(o){
         ${c.phone?`<a class="btn ghost sm" style="margin-top:10px" target="_blank" rel="noopener" href="https://wa.me/${waNumber(c.phone)}?text=${encodeURIComponent(`Bonjour ${firstName(c.name)||''} 😊 Merci pour votre commande ${o.number} chez ${S.settings.shopName} ! Suivez ici les étapes jusqu’à la livraison, et donnez votre avis à la réception 👉 ${guideLink(o)}`)}">📖 Envoyer le guide</a>`:''}
         ${RV_OK.includes(o.status)&&c.phone?`<a class="btn ghost sm" style="margin-top:10px" target="_blank" rel="noopener" href="https://wa.me/${waNumber(c.phone)}?text=${encodeURIComponent(`Bonjour ${firstName(c.name)||''} 😊 Merci pour votre commande ${o.number} chez ${S.settings.shopName} ! Votre avis compte beaucoup pour nous : notez votre achat en 30 secondes, avec une photo si vous le souhaitez 👉 ${reviewLink(o)}`)}">⭐ Demander un avis</a>`:''}
         <label class="btn ghost sm" style="margin-top:10px">📷 ${o.proof?'Remplacer la photo':'Ajouter la photo de livraison'}<input type="file" accept="image/*" capture="environment" class="sr" id="od-proof"></label></div>`:''}
-      <div class="panel"><h3>Statut</h3><div class="field"><label for="od-status">Changer le statut</label><select class="input" id="od-status">${Object.entries(STATUS).map(([k,v])=>`<option value="${k}" ${k===o.status?'selected':''}>${v.label}</option>`).join('')}</select></div>
+      ${cashPanel(o)}<div class="panel"><h3>Statut</h3><div class="field"><label for="od-status">Changer le statut</label><select class="input" id="od-status">${Object.entries(STATUS).map(([k,v])=>`<option value="${k}" ${k===o.status?'selected':''}>${v.label}</option>`).join('')}</select></div>
       <p class="muted small" style="margin:0">${o.stockApplied?'Le stock a été déduit pour cette commande.':'Le stock sera déduit dès que la commande passe en « Payée » ou au-delà.'}</p></div></div></div></div>
     <div class="m-f"><button class="btn ghost" data-a="printReceipt" data-id="${o.id}">Imprimer</button>${next?`<button class="btn ghost" id="od-next">Passer à « ${STATUS[next].label} »</button>`:''}<button class="btn primary" id="od-save">Enregistrer</button></div></div></div>`;
   window._lastReceipt = o;
-  const go = async st=>{ try{ await setOrderStatus(o, st); closeAll(); toast('Statut mis à jour : '+STATUS[st].label); }catch(e){ dbErr(e); toast('Mise à jour impossible.'); } };
+  const go = async st=>{ try{ const dest = $('#od-cash')?.value, willCash = isOnlineOrder(o)&&!o.cashed&&cashDue(o,st); await setOrderStatus(o, st, dest); closeAll(); toast('Statut mis à jour : '+STATUS[st].label+(willCash?' · encaissement enregistré ('+CASH_DEST[dest||cashDefault(o)].replace(/ \(.*$/,'')+')':'')); }catch(e){ dbErr(e); toast('Mise à jour impossible.'); } };
+  const reopen = ()=>orderDetail(S.orders.find(x=>x.id===o.id) || o);
+  if($('#od-cashnow')) $('#od-cashnow').onclick = async ()=>{ try{ await cashOrder(o, $('#od-cash').value); toast('Encaissement enregistré'); setTimeout(reopen, 150); }catch(e){ dbErr(e); toast('Enregistrement impossible.'); } };
+  if($('#od-remit')) $('#od-remit').onclick = async ()=>{ try{ await remitOrder(o, $('#od-rem').value); toast('Reversement enregistré en '+ACCOUNTS[$('#od-rem').value]); setTimeout(reopen, 150); }catch(e){ dbErr(e); toast('Enregistrement impossible.'); } };
+  if($('#od-uncash')) $('#od-uncash').onclick = async ()=>{ if(!confirm('Annuler cet encaissement ? L’écriture de trésorerie sera supprimée et vous pourrez choisir un autre compte.')) return; try{ await uncashOrder(o); toast('Encaissement annulé'); setTimeout(reopen, 150); }catch(e){ dbErr(e); } };
   $('#od-save').onclick = ()=>go($('#od-status').value);
   if($('#od-drv')) $('#od-drv').onchange = async ()=>{ const d = S.drivers.find(x=>x.id===$('#od-drv').value);
     try{ await patch('orders', o.id, {driver: d ? {id:d.id, name:d.name, phone:d.phone, assignedAt:Date.now()} : null}); o.driver = d ? {id:d.id, name:d.name, phone:d.phone} : null; toast(d ? 'Livreur affecté : '+d.name : 'Livreur retiré'); orderDetail(S.orders.find(x=>x.id===o.id) || o); }catch(e){ dbErr(e); } };
   if($('#od-proof')) $('#od-proof').onchange = async e=>{ const f = e.target.files[0]; if(!f) return; try{ const data = await compress(f);
       await put('delivery-photos', o.id, {data, at:Date.now(), by:S.myName||'Boutique'}); delete S.dphoto[o.id];
       const proof = {at:Date.now(), by:S.myName||'Boutique', note:''}; await patch('orders', o.id, {proof}); o.proof = proof;
-      if(o.status!=='livree' && o.status!=='annulee'){ await setOrderStatus(o, 'livree'); }
+      if(o.status!=='livree' && o.status!=='annulee'){ await setOrderStatus(o, 'livree', $('#od-cash')?.value); }
       toast('Photo enregistrée · commande livrée'); orderDetail(S.orders.find(x=>x.id===o.id) || o); }catch(err){ dbErr(err); toast('Envoi de la photo impossible.'); } };
   if($('#od-next')) $('#od-next').onclick = ()=>go(next);
 }
-async function setOrderStatus(o, st){
+async function setOrderStatus(o, st, dest){
   const upd = {status:st, updatedAt:Date.now()};
   if(st!=='annulee' && st!=='en_attente' && !o.stockApplied){
     await applyStock(expandItems(o.items), 1);
@@ -3957,6 +4016,11 @@ async function setOrderStatus(o, st){
     upd.stockApplied = false;
   }
   await patch('orders', o.id, upd);
+  /* trésorerie : la vente en ligne entre dans le compte choisi (ou reste chez le livreur) ; une annulation retire l'écriture */
+  try{
+    if(isOnlineOrder(o) && !o.cashed && cashDue(o, st)){ await cashOrder({...o, ...upd, payment:{...o.payment, ...(upd.payment||{})}}, dest || cashDefault(o)); o.cashed = true; }
+    else if(st==='annulee' && o.cashed && o.cashed.account!=='ignore'){ await uncashOrder(o); toast('Commande annulée : l’encaissement a été retiré de la trésorerie. Pensez à rembourser le client si besoin.'); }
+  }catch(e){ dbErr(e); toast('Statut changé, mais l’encaissement n’a pas pu être enregistré : voyez Trésorerie.'); }
 }
 
 /* --- Codes promo --- */
@@ -4387,7 +4451,11 @@ document.addEventListener('click', async e=>{
     case 'finAction': finForm(el.dataset.v); break;
     case 'finOpen': finOpening(); break;
     case 'reminders': openReminders(); break;
-    case 'delMove': { if(!confirmTwice(el)) break; const m=S.moves.find(x=>x.id===id); try{ const grp = m.group ? S.moves.filter(x=>x.group===m.group) : [m]; for(const x of grp) await del('fin-moves', x.id); const le=S.ledger.find(l=>l.moveId===id); if(le) await del('fin-ledger', le.id); toast('Écriture supprimée'); }catch(err){ dbErr(err); } break; }
+    case 'cashOrder': { const o=S.orders.find(x=>x.id===id), v=$('#cs-'+id)?.value; if(!o||!v) break; el.disabled=true; try{ await cashOrder(o, v); toast(v==='ignore'?'Marquée comme déjà comptée':'Encaissement enregistré : '+CASH_DEST[v].replace(/ \(.*$/,'')); }catch(err){ dbErr(err); el.disabled=false; } break; }
+    case 'cashAll': { const L=S.orders.filter(cashPending).slice(0,60); if(!confirm(`Enregistrer ${L.length} vente(s) en ligne avec le compte choisi sur chaque ligne ?`)) break; el.disabled=true; let n=0; for(const o of L){ const v=$('#cs-'+o.id)?.value||cashDefault(o); try{ await cashOrder(o, v); n++; }catch(err){ dbErr(err); } } toast(n+' encaissement(s) enregistré(s)'); break; }
+    case 'remitOrder': { const o=S.orders.find(x=>x.id===id), v=$('#rm-'+id)?.value||'caisse'; if(!o) break; el.disabled=true; try{ await remitOrder(o, v); toast('Reversement enregistré en '+ACCOUNTS[v]); }catch(err){ dbErr(err); el.disabled=false; } break; }
+    case 'remitAll': { const L=S.orders.filter(o=>atDriver(o)&&(o.cashed.driverName||'Livreur')===el.dataset.v); if(!confirm(`${el.dataset.v} a reversé ${fmt(L.reduce((t,o)=>t+(o.cashed.amount||0),0))} en caisse ?`)) break; el.disabled=true; for(const o of L){ try{ await remitOrder(o, 'caisse'); }catch(err){ dbErr(err); } } toast('Reversement enregistré en caisse'); break; }
+    case 'delMove': { if(!confirmTwice(el)) break; const m=S.moves.find(x=>x.id===id); try{ const lo = m && m.orderId && S.orders.find(o=>o.id===m.orderId && o.cashed && o.cashed.moveId===m.id); if(lo) await patch('orders', lo.id, {cashed:null}); const grp = m.group ? S.moves.filter(x=>x.group===m.group) : [m]; for(const x of grp) await del('fin-moves', x.id); const le=S.ledger.find(l=>l.moveId===id); if(le) await del('fin-ledger', le.id); toast('Écriture supprimée'); }catch(err){ dbErr(err); } break; }
     case 'newParty': partyForm(el.dataset.v, null); break;
     case 'partyDetail': partyDetail(el.dataset.v, id); break;
     case 'exportMoves': save('journal-tresorerie.csv', csv([['Date','Type','Libellé','Catégorie','Compte','Montant','Référence'], ...S.moves.slice().sort((a,b)=>(a.date||'').localeCompare(b.date||'')).map(m=>[m.date,MOVE_TYPES[m.type],m.label,m.category,ACCOUNTS[m.account],m.amount,m.ref])])); break;
