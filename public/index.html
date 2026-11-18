@@ -596,8 +596,21 @@ tr.click:hover td{background:var(--surface-2)}
   .side button[aria-current="page"]{box-shadow:inset 0 -3px 0 var(--saffron)}
   .pos{grid-template-columns:1fr}
   .pos-ticket{position:static; max-height:none}
-  .kpis{grid-template-columns:repeat(2,1fr)!important}
-  .two{grid-template-columns:1fr}
+  .kpis{grid-template-columns:repeat(2,minmax(0,1fr))!important}
+  .two{grid-template-columns:minmax(0,1fr)}
+  /* téléphone : une colonne qui ne s'élargit jamais au-delà de l'écran */
+  .admin,.pos{grid-template-columns:minmax(0,1fr)}
+  .admin>*,.pos>*,.kpi,.panel,.toolbar>*{min-width:0}
+  .kpi b{overflow-wrap:anywhere}
+  .tbl-wrap{overflow-x:auto; -webkit-overflow-scrolling:touch}
+}
+@media (max-width:760px){
+  /* iPhone : un champ en dessous de 16 px fait zoomer la page à chaque saisie */
+  input.input,select.input,textarea.input,.search input,input:not([type=checkbox]):not([type=radio]):not([type=range]),select,textarea{font-size:16px!important}
+  .toolbar h2{flex:1 1 100%}
+  .toolbar .input{flex:1 1 100%; max-width:none!important}
+  .alert{flex-wrap:wrap}
+  img,video,iframe{max-width:100%}
 }
 @media (max-width:760px){
   .top-in{flex-wrap:wrap; gap:10px; padding:10px 14px}
