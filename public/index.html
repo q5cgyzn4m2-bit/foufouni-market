@@ -852,7 +852,7 @@ function render(){
   const a = document.activeElement, fid = a && a.id, ss = a && a.selectionStart;
   renderTop(); renderBnav();
   if(!S.ready) return;
-  if(!S._blogDeep){ S._blogDeep = true; const ut = urlTarget(); if(ut.kind==='blog') S.view='blog'; else if(ut.kind==='art'){ S.view='article'; S.aid=ut.id; } }
+  if(!S._blogDeep){ S._blogDeep = true; const ut = urlTarget(); if(ut.kind==='blog') S.view='blog'; else if(ut.kind==='art'){ S.view='article'; S.aid=ut.id; } else if(ut.kind==='about') S.view='about'; }
   const m = $('#main');
   if(S.view==='shop') m.innerHTML = viewShop();
   else if(S.view==='product') m.innerHTML = viewProduct();
@@ -860,6 +860,7 @@ function render(){
   else if(S.view==='blog') m.innerHTML = viewBlog();
   else if(S.view==='article') m.innerHTML = viewArticle();
   else if(S.view==='guide') m.innerHTML = viewGuide();
+  else if(S.view==='about') m.innerHTML = viewAbout();
   else if(S.view==='orders') m.innerHTML = viewMyOrders();
   else if(S.view==='pos' && S.isAdmin) m.innerHTML = viewPos();
   else if(S.view==='admin' && S.isAdmin) m.innerHTML = viewAdmin();
@@ -924,7 +925,7 @@ function catDrawer(){
   const n = c => live.filter(p=>p.category===c).length;
   $('#overlay').innerHTML = `<div class="cat-drawer"><div class="scrim" data-a="closeAll"><div class="cat-panel" role="dialog" aria-modal="true" aria-label="Catégories">
     <div class="m-h" style="padding:6px 0"><h2>🗂️ Catégories</h2><button class="x" data-a="closeAll" aria-label="Fermer">×</button></div>
-    <div class="cat-list"><button data-a="catPick" data-v="Tout" aria-pressed="${S.cat==='Tout'}"><i>✨</i>Tout voir<small>${live.length} article${live.length>1?'s':''}</small></button>${pubArticles().length?`<button data-a="blog"><i>💡</i>Conseils<small>${pubArticles().length} guide${pubArticles().length>1?'s':''}</small></button>`:''}
+    <div class="cat-list"><button data-a="catPick" data-v="Tout" aria-pressed="${S.cat==='Tout'}"><i>✨</i>Tout voir<small>${live.length} article${live.length>1?'s':''}</small></button><button data-a="about"><i>ℹ️</i>À propos<small>Qui sommes-nous</small></button>${pubArticles().length?`<button data-a="blog"><i>💡</i>Conseils<small>${pubArticles().length} guide${pubArticles().length>1?'s':''}</small></button>`:''}
     ${cats.map(c=>`<button data-a="catPick" data-v="${esc(c)}" aria-pressed="${S.cat===c}"><i>${catEmo(c)}</i>${esc(c)}<small>${n(c)} article${n(c)>1?'s':''}</small></button>`).join('')}</div></div></div></div>`;
 }
 const voiceOK = () => !!(window.SpeechRecognition || window.webkitSpeechRecognition);
@@ -1070,7 +1071,7 @@ function viewShop(){
     ${S.cat==='Tout'&&!S.q?blogBlock():''}
     <footer class="shop-foot"><div><span class="fb">${esc(st.shopName)}</span><p style="margin-top:10px">${esc(st.intro)}</p></div>
       <div><h4>Paiement sécurisé</h4><p>${esc(enabledProcs().map(([k])=>PROCESSORS[k].name).join(', ')||'En espèces à la réception')}.</p>${payRow(false)}</div>
-      <div><h4>Livraison</h4><p>À ${esc(st.city)}, offerte dès ${fmt(st.freeFrom)} d’achat, et partout en Afrique de l’Ouest. Retrait en boutique possible.</p><button class="btn ghost sm" data-a="install" style="margin-top:10px">📲 Installer l’application</button> <button class="btn ghost sm" data-a="guide" style="margin-top:10px">📖 Guide d’achat</button> ${pubArticles().length?'<button class="btn ghost sm" data-a="blog" style="margin-top:10px">💡 Conseils</button>':''}</div>
+      <div><h4>Livraison</h4><p>À ${esc(st.city)}, offerte dès ${fmt(st.freeFrom)} d’achat, et partout en Afrique de l’Ouest. Retrait en boutique possible.</p><button class="btn ghost sm" data-a="install" style="margin-top:10px">📲 Installer l’application</button> <button class="btn ghost sm" data-a="guide" style="margin-top:10px">📖 Guide d’achat</button> <a class="btn ghost sm" href="${esc(aboutPath())}" data-a="about" style="margin-top:10px">ℹ️ À propos</a> ${pubArticles().length?'<button class="btn ghost sm" data-a="blog" style="margin-top:10px">💡 Conseils</button>':''}</div>
       <div><h4>Nous contacter</h4><p>${st.phone?`📞 <a href="tel:${esc(st.phone.replace(/\s/g,''))}" style="color:var(--indigo)">${esc(st.phone)}</a>${st.phone2?` · <a href="tel:${esc(st.phone2.replace(/\s/g,''))}" style="color:var(--indigo)">${esc(st.phone2)}</a>`:''}<br>`:''}${st.whatsapp?`<a href="https://wa.me/${waNumber(st.whatsapp)}" target="_blank" rel="noopener" style="color:#25D366;font-weight:700;display:inline-flex;align-items:center">${WA_ICON}WhatsApp ${esc(st.whatsapp)}</a><br>`:''}${st.email?`✉️ <a href="mailto:${esc(st.email)}" style="color:var(--indigo)">${esc(st.email)}</a><br>`:''}${st.address?`📍 ${esc(st.address)}${st.city?', '+esc(st.city):''}<br>`:''}${st.hours?`🕘 ${esc(st.hours)}`:''}${!st.phone&&!st.whatsapp&&!st.email&&!st.address?'Notre équipe vous répond à la livraison et en boutique.':''}</p></div></footer>
     ${S.products.some(isPartner)?`<p class="aff-note" style="text-align:center;margin:0 0 6px">Certains produits sont proposés via des liens partenaires (marqués « Partenaire ») : nous pouvons recevoir une commission, sans surcoût pour vous.${S.products.some(p=>isPartner(p)&&p.partner.platform==='amazon')?' '+AMAZON_NOTE:''}</p>`:''}
     <p class="foot-note">© ${new Date().getFullYear()} ${esc(st.legalName||st.shopName)}${st.legalForm?' · '+esc(st.legalForm):''}${st.capital?' au capital de '+esc(st.capital):''}${st.rccm?' · RCCM '+esc(st.rccm):''}${st.nif?' · NIF '+esc(st.nif):''}${st.address?' · '+esc(st.address)+(st.city?', '+esc(st.city):''):''}${st.country?' · '+esc(st.country):''}</p>`;
@@ -1693,6 +1694,7 @@ function urlTarget(){ let q = null; try{ q = new URLSearchParams(location.search
   if(m) return {kind: m[1]==='offre' ? 'lp' : 'p', id: m[2]};
   { const ma = /^\/conseils\/[^/]*--([A-Za-z0-9_-]+)\/?$/.exec(location.pathname); if(ma) return {kind:'art', id:ma[1]}; if(/^\/conseils\/?$/.test(location.pathname)) return {kind:'blog'};
     if(q && q.get('conseil')) return {kind:'art', id:q.get('conseil')}; if(q && q.get('conseils')) return {kind:'blog'}; }
+  if(/^\/a-propos\/?$/.test(location.pathname) || (q && q.get('apropos'))) return {kind:'about'};
   if(q && q.get('lp')) return {kind:'lp', id:q.get('lp')}; if(q && q.get('p')) return {kind:'p', id:q.get('p')};
   if(mc){ const c = [...new Set(S.products.map(x=>x.category).filter(Boolean))].find(x=>slugify(x)===mc[1]); if(c) return {kind:'cat', id:c}; }
   return {}; }
@@ -1850,6 +1852,28 @@ function autoLandingBase(p, nPhotos){
     captions: Array.from({length:nPhotos||0}, (_,i)=>({t:angles[i%angles.length], d: i===0 && hl[0] ? hl[0] : (hl[i] || '')})) };
 }
 /* --- Guide client : de la commande à la réception, puis l'avis --- */
+/* ===================== Page À propos ===================== */
+const aboutPath = () => prettyOn() ? '/a-propos' : '?apropos=1';
+function openAbout(){ closeAll(); S.view='about'; try{ history.pushState({about:1}, '', aboutPath()); }catch(e){} schedule(); window.scrollTo(0,0); }
+/* Texte modèle (utilisé tant que le gérant n'a rien écrit dans Gestion › Société). Le serveur a la même fonction pour Google. */
+function aboutDefault(st){ st = st || S.settings; const city = st.city || 'Bamako', live = S.products.filter(p=>p.active!==false && p.name);
+  const cats = [...new Set(live.filter(p=>!isPartner(p)).map(p=>p.category).filter(Boolean))].slice(0,8), procs = enabledProcs().map(([k])=>PROCESSORS[k].name);
+  const L = [`**${st.shopName} est une boutique en ligne née à ${city}, pour celles et ceux qui veulent acheter malin, sans se déplacer et sans mauvaise surprise.**`, '',
+    '## Notre mission', `Rendre accessibles des produits utiles et de qualité, choisis pour la vie de tous les jours au Mali, et vous les livrer jusque chez vous.${cats.length?' Nos rayons : '+cats.join(', ')+'.':''}`, '',
+    '## Pourquoi nous choisir ?', `- **Livraison à ${city}** et en Afrique de l’Ouest${st.deliveryPromise?' ('+st.deliveryPromise+')':''}.`,
+    `- **Paiement simple** : ${procs.length?procs.map(n=>/^Paiement/i.test(n)?n.toLowerCase():n).join(', '):'en espèces à la livraison'}.`, `- **Commande en un clic** sur le site${shopWa()?' ou directement sur WhatsApp':''}.`,
+    '- **Produits vérifiés** : photos réelles, vidéos et avis de vrais clients.', '- **Une vraie équipe** répond à vos questions, avant et après l’achat.', ...(st.returnPolicy?[`- **${st.returnPolicy}**.`]:[]), ''];
+  if(live.some(isPartner)) L.push('## Nos bons plans partenaires', `En plus de notre stock, nous sélectionnons des produits chez des marchands partenaires comme Amazon ou AliExpress. Ils sont clairement marqués **« Partenaire »** : si vous achetez par ces liens, nous pouvons recevoir une petite commission, sans aucun surcoût pour vous.`, '');
+  if(pubArticles().length) L.push('## Nos conseils', `Dans la rubrique [Conseils](${isServer()?'/conseils':blogPath()}), nous publions des guides pratiques pour vous aider à bien choisir et à acheter au meilleur prix.`, '');
+  const c = [st.whatsapp?`- WhatsApp : ${st.whatsapp}`:'', st.phone?`- Téléphone : ${st.phone}`:'', st.email?`- E-mail : ${st.email}`:'', `- Adresse : ${st.address?st.address+', ':''}${city}, ${st.country||'Mali'}`, st.hours?`- Horaires : ${st.hours}`:''].filter(Boolean);
+  L.push('## Nous contacter', ...c, '', `*${st.shopName} : le bon produit, au bon prix, livré chez vous.*`);
+  return L.join('\n'); }
+function viewAbout(){ const st = S.settings, md = String(st.aboutText||'').trim() || aboutDefault();
+  return `<div class="pdp-wrap"><article class="article"><nav class="crumb"><button data-a="go" data-v="shop">${esc(st.shopName)}</button> › À propos</nav>
+    <div class="art-cat" style="margin-top:12px">À propos</div><h1>À propos de ${esc(st.shopName)}</h1>
+    <div class="art-body">${mdLite(md).replace(/<p>\*([^*<]+)\*<\/p>/g,'<p><em>$1</em></p>')}</div>
+    <div class="art-share"><button class="btn primary sm" data-a="go" data-v="shop">🛍️ Voir la boutique</button>${shopWa()?`<a class="btn wa sm" target="_blank" rel="noopener" href="https://wa.me/${shopWa()}?text=${encodeURIComponent('Bonjour '+st.shopName+', j’ai une question.')}">${WA_ICON}Nous écrire</a>`:''}<button class="btn ghost sm" data-a="guide">📖 Guide d’achat</button></div>
+    ${S.isAdmin?`<p class="muted small" style="margin-top:16px">${st.aboutText?'Texte personnalisé.':'Texte modèle automatique.'} Modifiez-le dans Gestion › Société › Page « À propos ».</p>`:''}</article></div>`; }
 const guideLink = o => (isServer() ? location.origin+'/guide' : location.origin+location.pathname+'?guide=1') + (o ? (isServer()?'?':'&')+'o='+encodeURIComponent(o.id)+'&t='+encodeURIComponent(o.token||'') : '');
 function openGuide(o){ closeAll(); S.view='guide'; S.guideOrder = o || null; S.guideTab = S.guideTab || 'site'; try{ history.pushState({g:1}, '', isServer() ? '/guide'+(o?'?o='+encodeURIComponent(o.id)+'&t='+encodeURIComponent(o.token||''):'') : '?guide=1'); }catch(e){} schedule(); window.scrollTo(0,0); }
 function guideTrack(o){
@@ -2260,7 +2284,8 @@ function openProduct(id){
   schedule(); window.scrollTo(0,0);
 }
 window.addEventListener('popstate', ()=>{ const ut = urlTarget(); let pid = ut.kind==='p' ? ut.id : '', lid = ut.kind==='lp' ? ut.id : ''; if(ut.kind==='cat'){ S.cat = ut.id; }
-  if(ut.kind==='blog' || ut.kind==='art'){ S.view = ut.kind==='blog' ? 'blog' : 'article'; if(ut.kind==='art') S.aid = ut.id; closeAll(); schedule(); return; } if(S.view==='blog' || S.view==='article') S.view='shop';
+  if(ut.kind==='about'){ S.view='about'; closeAll(); schedule(); return; }
+  if(ut.kind==='blog' || ut.kind==='art'){ S.view = ut.kind==='blog' ? 'blog' : 'article'; if(ut.kind==='art') S.aid = ut.id; closeAll(); schedule(); return; } if(S.view==='blog' || S.view==='article' || S.view==='about') S.view='shop';
   if(lid && S.products.some(x=>x.id===lid)){ S.view='landing'; S.pid=lid; S.pqty=1; }
   else if(pid && S.products.some(x=>x.id===pid)){ S.view='product'; S.pid=pid; S.pqty=1; } else if(S.view==='product' || S.view==='landing') S.view='shop';
   closeAll(); schedule(); });
@@ -4046,12 +4071,16 @@ function paneCompany(){
       <div class="field"><label for="co-carSpeed">Vitesse</label><select class="input" id="co-carSpeed">${[['lent','Lente'],['normal','Normale'],['rapide','Rapide']].map(([v,l])=>`<option value="${v}" ${(st.carouselSpeed||'normal')===v?'selected':''}>${l}</option>`).join('')}</select></div></div>
       <p class="muted small" style="margin:0">Le badge « Nouveau » et la mise en avant se règlent dans la fiche de chaque produit. Il faut au moins 2 produits pour que le carrousel s’affiche.</p></div>
     <label style="display:flex;gap:8px;align-items:center;margin-top:8px"><input type="checkbox" id="co-lpFirst" ${st.lpFirst===false?'':'checked'}> Au clic sur un produit, ouvrir directement sa page de vente (quand elle est remplie)</label></div>
+   <div class="panel"><h3>Page « À propos »</h3><p class="muted small" style="margin:0 0 10px">Visible à l’adresse <b>${esc(isServer()?location.origin:'')}${esc(aboutPath())}</b>, dans le pied de page et le volet des catégories. Laissez vide pour utiliser le texte modèle, rempli automatiquement avec vos informations. Mise en forme : <code>## Titre</code>, <code>- liste</code>, <code>**gras**</code>.</p>
+    <textarea class="input" id="co-aboutText" data-co="aboutText" maxlength="6000" style="min-height:220px;font-size:14px" placeholder="Laissez vide pour le texte modèle automatique">${esc(st.aboutText||'')}</textarea>
+    <div class="row" style="gap:8px;margin-top:8px"><button class="btn ghost sm" data-a="aboutTpl">📝 Partir du texte modèle</button><button class="btn ghost sm" data-a="about">👁️ Voir la page</button></div></div>
    <div class="panel"><h3>Reçus</h3>${f('receiptNote')}</div>
    <div class="panel"><h3>Référencement Google</h3>
     <div class="field"><label for="co-seoTitle">Titre de l’accueil <span class="cnt" id="co-seoTitle-c"></span></label><input class="input" id="co-seoTitle" data-co="seoTitle" maxlength="70" value="${esc(st.seoTitle||'')}" placeholder="${esc(autoSeoHome().title)}"></div>
     <div class="field"><label for="co-seoDesc">Méta-description de l’accueil <span class="cnt" id="co-seoDesc-c"></span></label><textarea class="input" id="co-seoDesc" data-co="seoDesc" maxlength="170" style="min-height:70px" placeholder="${esc(autoSeoHome().desc)}">${esc(st.seoDesc||'')}</textarea></div>
     <button class="btn ghost sm" data-a="seoHomeGen" style="margin-bottom:12px">✨ Générer automatiquement</button>
     <div class="field"><label for="co-googleVerify">Code de vérification Google Search Console</label><input class="input" id="co-googleVerify" data-co="googleVerify" value="${esc(st.googleVerify||'')}" placeholder="le code de la balise « google-site-verification »" style="font-family:monospace"></div>
+    <div class="field"><label for="co-pinVerify">Code de vérification Pinterest</label><input class="input" id="co-pinVerify" data-co="pinVerify" value="${esc(st.pinVerify||'')}" placeholder="le code de la balise « p:domain_verify »" style="font-family:monospace"></div>
     <p class="muted small" style="margin:0">Dans Search Console, choisissez « Balise HTML » et copiez seulement le texte entre les guillemets de content="…". Plan du site à déclarer : <b>${esc(isServer()?location.origin:'votre-adresse')}/sitemap.xml</b></p></div>
    <div class="panel"><h3>Suivi publicitaire</h3><div class="field"><label for="co-gtmId">Google Tag Manager</label><input class="input" id="co-gtmId" data-co="gtmId" value="${esc(st.gtmId||'')}" placeholder="ex. GTM-WJVTWPWW" style="font-family:monospace"></div>
     <div class="field"><label for="co-metaPixel">Identifiant du pixel Meta (Facebook, Instagram)</label><input class="input" id="co-metaPixel" data-co="metaPixel" inputmode="numeric" value="${esc(st.metaPixel||'')}" placeholder="ex. 1784224236125858" style="font-family:monospace"></div>
@@ -4075,6 +4104,8 @@ async function saveCompany(){
   if($('#co-showTrust')) s2.showTrust = $('#co-showTrust').checked; if($('#co-lpFirst')) s2.lpFirst = $('#co-lpFirst').checked; s2.deliveryPromise = String(s2.deliveryPromise||'').slice(0,40); s2.returnPolicy = String(s2.returnPolicy||'').slice(0,40);
   s2.metaPixel = String(s2.metaPixel||'').replace(/\s/g,''); if(s2.metaPixel && !/^\d{10,20}$/.test(s2.metaPixel)) return toast('Identifiant de pixel Meta invalide (uniquement des chiffres).');
   s2.googleVerify = String(s2.googleVerify||'').trim().replace(/^.*content=["']?([A-Za-z0-9_-]+).*$/,'$1'); if(s2.googleVerify && !/^[A-Za-z0-9_-]{20,80}$/.test(s2.googleVerify)) return toast('Code de vérification Google invalide.');
+  s2.aboutText = String(s2.aboutText||'').slice(0,6000);
+  s2.pinVerify = String(s2.pinVerify||'').trim().replace(/^.*content=["']?([A-Za-z0-9_-]+).*$/,'$1'); if(s2.pinVerify && !/^[A-Za-z0-9_-]{16,80}$/.test(s2.pinVerify)) return toast('Code de vérification Pinterest invalide.');
   s2.gtmId = String(s2.gtmId||'').toUpperCase().replace(/\s/g,''); if(s2.gtmId && !/^GTM-[A-Z0-9]{4,12}$/.test(s2.gtmId)) return toast('Identifiant Google Tag Manager invalide (format GTM-XXXXXXX).');
   s2.tiktokPixel = String(s2.tiktokPixel||'').toUpperCase().replace(/\s/g,''); if(s2.tiktokPixel && !/^[A-Z0-9]{10,30}$/.test(s2.tiktokPixel)) return toast('Identifiant de pixel TikTok invalide.');
   if(s2.email && !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(s2.email)) return toast('L’adresse e-mail ne semble pas valide.');
@@ -4322,6 +4353,8 @@ document.addEventListener('click', async e=>{
     case 'catPick': { closeAll(); S.facets={}; S.grades=[]; S.cat = el.dataset.v; S.q=''; S.view='shop'; try{ history.pushState({},'', S.cat==='Tout' ? homePath() : catPathC(S.cat)); }catch(err){} schedule(); setTimeout(()=>$('#catalogue')?.scrollIntoView({behavior:'smooth'}), 120); break; }
     case 'voiceSearch': voiceSearch(el); break;
     case 'blog': openBlog(); break;
+    case 'about': openAbout(); break;
+    case 'aboutTpl': { const t = $('#co-aboutText'); if(t){ if(t.value.trim() && !confirm('Remplacer le texte actuel par le texte modèle ?')) break; t.value = aboutDefault(); t.focus(); } break; }
     case 'blogCat': S.blogCat = el.dataset.v; schedule(); break;
     case 'article': openArticle(id); break;
     case 'artEdit': articleForm(id ? S.articles.find(x=>x.id===id) : null); break;

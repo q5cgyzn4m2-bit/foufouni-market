@@ -144,7 +144,7 @@ function publicSettings() {
     showTrust: s.showTrust !== false, deliveryPromise: String(s.deliveryPromise || '').slice(0, 40), returnPolicy: String(s.returnPolicy || '').slice(0, 40),
     manualPay: manualPay(), shipCountries: Array.isArray(s.shipCountries) ? s.shipCountries : ['ML'],
     headerSub: s.headerSub || '', legalName: s.legalName || '', legalForm: s.legalForm || '', capital: s.capital || '', rccm: s.rccm || '', nif: s.nif || '', address: s.address || '', country: s.country || '', whatsapp: s.whatsapp || '', phone2: s.phone2 || '', email: s.email || '', hours: s.hours || '', receiptNote: s.receiptNote || '',
-    affDays: s.affDays || 30, siteUrl: s.siteUrl || '',
+    affDays: s.affDays || 30, siteUrl: s.siteUrl || '', aboutText: String(s.aboutText || '').slice(0, 6000),
     assistant: !!env.ANTHROPIC_API_KEY && s.assistantOn !== false, assistantName: s.assistantName || 'Fanta',
     assistantPhoto: /^data:image\/(png|jpeg|webp);base64,/.test(s.assistantPhoto || '') && s.assistantPhoto.length < 200000 ? s.assistantPhoto : '',
     featuredPromo: s.featuredPromo && s.featuredPromo.code ? { code: s.featuredPromo.code, type: s.featuredPromo.type, value: s.featuredPromo.value, minOrder: s.featuredPromo.minOrder || 0, expiresAt: s.featuredPromo.expiresAt || '' } : null };
@@ -1448,6 +1448,23 @@ Réponds UNIQUEMENT avec un objet JSON sur une ligne (retours à la ligne du bod
   const str = (v, n) => String(v || '').slice(0, n);
   res.json({ title: str(o.title, 90), category: str(o.category, 40), summary: str(o.summary, 400), body: str(o.body, 12000), seoTitle: str(o.seoTitle, 70), seoDesc: str(o.seoDesc, 170) });
 }));
+/* ===================== Page À propos (même texte modèle que la boutique) ===================== */
+function aboutDefaultS(s) {
+  const city = s.city || 'Bamako', live = liveProducts(), cats = [...new Set(live.filter(p => !isPartnerS(p)).map(p => p.category).filter(Boolean))].slice(0, 8);
+  const names = { orange: 'Orange Money', wave: 'Wave', moov: 'Moov Money', cod: 'Paiement à la livraison' };
+  const procs = Object.entries(s.processors || {}).filter(([k, v]) => v && v.enabled && names[k] && (k === 'cod' || CONFIGURED[k] || manualPay()[k])).map(([k]) => names[k]);
+  const wa = s.whatsapp || s.phone;
+  const L = [`**${s.shopName} est une boutique en ligne née à ${city}, pour celles et ceux qui veulent acheter malin, sans se déplacer et sans mauvaise surprise.**`, '',
+    '## Notre mission', `Rendre accessibles des produits utiles et de qualité, choisis pour la vie de tous les jours au Mali, et vous les livrer jusque chez vous.${cats.length ? ' Nos rayons : ' + cats.join(', ') + '.' : ''}`, '',
+    '## Pourquoi nous choisir ?', `- **Livraison à ${city}** et en Afrique de l’Ouest${s.deliveryPromise ? ' (' + s.deliveryPromise + ')' : ''}.`,
+    `- **Paiement simple** : ${procs.length ? procs.map(n => /^Paiement/.test(n) ? n.toLowerCase() : n).join(', ') : 'en espèces à la livraison'}.`, `- **Commande en un clic** sur le site${wa ? ' ou directement sur WhatsApp' : ''}.`,
+    '- **Produits vérifiés** : photos réelles, vidéos et avis de vrais clients.', '- **Une vraie équipe** répond à vos questions, avant et après l’achat.', ...(s.returnPolicy ? [`- **${s.returnPolicy}**.`] : []), ''];
+  if (live.some(isPartnerS)) L.push('## Nos bons plans partenaires', 'En plus de notre stock, nous sélectionnons des produits chez des marchands partenaires comme Amazon ou AliExpress. Ils sont clairement marqués **« Partenaire »** : si vous achetez par ces liens, nous pouvons recevoir une petite commission, sans aucun surcoût pour vous.', '');
+  if (pubArticles().length) L.push('## Nos conseils', 'Dans la rubrique [Conseils](/conseils), nous publions des guides pratiques pour vous aider à bien choisir et à acheter au meilleur prix.', '');
+  L.push('## Nous contacter', ...[s.whatsapp ? `- WhatsApp : ${s.whatsapp}` : '', s.phone ? `- Téléphone : ${s.phone}` : '', s.email ? `- E-mail : ${s.email}` : '', `- Adresse : ${s.address ? s.address + ', ' : ''}${city}, ${s.country || 'Mali'}`, s.hours ? `- Horaires : ${s.hours}` : ''].filter(Boolean));
+  return L.join('\n');
+}
+const aboutText = s => String(s.aboutText || '').trim() || aboutDefaultS(s);
 function seoPage(req) {
   const s = settings(), q = req.query || {};
   let kind = 'home', p = null, cat = '', redirect = '';
@@ -1456,6 +1473,7 @@ function seoPage(req) {
   else if (mc) { const all = [...new Set(liveProducts().map(x => x.category).filter(Boolean))]; cat = all.find(c => slugify(c) === mc[1]) || ''; kind = cat ? 'category' : 'notfound'; }
   else if (q.p || q.lp) { const id = String(q.lp || q.p), f = validId(id) && getDoc('products', id); if (f && f.active !== false) { p = { ...f, id }; kind = q.lp ? 'offer' : 'product'; } }
   if (req.path.replace(/\/$/, '') === '/guide') kind = 'guide';
+  if (req.path.replace(/\/$/, '') === '/a-propos' || q.apropos) kind = 'about';
   let art = null; const ma = /^\/conseils\/([^/]+)$/.exec(req.path);
   if (req.path.replace(/\/$/, '') === '/conseils') kind = 'blog';
   else if (ma || q.conseil) { const id = ma ? ma[1].split('--').pop() : String(q.conseil); const a = validId(id) && getDoc('articles', id);
@@ -1487,6 +1505,8 @@ ${rs.length ? `<h2>Avis clients</h2>${rs.slice(0, 5).map(r => `<blockquote>${'�
     return wrap(`<nav><a href="/">${escH(s.shopName)}</a> › <a href="/conseils">Conseils</a> › ${escH(a.title)}</nav><article><h1>${escH(a.title)}</h1>
 <p><small>${new Date(a.publishedAt || a.createdAt || Date.now()).toLocaleDateString('fr-FR')} · ${readMinutes(a.body)} min de lecture</small></p>${a.summary ? `<p><strong>${escH(a.summary)}</strong></p>` : ''}
 ${mdLiteS(a.body)}${rel.length ? `<h2>Les produits de cet article</h2><ul>${rel.map(li).join('')}</ul>` : ''}</article>`); }
+  if (kind === 'about') return wrap(`<nav><a href="/">${escH(s.shopName)}</a> › À propos</nav><article><h1>À propos de ${escH(s.shopName)}</h1>
+${mdLiteS(aboutText(s)).replace(/<p>\*([^*<]+)\*<\/p>/g, '<p><em>$1</em></p>')}</article>`);
   if (kind === 'guide') return wrap(`<h1>Guide d’achat : commander chez ${escH(s.shopName)}, étape par étape</h1><ol>
 <li>Pas besoin de créer un compte : vos commandes restent dans « Mes commandes » et se retrouvent avec votre numéro de commande et votre téléphone.</li>
 <li>Choisissez votre produit, sa couleur, sa taille et la quantité.</li><li>Commandez sur le site, ou touchez « Commander sur WhatsApp » : votre panier part tout prêt.</li>
@@ -1523,6 +1543,8 @@ function seoJson(pg) {
       image: cov ? (cov.startsWith('http') ? cov : BASE_URL + cov) : BASE_URL + '/og-image.jpg', datePublished: new Date(a.publishedAt || a.createdAt || Date.now()).toISOString(), dateModified: new Date(a.updatedAt || a.publishedAt || Date.now()).toISOString(),
       inLanguage: 'fr', author: { '@type': 'Organization', name: s.shopName, url: BASE_URL + '/' }, publisher: { '@type': 'Organization', name: s.shopName, logo: { '@type': 'ImageObject', url: BASE_URL + '/icon-512.png' } }, ...(a.category ? { articleSection: a.category } : {}), wordCount: String(a.body || '').split(/\s+/).filter(Boolean).length });
     out.push({ '@context': 'https://schema.org', '@type': 'BreadcrumbList', itemListElement: [{ '@type': 'ListItem', position: 1, name: s.shopName, item: BASE_URL + '/' }, { '@type': 'ListItem', position: 2, name: 'Conseils', item: BASE_URL + '/conseils' }, { '@type': 'ListItem', position: 3, name: a.title, item: url }] });
+  } else if (kind === 'about') {
+    out.push({ '@context': 'https://schema.org', '@type': 'AboutPage', name: `À propos de ${s.shopName}`, url: BASE_URL + '/a-propos', inLanguage: 'fr', mainEntity: { '@id': BASE_URL + '/#store' } }, { '@context': 'https://schema.org', ...org });
   } else if (kind === 'blog') {
     out.push({ '@context': 'https://schema.org', '@type': 'Blog', name: `Conseils — ${s.shopName}`, url: BASE_URL + '/conseils', inLanguage: 'fr', blogPost: pubArticles().slice(0, 50).map(a => ({ '@type': 'BlogPosting', headline: a.title, url: BASE_URL + articlePath(a) })) });
   } else if (kind === 'category') {
@@ -1539,17 +1561,19 @@ function sendPage(req, res) {
   const pg = seoPage(req);
   if (pg.redirect) return res.redirect(301, pg.redirect + (req.originalUrl.includes('?') ? req.originalUrl.slice(req.originalUrl.indexOf('?')) : ''));
   const { s, kind, p, cat, art } = pg, isLp = kind === 'offer';
-  const title = art ? String(art.seoTitle || `${art.title} | ${s.shopName}`).slice(0, 70) : kind === 'blog' ? `Conseils et guides d’achat | ${s.shopName}` : p && p.seoTitle ? String(p.seoTitle).slice(0, 70) : !p && kind === 'home' && s.seoTitle ? String(s.seoTitle).slice(0, 70) : p ? `${isLp && p.lpHook ? p.lpHook : p.name} — ${plain(p.price)} FCFA | ${s.shopName}` : kind === 'guide' ? `Guide d’achat : comment commander | ${s.shopName}` : kind === 'category' ? `${cat} : achat en ligne à ${s.city || 'Bamako'} | ${s.shopName}` : kind === 'notfound' ? `Page introuvable | ${s.shopName}` : `${s.shopName} — ${s.tagline || 'Boutique en ligne'}`;
+  const title = art ? String(art.seoTitle || `${art.title} | ${s.shopName}`).slice(0, 70) : kind === 'blog' ? `Conseils et guides d’achat | ${s.shopName}` : p && p.seoTitle ? String(p.seoTitle).slice(0, 70) : !p && kind === 'home' && s.seoTitle ? String(s.seoTitle).slice(0, 70) : p ? `${isLp && p.lpHook ? p.lpHook : p.name} — ${plain(p.price)} FCFA | ${s.shopName}` : kind === 'guide' ? `Guide d’achat : comment commander | ${s.shopName}` : kind === 'about' ? `À propos de ${s.shopName} : boutique en ligne à ${s.city || 'Bamako'}` : kind === 'category' ? `${cat} : achat en ligne à ${s.city || 'Bamako'} | ${s.shopName}` : kind === 'notfound' ? `Page introuvable | ${s.shopName}` : `${s.shopName} — ${s.tagline || 'Boutique en ligne'}`;
   const desc = (art ? String(art.seoDesc || art.summary || art.title) : kind === 'blog' ? `Les conseils de ${s.shopName} pour bien choisir vos produits et acheter malin à ${s.city || 'Bamako'} : guides, comparatifs et astuces.` : p && p.seoDesc ? String(p.seoDesc) : !p && kind === 'home' && s.seoDesc ? String(s.seoDesc) : p
     ? `${p.condition && p.condition !== 'neuf' ? `Occasion · ${({ comme_neuf: 'Comme neuf', tres_bon: 'Très bon état', bon: 'Bon état', correct: 'État correct', reconditionne: 'Reconditionné' })[p.condition] || 'Occasion'}. ` : ''}${p.comparePrice > p.price ? `Promo : ${plain(p.price)} FCFA au lieu de ${plain(p.comparePrice)} FCFA. ` : `${plain(p.price)} FCFA. `}${p.lpSub || p.description || p.category || ''} Livraison à ${s.city || 'Bamako'}, paiement mobile money ou à la livraison.`
+    : kind === 'about' ? `${s.shopName}, boutique en ligne née à ${s.city || 'Bamako'} : produits utiles et vérifiés, livraison à domicile, paiement Orange Money, Wave ou à la livraison, commande sur WhatsApp.`
     : kind === 'guide' ? `Comment commander chez ${s.shopName} : choisir, commander sur le site ou WhatsApp, payer par mobile money ou à la livraison, suivre la livraison et donner son avis.`
     : kind === 'category' ? `Achetez ${cat.toLowerCase()} en ligne chez ${s.shopName} : livraison à ${s.city || 'Bamako'} et en Afrique de l’Ouest, paiement Orange Money, Wave ou à la livraison.`
     : (s.intro || 'Commandez en ligne, payez par mobile money ou à la livraison.')).replace(/\s+/g, ' ').trim().slice(0, 300);
   const img = p ? productImage(p.id, p) : art && articleCover(art) ? (articleCover(art).startsWith('http') ? articleCover(art) : BASE_URL + articleCover(art)) : `${BASE_URL}/og-image.jpg`;
-  const url = art ? BASE_URL + articlePath(art) : kind === 'blog' ? `${BASE_URL}/conseils` : p ? BASE_URL + canonPath(p) : kind === 'category' ? BASE_URL + catPath(cat) : kind === 'guide' ? `${BASE_URL}/guide` : `${BASE_URL}/`;
+  const url = art ? BASE_URL + articlePath(art) : kind === 'blog' ? `${BASE_URL}/conseils` : p ? BASE_URL + canonPath(p) : kind === 'category' ? BASE_URL + catPath(cat) : kind === 'guide' ? `${BASE_URL}/guide` : kind === 'about' ? `${BASE_URL}/a-propos` : `${BASE_URL}/`;
   const noindex = kind === 'notfound' || (p && isPartnerS(p)) || ['espace', 'livreur', 'payer', 'livre', 'installer', 'pay'].some(k => req.query[k]);
   const meta = [
     ...(/^[A-Za-z0-9_-]{20,80}$/.test(s.googleVerify || '') ? [['name', 'google-site-verification', s.googleVerify]] : []),
+    ...(/^[A-Za-z0-9_-]{16,80}$/.test(s.pinVerify || '') ? [['name', 'p:domain_verify', s.pinVerify]] : []),
     ['name', 'description', desc], ['name', 'robots', noindex ? 'noindex, follow' : 'index, follow, max-image-preview:large'], ['property', 'og:type', p ? 'product' : art ? 'article' : 'website'], ['property', 'og:site_name', s.shopName], ['property', 'og:locale', 'fr_FR'],
     ['property', 'og:title', title], ['property', 'og:description', desc], ['property', 'og:url', url], ['property', 'og:image', img],
     ...(img.endsWith('/og-image.jpg') ? [['property', 'og:image:width', '1200'], ['property', 'og:image:height', '630']] : []),
@@ -1562,7 +1586,7 @@ function sendPage(req, res) {
   res.status(kind === 'notfound' ? 404 : 200).set({ 'Content-Type': 'text/html; charset=utf-8', 'Cache-Control': 'no-cache' }).send(html);
 }
 app.get(['/', '/index.html'], sendPage);
-app.get(['/produit/:slug', '/offre/:slug', '/categorie/:slug', '/guide', '/conseils', '/conseils/:slug'], sendPage);
+app.get(['/produit/:slug', '/offre/:slug', '/categorie/:slug', '/guide', '/a-propos', '/conseils', '/conseils/:slug'], sendPage);
 app.get('/robots.txt', (req, res) => {
   res.type('text/plain').set('Cache-Control', 'public, max-age=3600').send(`User-agent: *\nAllow: /\nDisallow: /api/\nDisallow: /go/\nDisallow: /*?espace=\nDisallow: /*?livreur=\nDisallow: /*?payer=\nDisallow: /*?livre=\nDisallow: /*?pay=\n\nSitemap: ${BASE_URL}/sitemap.xml\n`);
 });
@@ -1572,6 +1596,7 @@ app.get('/sitemap.xml', (req, res) => {
   const last = live.reduce((t, p) => Math.max(t, p.updatedAt || p.createdAt || 0), 0);
   const urls = [`<url><loc>${x(BASE_URL + '/')}</loc><lastmod>${d(last)}</lastmod><changefreq>daily</changefreq><priority>1.0</priority></url>`,
     `<url><loc>${x(BASE_URL + '/guide')}</loc><changefreq>monthly</changefreq><priority>0.5</priority></url>`,
+    `<url><loc>${x(BASE_URL + '/a-propos')}</loc><changefreq>monthly</changefreq><priority>0.5</priority></url>`,
     ...(pubArticles().length ? [`<url><loc>${x(BASE_URL + '/conseils')}</loc><lastmod>${d(pubArticles()[0].updatedAt || pubArticles()[0].publishedAt)}</lastmod><changefreq>weekly</changefreq><priority>0.7</priority></url>`] : []),
     ...pubArticles().map(a => `<url><loc>${x(BASE_URL + articlePath(a))}</loc><lastmod>${d(a.updatedAt || a.publishedAt)}</lastmod><changefreq>monthly</changefreq><priority>0.7</priority>${articleCover(a) ? `<image:image><image:loc>${x(articleCover(a).startsWith('http') ? articleCover(a) : BASE_URL + articleCover(a))}</image:loc><image:title>${x(a.title)}</image:title></image:image>` : ''}</url>`),
     ...cats.map(c => `<url><loc>${x(BASE_URL + catPath(c))}</loc><lastmod>${d(last)}</lastmod><changefreq>daily</changefreq><priority>0.7</priority></url>`),
