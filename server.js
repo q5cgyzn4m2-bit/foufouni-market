@@ -1523,17 +1523,30 @@ ${mdLiteS(aboutText(s)).replace(/<p>\*([^*<]+)\*<\/p>/g, '<p><em>$1</em></p>')}<
 ${cats.length ? `<h2>Nos rayons</h2><ul>${cats.map(c => `<li><a href="${escH(catPath(c))}">${escH(c)}</a></li>`).join('')}</ul>` : ''}
 <h2>Nos produits</h2><ul>${live.slice(0, 300).map(li).join('')}</ul>`);
 }
+/* Livraison et retours dans les fiches produits (demandés par Google « Fiches de marchand ») */
+function offerExtras(s, p) {
+  const out = {}, fee = Number(p.price) >= Number(s.freeFrom || Infinity) ? 0 : Math.max(0, Math.round(Number(s.deliveryFee) || 0));
+  const prom = String(s.deliveryPromise || ''), hrs = /(\d+)\s*h/i.exec(prom), days = /(\d+)\s*(?:à|-)?\s*(\d+)?\s*jours?/i.exec(prom);
+  const maxT = hrs ? Math.max(1, Math.ceil(Number(hrs[1]) / 24)) : days ? Number(days[2] || days[1]) : 3;
+  out.shippingDetails = { '@type': 'OfferShippingDetails', shippingRate: { '@type': 'MonetaryAmount', value: String(fee), currency: 'XOF' },
+    shippingDestination: { '@type': 'DefinedRegion', addressCountry: 'ML' },
+    deliveryTime: { '@type': 'ShippingDeliveryTime', handlingTime: { '@type': 'QuantitativeValue', minValue: 0, maxValue: 1, unitCode: 'DAY' }, transitTime: { '@type': 'QuantitativeValue', minValue: 0, maxValue: Math.min(30, maxT), unitCode: 'DAY' } } };
+  const rp = String(s.returnPolicy || ''), rd = /(\d+)\s*jours?/i.exec(rp);
+  if (/aucun|pas de (retour|reprise|échange)|non repris/i.test(rp)) out.hasMerchantReturnPolicy = { '@type': 'MerchantReturnPolicy', applicableCountry: 'ML', returnPolicyCategory: 'https://schema.org/MerchantReturnNotPermitted' };
+  else if (rd) out.hasMerchantReturnPolicy = { '@type': 'MerchantReturnPolicy', applicableCountry: 'ML', returnPolicyCategory: 'https://schema.org/MerchantReturnFiniteReturnWindow', merchantReturnDays: Math.min(365, Number(rd[1])), returnMethod: 'https://schema.org/ReturnInStore' };
+  return out;
+}
 function seoJson(pg) {
   const { s, kind, p, cat } = pg, org = { '@type': 'OnlineStore', '@id': BASE_URL + '/#store', name: s.shopName, url: BASE_URL + '/', logo: BASE_URL + '/icon-512.png', image: BASE_URL + '/og-image.jpg',
     ...(s.phone ? { telephone: s.phone } : {}), ...(s.email ? { email: s.email } : {}), ...(s.legalName ? { legalName: s.legalName } : {}),
     address: { '@type': 'PostalAddress', ...(s.address ? { streetAddress: s.address } : {}), addressLocality: s.city || 'Bamako', addressCountry: 'ML' } };
   const out = [];
   if ((kind === 'product' || kind === 'offer') && p && !isPartnerS(p)) {
-    const rs = pubReviewsS(p.id), url = BASE_URL + canonPath(p), brand = (lines2(p.specs).find(x => /^marque\s*:/i.test(x)) || '').replace(/^marque\s*:\s*/i, '');
+    const rs = pubReviewsS(p.id), url = BASE_URL + canonPath(p), brand = String(p.brand || (lines2(p.specs).find(x => /^marque\s*:/i.test(x)) || '').replace(/^marque\s*:\s*/i, '')).trim().slice(0, 60);
     const imgs = [productImage(p.id, p), ...(Array.isArray(p.gallery) ? p.gallery.slice(0, 5).map(g => `${BASE_URL}/img/pi/${encodeURIComponent(g)}`) : [])];
     out.push({ '@context': 'https://schema.org', '@type': 'Product', name: p.name, image: imgs, description: String(p.description || p.lpSub || p.name).slice(0, 500), sku: p.sku || p.id,
       ...(/^\d{13}$/.test(p.barcode || '') && !String(p.barcode).startsWith('2') ? { gtin13: p.barcode } : {}), ...(brand ? { brand: { '@type': 'Brand', name: brand } } : {}), ...(p.category ? { category: p.category } : {}),
-      offers: { '@type': 'Offer', url, priceCurrency: 'XOF', price: String(Math.round(p.price)), availability: p.stock > 0 ? 'https://schema.org/InStock' : 'https://schema.org/OutOfStock', itemCondition: condSchema(p.condition), seller: { '@id': BASE_URL + '/#store' } },
+      offers: { '@type': 'Offer', url, priceCurrency: 'XOF', price: String(Math.round(p.price)), availability: p.stock > 0 ? 'https://schema.org/InStock' : 'https://schema.org/OutOfStock', itemCondition: condSchema(p.condition), seller: { '@id': BASE_URL + '/#store' }, ...offerExtras(s, p) },
       ...(rs.length ? { aggregateRating: { '@type': 'AggregateRating', ratingValue: (rs.reduce((t, r) => t + r.rating, 0) / rs.length).toFixed(1), reviewCount: rs.length },
         review: rs.slice(0, 5).map(r => ({ '@type': 'Review', author: { '@type': 'Person', name: r.name || 'Client' }, reviewRating: { '@type': 'Rating', ratingValue: r.rating, bestRating: 5 }, ...(r.text ? { reviewBody: String(r.text).slice(0, 500) } : {}), ...(r.createdAt ? { datePublished: new Date(r.createdAt).toISOString().slice(0, 10) } : {}) })) } : {}) });
     out.push({ '@context': 'https://schema.org', '@type': 'BreadcrumbList', itemListElement: [{ '@type': 'ListItem', position: 1, name: s.shopName, item: BASE_URL + '/' }, ...(p.category ? [{ '@type': 'ListItem', position: 2, name: p.category, item: BASE_URL + catPath(p.category) }] : []), { '@type': 'ListItem', position: p.category ? 3 : 2, name: p.name, item: url }] });
