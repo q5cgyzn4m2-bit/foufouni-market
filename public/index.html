@@ -2213,12 +2213,26 @@ function studioCaption(d, net){
   return `${head}${price?'\n💰 '+price:''}\n${d.sub?d.sub+'\n':''}🚚 Livraison à ${st.city}${st.freeFrom?', offerte dès '+fmt(st.freeFrom):''}\n💳 ${pay}\n👉 Commandez ici : ${link}${st.phone?'\n📞 '+st.phone:''}\n\n${tags}`;
 }
 S.studio = {subject:'shop', net:'facebook', fmt:'post'};
+/* Publicités : catalogue automatique + ouverture des gestionnaires de publicités */
+const ADS_MGR = {facebook:'https://adsmanager.facebook.com/adsmanager/manage/campaigns', instagram:'https://adsmanager.facebook.com/adsmanager/manage/campaigns', tiktok:'https://ads.tiktok.com/'};
+function catalogPanel(){
+  const base = isServer() ? location.origin : shopUrl().replace(/\/$/,''), all = S.products.filter(p=>p.active!==false && p.name && !isPartner(p));
+  const ok = all.filter(p=>p.price>0 && /^data:image\//.test(p.image||'')), noImg = all.filter(p=>!/^data:image\//.test(p.image||''));
+  return `<details class="panel" id="cat-panel" ${S.catOpen?'open':''}><summary style="cursor:pointer;font-weight:800">🛍️ Catalogue pour les publicités Facebook, Instagram et TikTok · ${ok.length} produit${ok.length>1?'s':''}</summary>
+    <p class="muted small" style="margin:10px 0">Ces adresses donnent la liste de vos produits (nom, prix, photo, stock, lien), <b>mise à jour automatiquement</b>. Collez-les <b>une seule fois</b> : Facebook et TikTok reliront le catalogue chaque jour et montreront à chaque personne les produits qu’elle a regardés sur votre site.</p>
+    ${[['Facebook / Instagram (Meta Commerce Manager)','facebook'],['TikTok (Catalogue TikTok Ads)','tiktok']].map(([l,k])=>`<div class="field"><label>${l}</label><div class="row" style="gap:8px"><input class="input" id="cat-${k}" value="${esc(base)}/catalogue/${k}.csv" readonly style="flex:1"><button class="btn ghost sm" data-a="catCopy" data-v="${k}" style="flex:0">Copier</button></div></div>`).join('')}
+    ${noImg.length?`<p class="small" style="margin:0 0 8px;color:var(--danger)">⚠️ ${noImg.length} produit${noImg.length>1?'s':''} sans photo exclu${noImg.length>1?'s':''} du catalogue : ${noImg.slice(0,4).map(p=>esc(p.name)).join(', ')}${noImg.length>4?'…':''}</p>`:''}
+    <ol class="small" style="margin:6px 0 0;padding-left:18px;line-height:1.7"><li><b>Facebook</b> : business.facebook.com › Commerce Manager › <i>Ajouter un catalogue</i> › E-commerce › <i>Sources de données › Flux de données › Lien vers un fichier</i> › collez l’adresse, mise à jour <b>quotidienne</b>, devise <b>XOF</b>. Puis reliez le catalogue à votre <b>pixel</b>.</li>
+    <li><b>TikTok</b> : ads.tiktok.com › Ressources › <i>Catalogues</i> › Créer › <i>Ajouter des produits › Flux de données</i> › collez l’adresse, mise à jour quotidienne.</li>
+    <li>Lancez une campagne <b>Ventes du catalogue</b> (Facebook) ou <b>Catalogue / Shopping Ads</b> (TikTok) : les publicités se créent toutes seules à partir de vos produits.</li></ol></details>`;
+}
 function paneStudio(){
   const ss = S.studio, subj = subjectList(); if(!subj.some(x=>x[0]===ss.subject)) ss.subject='shop';
   const fmts = FORMATS[ss.net]; if(!fmts.some(f=>f[0]===ss.fmt)) ss.fmt = fmts[0][0];
   const d = subjectData(ss.subject), link = d ? studioLink(d, ss.net) : '';
   const stats = studioStats();
   return `<div class="toolbar"><h2 style="font-size:24px;flex:1">Studio réseaux sociaux</h2></div>
+  ${catalogPanel()}
   <div class="panel"><div class="row" style="align-items:flex-end"><div class="field" style="flex:2 1 280px"><label for="sd-subj">Que voulez-vous promouvoir ?</label><select class="input" id="sd-subj" data-studio="subject">${subj.map(([k,l])=>`<option value="${esc(k)}" ${k===ss.subject?'selected':''}>${esc(l)}</option>`).join('')}</select></div></div>
     <div class="cats" role="group" aria-label="Réseau" style="margin:6px 0 10px">${Object.entries(NETS).map(([k,l])=>`<button aria-pressed="${ss.net===k}" data-a="sdNet" data-v="${k}">${l}</button>`).join('')}</div>
     <div class="cats" role="group" aria-label="Format" style="margin:0">${fmts.map(([k,l,w,h])=>`<button aria-pressed="${ss.fmt===k}" data-a="sdFmt" data-v="${k}">${l} · ${w}×${h}</button>`).join('')}</div></div>
@@ -2227,6 +2241,7 @@ function paneStudio(){
     <div class="panel" style="flex:1 1 320px"><div class="field"><label for="sd-cap">Texte de publication (${esc(NETS[ss.net])})</label><textarea class="input" id="sd-cap" style="min-height:200px">${esc(d?studioCaption(d, ss.net):'')}</textarea></div>
       <div class="field"><label>Lien suivi pour ${esc(NETS[ss.net])}</label><div class="row" style="gap:8px"><input class="input" id="sd-link" value="${esc(link)}" readonly style="flex:1"><button class="btn ghost sm" data-a="sdCopyLink" style="flex:0">Copier</button></div></div>
       <div class="fin-actions"><button class="btn primary" data-a="sdDl">⬇️ Télécharger l’image</button>${navigator.canShare?'<button class="btn ghost" data-a="sdShare">↗ Partager</button>':''}<button class="btn ghost" data-a="sdCopy">Copier le texte</button></div>
+      ${ADS_MGR[ss.net]?`<div class="panel" style="margin:12px 0 0;background:var(--surface-2,rgba(255,255,255,.03))"><button class="btn primary" data-a="sdAds" style="width:100%">📣 Lancer une publicité ${esc(NETS[ss.net])}</button><p class="muted small" style="margin:8px 0 0">Télécharge l’image, copie le texte et le lien suivi, puis ouvre ${ss.net==='tiktok'?'TikTok Ads Manager':'le Gestionnaire de publicités Meta'}. Là-bas : objectif <b>Ventes</b>, pixel ${ss.net==='tiktok'?'TikTok':'Meta'} de la boutique, votre budget, puis collez le texte et le lien.</p></div>`:''}
       <p class="muted small" style="margin:0">Chaque réseau a son propre lien : les visites et les commandes qu’il apporte s’affichent ci-dessous.</p></div></div>
   <div class="panel tbl-wrap"><h3>Résultats par réseau (30 derniers jours)</h3><table><thead><tr><th>Réseau</th>${isServer()?'<th style="text-align:right">Visites</th>':''}<th style="text-align:right">Commandes</th><th style="text-align:right">Chiffre d’affaires</th></tr></thead><tbody>
     ${stats.map(r=>`<tr><td><b>${esc(r.label)}</b></td>${isServer()?`<td style="text-align:right">${r.visits}</td>`:''}<td style="text-align:right">${r.orders}</td><td style="text-align:right">${fmt(r.revenue)}</td></tr>`).join('')}</tbody></table>
@@ -2367,7 +2382,7 @@ function viewProduct(){
         ${st.phone?`<div><span>📞</span><span><b>Une question ?</b><a href="tel:${esc(st.phone.replace(/\s/g,''))}" style="color:var(--indigo)">${esc(st.phone)}</a></span></div>`:''}</div></div>
       <div class="mini-codes">${qrSVG(payLink(p, hasVar(p)?selVariant(p):null), 64)}<div>${eanSVG(hasVar(p)&&selVariant(p)?vCode(p,selVariant(p)):pCode(p), 150, 50)}<span>Scannez le QR pour payer sur votre téléphone · code produit ${esc(hasVar(p)&&selVariant(p)?vCode(p,selVariant(p)):pCode(p))}</span></div></div>
       ${hasLanding(p)?`<button class="lp-banner" data-a="openLanding" data-id="${p.id}"><span style="font-size:26px">✨</span><span style="flex:1"><b>Découvrez ce produit en détail</b><span class="muted small">${[(p.angleCaps||[]).some(c=>c&&c.t)?'photos sous tous les angles':'', (p.lpVideo||p.lpVideoFile)?'vidéo':'', (p.spin||[]).length>=4?'vue à 360°':'', productRating(p.id).n?'avis clients':'', 'questions fréquentes'].filter(Boolean).join(' · ')}</span></span><span style="font-weight:800;color:var(--indigo)">Voir ›</span></button>`:''}
-      <div class="row" style="gap:8px;margin-top:14px;flex-wrap:wrap"><button class="btn ghost sm" data-a="openLanding" data-id="${p.id}" style="flex:0;white-space:nowrap">✨ Page de vente</button><button class="btn ghost sm" data-a="shareProduct" data-id="${p.id}" style="flex:0">↗ Partager</button>${S.isAdmin?`<button class="btn ghost sm" data-a="visual" data-id="${p.id}" style="flex:0">🖼 Visuel</button><button class="btn ghost sm" data-a="editProduct" data-id="${p.id}" style="flex:0">✏️ Modifier</button>`:''}</div>
+      <div class="row" style="gap:8px;margin-top:14px;flex-wrap:wrap"><button class="btn ghost sm" data-a="openLanding" data-id="${p.id}" style="flex:0;white-space:nowrap">✨ Page de vente</button><button class="btn ghost sm" data-a="shareProduct" data-id="${p.id}" style="flex:0">↗ Partager</button>${S.isAdmin?`<button class="btn ghost sm" data-a="visual" data-id="${p.id}" style="flex:0">🖼 Visuel</button><button class="btn ghost sm" data-a="editProduct" data-id="${p.id}" style="flex:0">✏️ Modifier</button>${isPartner(p)?'':`<button class="btn ghost sm" data-a="promote" data-id="${p.id}" style="flex:0">📣 Promouvoir</button>`}`:''}</div>
       ${inBundles.length?`<div style="margin-top:14px">${inBundles.map(b=>`<button class="btn ghost block" style="margin-top:8px" data-a="addBundle" data-id="${b.id}">Aussi en lot : ${esc(b.name)} · ${fmt(b.price)}</button>`).join('')}</div>`:''}
     </div></div>
   ${hl.length?`<section class="pdp-sec"><h2>Points forts</h2><div class="hl">${hl.map(x=>`<div><i>✓</i><span>${esc(x)}</span></div>`).join('')}</div></section>`:''}
@@ -2613,6 +2628,7 @@ async function validatePromo(code, subtotal){
 /* --- Commande --- */
 let CO = null;
 try{ if(localStorage.getItem('ffm-inst-hide')) S.instHide = true; }catch(e){}
+document.addEventListener('toggle', e=>{ if(e.target && e.target.id==='cat-panel') S.catOpen = e.target.open; }, true);
 document.addEventListener('change', e=>{ if(e.target && e.target.id==='co-city' && CO){ const before = CO.city; readCO(); if(CO.city!==before || !(QUARTIERS[CO.city]||[]).length) setTimeout(()=>{ if($('#co-city') || CO.step===2) drawCheckout(); }, 0); } });
 function openCheckout(){
   { const t0 = computeTotals(S.cart, S.appliedPromo, 'livraison'); ttTrack('InitiateCheckout', {value:Math.round(t0.subtotal), contents:t0.lines.filter(l=>l.kind==='product').map(l=>ttItem(l.p, l.qty, l.unit))}); }
@@ -4407,6 +4423,9 @@ document.addEventListener('click', async e=>{
     case 'sdFmt': S.studio.fmt = el.dataset.v; schedule(); break;
     case 'sdCopyLink': try{ await navigator.clipboard.writeText($('#sd-link').value); toast('Lien copié'); }catch(err){ toast($('#sd-link').value); } break;
     case 'sdCopy': try{ await navigator.clipboard.writeText($('#sd-cap').value); toast('Texte copié'); }catch(err){} break;
+    case 'catCopy': try{ await navigator.clipboard.writeText($('#cat-'+el.dataset.v).value); toast('Adresse du catalogue copiée'); }catch(err){ toast($('#cat-'+el.dataset.v).value); } break;
+    case 'sdAds': { const url = ADS_MGR[S.studio.net]; const w = window.open(url, '_blank', 'noopener'); try{ await navigator.clipboard.writeText($('#sd-cap').value + '\n\n' + $('#sd-link').value); }catch(err){} $('[data-a="sdDl"]')?.click(); toast('Image téléchargée, texte et lien copiés : collez-les dans votre publicité.'); if(!w) location.href = url; break; }
+    case 'promote': { const p = S.products.find(x=>x.id===id); if(!p) break; closeAll(); S.studio = {...(S.studio||{}), subject:'product:'+id, net:S.studio?.net && ADS_MGR[S.studio.net] ? S.studio.net : 'facebook'}; S.view='admin'; S.tab='studio'; schedule(); window.scrollTo(0,0); break; }
     case 'sdDl': { if(!S._sdBlob) break; const ss=S.studio, name = `${S.settings.shopName.normalize('NFD').replace(/[^A-Za-z0-9]+/g,'-').toLowerCase()}-${ss.subject.replace(/[^a-z0-9]+/gi,'-')}-${ss.net}-${ss.fmt}.png`;
       if(dl) save(name, S._sdBlob); else { const a=document.createElement('a'); a.href=S._sdUrl; a.download=name; document.body.appendChild(a); a.click(); a.remove(); } break; }
     case 'sdShare': { if(!S._sdBlob) break; const f = new File([S._sdBlob], 'visuel.png', {type:'image/png'}); try{ if(navigator.canShare({files:[f]})) await navigator.share({files:[f], text:$('#sd-cap').value}); else toast('Partage non disponible : téléchargez l’image.'); }catch(err){} break; }

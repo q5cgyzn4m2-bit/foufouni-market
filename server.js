@@ -1636,6 +1636,28 @@ app.get(['/produit/:slug', '/offre/:slug', '/categorie/:slug', '/guide', '/a-pro
 app.get('/robots.txt', (req, res) => {
   res.type('text/plain').set('Cache-Control', 'public, max-age=3600').send(`User-agent: *\nAllow: /\nDisallow: /api/\nDisallow: /go/\nDisallow: /*?espace=\nDisallow: /*?livreur=\nDisallow: /*?payer=\nDisallow: /*?livre=\nDisallow: /*?pay=\n\nSitemap: ${BASE_URL}/sitemap.xml\n`);
 });
+/* ===================== Catalogue produits pour Facebook / Instagram (Meta Commerce Manager) et TikTok ===================== */
+function catalogRows(src) {
+  const st = settings();
+  return liveProducts().filter(p => !isPartnerS(p) && p.name && Number(p.price) > 0 && /^data:image\//.test(p.image || '')).map(p => {
+    const brand = String(p.brand || (lines2(p.specs).find(x => /^marque\s*:/i.test(x)) || '').replace(/^marque\s*:\s*/i, '')).trim().slice(0, 100) || st.shopName;
+    const cmp = Number(p.comparePrice) > Number(p.price) ? Math.round(Number(p.comparePrice)) : 0, price = Math.round(Number(p.price));
+    const desc = String(p.description || p.lpSub || lines2(p.highlights).join('. ') || p.name).replace(/\s+/g, ' ').trim().slice(0, 4900);
+    const link = `${BASE_URL}${canonPath(p)}?src=${src}&utm_source=${src}&utm_medium=paid&utm_campaign=catalogue`;
+    const extra = Array.isArray(p.gallery) ? p.gallery.slice(0, 9).map(g => `${BASE_URL}/img/pi/${encodeURIComponent(g)}`) : [];
+    return { id: p.sku || p.id, title: String(p.name).slice(0, 150), description: desc, availability: Number(p.stock) > 0 ? 'in stock' : 'out of stock',
+      condition: p.condition && p.condition !== 'neuf' ? (/reconditionn|refurb/i.test(p.condition) ? 'refurbished' : 'used') : 'new', price: `${cmp || price} XOF`, sale_price: cmp ? `${price} XOF` : '',
+      link, image_link: productImage(p.id, p), additional_image_link: extra.join(','), brand, product_type: String(p.category || '').slice(0, 750), inventory: Math.max(0, Math.round(Number(p.stock) || 0)) };
+  });
+}
+const csvCell = v => { const x = String(v == null ? '' : v); return /[",\n\r]/.test(x) ? '"' + x.replace(/"/g, '""') + '"' : x; };
+function sendCatalog(res, rows, cols, map) {
+  res.set('Content-Type', 'text/csv; charset=utf-8'); res.set('Cache-Control', 'public, max-age=900');
+  res.send('﻿' + [cols.join(','), ...rows.map(r => cols.map(c => csvCell(r[map[c] || c])).join(','))].join('\n'));
+}
+const META_COLS = ['id', 'title', 'description', 'availability', 'condition', 'price', 'sale_price', 'link', 'image_link', 'additional_image_link', 'brand', 'product_type', 'inventory'];
+app.get(['/catalogue/facebook.csv', '/catalogue/meta.csv'], (req, res) => sendCatalog(res, catalogRows('facebook'), META_COLS, {}));
+app.get('/catalogue/tiktok.csv', (req, res) => sendCatalog(res, catalogRows('tiktok'), ['sku_id', ...META_COLS.slice(1)], { sku_id: 'id' }));
 app.get('/sitemap.xml', (req, res) => {
   const live = liveProducts(), cats = [...new Set(live.map(x => x.category).filter(Boolean))].sort();
   const d = t => new Date(t || Date.now()).toISOString().slice(0, 10), x = v => String(v).replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;');
