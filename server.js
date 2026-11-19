@@ -675,12 +675,28 @@ app.get('/media/:file', h(async (req, res) => {
 /* Facebook (Page) et Instagram (compte professionnel) : publication automatique par l'API Graph de Meta.
    TikTok, Pinterest, WhatsApp, X, LinkedIn : rappel sur le téléphone du gérant à l'heure prévue (ces réseaux exigent une validation de l'application pour publier publiquement). */
 const GRAPH = (env.META_GRAPH_URL || 'https://graph.facebook.com').replace(/\/$/, '') + '/' + (env.META_GRAPH_VERSION || 'v25.0');
+const GRAPH_VIDEO = (env.META_GRAPH_VIDEO_URL || env.META_GRAPH_URL || 'https://graph-video.facebook.com').replace(/\/$/, '') + '/' + (env.META_GRAPH_VERSION || 'v25.0');
 const AUTO_NETS = new Set(['facebook', 'instagram']);
+const MEDIA_ID = /^(sp|v)[a-z0-9]{6,30}$/;
+/* médias d'une publication : une image, une vidéo, ou un carrousel (2 à 10 éléments) */
+function mediaOf(post) {
+  const m = (Array.isArray(post.media) ? post.media : []).filter(x => x && MEDIA_ID.test(x.id || '') && (x.type === 'image' || x.type === 'video')).slice(0, 10);
+  return m.length ? m : (MEDIA_ID.test(post.image || '') ? [{ type: 'image', id: post.image }] : []);
+}
+const mediaUrl = (m, net) => `${BASE_URL}/media/${net === 'instagram' && m.ig && MEDIA_ID.test(m.ig) ? m.ig : m.id}.${m.type === 'video' ? (/^(mp4|mov|webm)$/.test(m.ext || '') ? m.ext : 'mp4') : 'jpg'}`;
+async function igWait(id, token, tries = 60) {
+  for (let i = 0; i < tries; i++) {
+    const r = await graph(id, { fields: 'status_code,status', access_token: token }, 'GET');
+    if (r.status_code === 'FINISHED') return; if (r.status_code === 'ERROR' || r.status_code === 'EXPIRED') throw httpErr(400, 'Instagram a refusé le média : ' + (r.status || r.status_code));
+    await new Promise(ok => setTimeout(ok, 5000));
+  }
+  throw httpErr(504, 'Instagram met trop de temps à traiter la vidéo.');
+}
 const SOCIAL_NETS = new Set(['facebook', 'instagram', 'tiktok', 'pinterest', 'whatsapp', 'x', 'linkedin']);
 const metaCfg = () => getDoc('social-config', 'meta') || null;
 function socialStatus() { const m = metaCfg(); return { meta: m ? { connected: true, pageName: m.pageName, pageId: m.pageId, ig: m.igId ? { username: m.igUsername || '' } : null, at: m.connectedAt } : { connected: false } }; }
-async function graph(path, params = {}, method = 'POST') {
-  const u = new URL(GRAPH + '/' + path.replace(/^\//, ''));
+async function graph(path, params = {}, method = 'POST', base = GRAPH) {
+  const u = new URL(base + '/' + path.replace(/^\//, ''));
   let opt = { method, signal: AbortSignal.timeout(30000) };
   if (method === 'GET') Object.entries(params).forEach(([k, v]) => u.searchParams.set(k, v));
   else opt = { ...opt, headers: { 'Content-Type': 'application/x-www-form-urlencoded' }, body: new URLSearchParams(params).toString() };
@@ -737,18 +753,44 @@ app.post('/api/admin/social/image', requireStaff, express.raw({ type: ['image/jp
 }));
 app.delete('/api/admin/social/post/:id', requireStaff, h(async (req, res) => {
   const id = String(req.params.id || ''); const p = validId(id) && getDoc('social-posts', id); if (!p) throw httpErr(404, 'Publication introuvable.');
-  const mine = new Set([p.image, ...Object.values(p.images || {})].filter(x => /^sp[a-z0-9]{6,30}$/.test(x || '')));
-  for (const x of allDocs('social-posts')) if (x.id !== id) [x.image, ...Object.values(x.images || {})].forEach(i => mine.delete(i));
+  const ids = x => [x.image, ...Object.values(x.images || {}), ...(x.media || []).flatMap(m => [m && m.id, m && m.ig, m && m.poster])];
+  const mine = new Set(ids(p).filter(x => MEDIA_ID.test(x || '')));
+  for (const x of allDocs('social-posts')) if (x.id !== id) ids(x).forEach(i => mine.delete(i));
+  const prodJson = JSON.stringify(allDocs('products')); for (const f of [...mine]) if (f.startsWith('v') && prodJson.includes(f)) mine.delete(f);
   for (const f of mine) await store.files.del(f).catch(() => {});
   store.del ? store.del('social-posts', id) : putDoc('social-posts', id, null); res.json({ ok: true });
 }));
 app.post('/api/admin/social/publish/:id', requireStaff, h(async (req, res) => {
   const id = String(req.params.id || ''); const p = validId(id) && getDoc('social-posts', id); if (!p) throw httpErr(404, 'Publication introuvable.');
   if (p.status === 'sending') throw httpErr(409, 'Publication déjà en cours.');
+  if (mediaOf(p).some(m => m.type === 'video') && (p.nets || []).some(n => AUTO_NETS.has(n))) { runSocialPost(id, true).catch(e => console.warn('Publication :', e.message)); return res.json({ ...p, status: 'sending', background: true }); }
   res.json(await runSocialPost(id, true));
 }));
 async function publishMeta(net, post, cfg) {
-  const im = (post.images && /^sp[a-z0-9]{6,30}$/.test(post.images[net] || '') ? post.images[net] : post.image), img = `${BASE_URL}/media/${im}.jpg`, cap = String((post.captions && post.captions[net]) || post.caption || '').slice(0, 2200);
+  const items = mediaOf(post), cap = String((post.captions && post.captions[net]) || post.caption || '').slice(0, 2200), tok = cfg.pageToken;
+  if (!items.length) throw httpErr(400, 'Aucun média dans cette publication.');
+  if (items.length > 1 || items[0].type === 'video') {
+    if (net === 'facebook') {
+      if (items.length === 1) { const vp = { file_url: mediaUrl(items[0], net), description: cap, access_token: tok }; const r = await graph(`${cfg.pageId}/videos`, vp, 'POST', GRAPH_VIDEO).catch(e => GRAPH_VIDEO === GRAPH ? Promise.reject(e) : graph(`${cfg.pageId}/videos`, vp));
+        return { id: r.id, url: `https://www.facebook.com/${cfg.pageId}/videos/${r.id}` }; }
+      if (items.some(m => m.type === 'video')) throw httpErr(400, 'Facebook n’accepte que des photos dans un carrousel (publiez la vidéo à part).');
+      const ids = []; for (const m of items) ids.push((await graph(`${cfg.pageId}/photos`, { url: mediaUrl(m, net), published: 'false', access_token: tok })).id);
+      const params = { message: cap, access_token: tok }; ids.forEach((id, i) => { params[`attached_media[${i}]`] = JSON.stringify({ media_fbid: id }); });
+      const r = await graph(`${cfg.pageId}/feed`, params); return { id: r.id, url: `https://www.facebook.com/${r.id}` };
+    }
+    if (!cfg.igId) throw httpErr(400, 'Aucun compte Instagram professionnel n’est relié à la page Facebook.');
+    let cid;
+    if (items.length === 1) { cid = (await graph(`${cfg.igId}/media`, { media_type: 'REELS', video_url: mediaUrl(items[0], net), caption: cap, share_to_feed: 'true', access_token: tok })).id; await igWait(cid, tok); }
+    else {
+      const kids = [];
+      for (const m of items) { const c = (await graph(`${cfg.igId}/media`, m.type === 'video' ? { media_type: 'VIDEO', video_url: mediaUrl(m, net), is_carousel_item: 'true', access_token: tok } : { image_url: mediaUrl(m, net), is_carousel_item: 'true', access_token: tok })).id; kids.push(c); if (m.type === 'video') await igWait(c, tok); }
+      cid = (await graph(`${cfg.igId}/media`, { media_type: 'CAROUSEL', children: kids.join(','), caption: cap, access_token: tok })).id; await igWait(cid, tok, 24);
+    }
+    const out = await graph(`${cfg.igId}/media_publish`, { creation_id: cid, access_token: tok });
+    let url = ''; try { url = (await graph(out.id, { fields: 'permalink', access_token: tok }, 'GET')).permalink || ''; } catch (e) {}
+    return { id: out.id, url };
+  }
+  const im = (post.images && /^sp[a-z0-9]{6,30}$/.test(post.images[net] || '') ? post.images[net] : items[0].ig && net === 'instagram' ? items[0].ig : items[0].id), img = `${BASE_URL}/media/${im}.jpg`;
   if (net === 'facebook') {
     const r = await graph(`${cfg.pageId}/photos`, { url: img, message: cap, published: 'true', access_token: cfg.pageToken });
     const pid = r.post_id || r.id; return { id: pid, url: `https://www.facebook.com/${pid}` };
