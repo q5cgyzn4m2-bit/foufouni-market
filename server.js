@@ -711,7 +711,9 @@ app.post('/api/admin/social/image', requireStaff, express.raw({ type: ['image/jp
 }));
 app.delete('/api/admin/social/post/:id', requireStaff, h(async (req, res) => {
   const id = String(req.params.id || ''); const p = validId(id) && getDoc('social-posts', id); if (!p) throw httpErr(404, 'Publication introuvable.');
-  if (/^sp[a-z0-9]{6,30}$/.test(p.image || '') && !allDocs('social-posts').some(x => x.id !== id && x.image === p.image)) await store.files.del(p.image).catch(() => {});
+  const mine = new Set([p.image, ...Object.values(p.images || {})].filter(x => /^sp[a-z0-9]{6,30}$/.test(x || '')));
+  for (const x of allDocs('social-posts')) if (x.id !== id) [x.image, ...Object.values(x.images || {})].forEach(i => mine.delete(i));
+  for (const f of mine) await store.files.del(f).catch(() => {});
   store.del ? store.del('social-posts', id) : putDoc('social-posts', id, null); res.json({ ok: true });
 }));
 app.post('/api/admin/social/publish/:id', requireStaff, h(async (req, res) => {
@@ -720,7 +722,7 @@ app.post('/api/admin/social/publish/:id', requireStaff, h(async (req, res) => {
   res.json(await runSocialPost(id, true));
 }));
 async function publishMeta(net, post, cfg) {
-  const img = `${BASE_URL}/media/${post.image}.jpg`, cap = String((post.captions && post.captions[net]) || post.caption || '').slice(0, 2200);
+  const im = (post.images && /^sp[a-z0-9]{6,30}$/.test(post.images[net] || '') ? post.images[net] : post.image), img = `${BASE_URL}/media/${im}.jpg`, cap = String((post.captions && post.captions[net]) || post.caption || '').slice(0, 2200);
   if (net === 'facebook') {
     const r = await graph(`${cfg.pageId}/photos`, { url: img, message: cap, published: 'true', access_token: cfg.pageToken });
     const pid = r.post_id || r.id; return { id: pid, url: `https://www.facebook.com/${pid}` };

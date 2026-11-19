@@ -2241,10 +2241,23 @@ function spPlanBox(ss){
   const next = Math.ceil((Date.now()+30*60e3)/(30*60e3))*30*60e3;
   return `<div class="panel" style="margin:12px 0 0"><h3 style="margin:0 0 8px">🗓️ Programmer cette publication</h3>
     <div class="field"><label for="sp-at">Date et heure de publication</label><input type="datetime-local" class="input" id="sp-at" value="${spLocal(next)}" min="${spLocal(Date.now())}"></div>
+    <p class="co-lbl" style="margin:4px 0 6px">Image</p>
+    <div class="row" style="gap:10px;align-items:center;flex-wrap:wrap;margin-bottom:10px">${S.spOwn?`<img src="${S.spOwn.url}" alt="" style="width:56px;height:56px;object-fit:cover;border-radius:8px;flex:none"><span class="small" style="flex:1 1 140px">Votre photo (${S.spOwn.w}×${S.spOwn.h})</span><button class="btn ghost sm" data-a="spOwnOff" style="flex:none">↩ Visuel du Studio</button>`:`<span class="small" style="flex:1 1 140px">Le visuel du Studio ci-contre</span>`}
+      <label class="btn ghost sm" style="flex:none;cursor:pointer">🖼 ${S.spOwn?'Autre photo':'Utiliser ma photo'}<input type="file" accept="image/*" class="sp-own" hidden></label></div>
     <p class="co-lbl" style="margin:4px 0 6px">Réseaux</p><div class="row" style="flex-wrap:wrap;gap:6px 14px;margin-bottom:8px">${SP_NETS.map(n=>`<label class="row small" style="gap:6px;font-weight:700"><input type="checkbox" class="sp-net" value="${n}" ${n===ss.net?'checked':''}> ${esc(NETS[n])} <span class="pill ${SP_AUTO(n)?'ok':''}" style="font-size:10.5px">${SP_AUTO(n)?'auto':'rappel'}</span></label>`).join('')}</div>
     <p class="muted small" style="margin:0 0 10px"><b>auto</b> : publié tout seul à l’heure prévue. <b>rappel</b> : notification sur votre téléphone à l’heure prévue, avec le visuel et le texte prêts à publier.${S.social?.meta?.connected?'':' Reliez Facebook et Instagram dans <b>Gestion › Calendrier réseaux</b> pour la publication automatique.'}</p>
     <div class="row" style="gap:8px;flex-wrap:wrap"><button class="btn primary" data-a="spSchedule">🗓️ Programmer</button><button class="btn ghost" data-a="spSchedule" data-v="now">⚡ Publier maintenant</button></div></div>`;
 }
+/* Instagram n'accepte que les images entre 4:5 (portrait) et 1,91:1 (paysage) : on complète avec un fond sombre si besoin */
+const spIgOk = (w,h) => h/w <= 1.25 + 1e-3 && w/h <= 1.91 + 1e-3;
+async function spFit(blob){ const bmp = await createImageBitmap(blob); let W = bmp.width, H = bmp.height;
+  if(spIgOk(W,H)) return blob; if(H/W > 1.25) W = Math.round(H/1.25); else H = Math.round(W/1.91);
+  const c = document.createElement('canvas'); c.width = W; c.height = H; const g = c.getContext('2d'); g.fillStyle = '#14110d'; g.fillRect(0,0,W,H); g.drawImage(bmp, (W-bmp.width)/2, (H-bmp.height)/2);
+  return await new Promise(r=>c.toBlob(r,'image/jpeg',0.9)); }
+async function spUpload(blob){ const jpg = await spJpeg(blob); const r = await fetch('/api/admin/social/image', {method:'POST', credentials:'same-origin', headers:{'Content-Type':'image/jpeg'}, body:jpg}); const j = await r.json().catch(()=>({})); if(!r.ok) throw new Error(j.error || 'Envoi de l’image impossible.'); return j.id; }
+async function spReadImg(file){ if(!file || !/^image\//.test(file.type)) throw new Error('Choisissez une image (JPG, PNG…).'); if(file.size > 15e6) throw new Error('Image trop lourde (15 Mo max.).');
+  const bmp = await createImageBitmap(file), k = Math.min(1, 2160/Math.max(bmp.width, bmp.height)), c = document.createElement('canvas'); c.width = Math.round(bmp.width*k); c.height = Math.round(bmp.height*k); c.getContext('2d').drawImage(bmp,0,0,c.width,c.height);
+  const blob = await new Promise(r=>c.toBlob(r,'image/jpeg',0.9)); return {blob, w:c.width, h:c.height, url:URL.createObjectURL(blob)}; }
 async function spJpeg(blob){ const bmp = await createImageBitmap(blob), c = document.createElement('canvas'); c.width = bmp.width; c.height = bmp.height; const g = c.getContext('2d'); g.fillStyle = '#fff'; g.fillRect(0,0,c.width,c.height); g.drawImage(bmp,0,0);
   return await new Promise(r=>c.toBlob(r,'image/jpeg',0.9)); }
 async function spSchedule(now){
@@ -2253,15 +2266,15 @@ async function spSchedule(now){
   const at = now ? Date.now() : new Date($('#sp-at').value).getTime();
   if(!now && !(at > Date.now() - 60e3)) return toast('Choisissez une date et une heure à venir.');
   const [, , W, H] = FORMATS[ss.net].find(f=>f[0]===ss.fmt) || FORMATS[ss.net][0];
-  if(nets.includes('instagram') && (H/W > 1.25 || W/H > 1.91)) return toast('Instagram accepte seulement les formats carré ou portrait 4:5 : choisissez « Publication carrée » ou « Portrait » (ou décochez Instagram).');
-  if(!S._sdBlob || !d) return toast('Le visuel n’est pas encore prêt : patientez une seconde.');
+  const own = S.spOwn, base = own ? own.blob : S._sdBlob, bw = own ? own.w : W, bh = own ? own.h : H;
+  if(!base || !d) return toast('Le visuel n’est pas encore prêt : patientez une seconde.');
   const btns = document.querySelectorAll('[data-a="spSchedule"]'); btns.forEach(b=>b.disabled=true);
   try{
-    const jpg = await spJpeg(S._sdBlob);
-    const r = await fetch('/api/admin/social/image', {method:'POST', credentials:'same-origin', headers:{'Content-Type':'image/jpeg'}, body:jpg}); const j = await r.json().catch(()=>({}));
-    if(!r.ok) throw new Error(j.error || 'Envoi de l’image impossible.');
+    const img = await spUpload(base), images = {};
+    if(nets.includes('instagram') && !spIgOk(bw,bh)) images.instagram = await spUpload(await spFit(base));
     const id = newId('sp'), captions = Object.fromEntries(nets.map(n=>[n, studioCaption(d, n)]));
-    await put('social-posts', id, {id, at, nets, captions, image:j.id, title:d.title, subject:ss.subject, fmt:ss.fmt, size:`${W}×${H}`, status:'scheduled', createdAt:Date.now(), by:S.uid||''});
+    await put('social-posts', id, {id, at, nets, captions, image:img, images, title:d.title, subject:ss.subject, fmt:own?'photo':ss.fmt, size:`${bw}×${bh}`, status:'scheduled', createdAt:Date.now(), by:S.uid||''});
+    if(own){ URL.revokeObjectURL(own.url); S.spOwn = null; }
     if(now){ toast('Publication en cours…'); const res = await window.socialApi('POST', '/api/admin/social/publish/'+encodeURIComponent(id)); spToastResult(res); }
     else toast(`Programmé pour ${spDate(at)} ✓ Retrouvez-le dans Gestion › Calendrier réseaux.`);
   }catch(e){ toast(e.message || 'Programmation impossible.'); }
@@ -2303,13 +2316,17 @@ function paneSocial(){
   ${past.length?`<div class="panel"><h3>Déjà parties</h3>${past.map(card).join('')}</div>`:''}`;
 }
 function spOpen(id){ const p = (S.socialPosts||[]).find(x=>x.id===id); if(!p) return toast('Publication introuvable (supprimée ?).');
-  const img = `/media/${p.image}.jpg`, file = `foufouni-${p.id}.jpg`;
+  const img = `/media/${p.image}.jpg`, file = `foufouni-${p.id}.jpg`, edit = p.status==='scheduled', imOf = n => `/media/${(p.images||{})[n]||p.image}.jpg`;
   $('#overlay').innerHTML = `<div class="scrim" data-a="closeAll"><div class="modal wide" role="dialog" aria-modal="true" aria-label="Publication"><div class="toolbar"><h3 style="flex:1;margin:0">${esc(p.title||'Publication')}</h3><button class="icon-btn" data-a="closeAll" aria-label="Fermer">✕</button></div>
-    <p class="muted small" style="margin:0 0 10px">${spDate(p.at)} · ${(p.nets||[]).map(n=>spChip(p,n)).join(' ')}</p>
-    <div class="row" style="gap:14px;align-items:flex-start;flex-wrap:wrap"><div style="flex:1 1 220px"><img src="${img}" alt="Visuel" style="width:100%;border-radius:12px;border:1px solid var(--line)"><a class="btn primary" style="margin-top:8px;width:100%" href="${img}" download="${file}">⬇️ Télécharger l’image</a></div>
+    ${edit?`<div class="row" style="gap:8px;align-items:flex-end;flex-wrap:wrap;margin-bottom:10px"><div class="field" style="margin:0;flex:1 1 200px"><label for="spe-at">Date et heure</label><input type="datetime-local" class="input" id="spe-at" value="${spLocal(p.at)}"></div><button class="btn ghost sm" data-a="spSaveAt" data-id="${esc(p.id)}" style="flex:none">Enregistrer l’heure</button></div>`:`<p class="muted small" style="margin:0 0 10px">${spDate(p.at)}</p>`}
+    <p class="muted small" style="margin:0 0 10px">${(p.nets||[]).map(n=>spChip(p,n)).join(' ')}</p>
+    <div class="row" style="gap:14px;align-items:flex-start;flex-wrap:wrap"><div style="flex:1 1 220px"><img src="${img}" alt="Visuel" style="width:100%;border-radius:12px;border:1px solid var(--line)"><a class="btn primary" style="margin-top:8px;width:100%" href="${img}" download="${file}">⬇️ Télécharger l’image</a>${edit?`<label class="btn ghost sm" style="margin-top:6px;width:100%;cursor:pointer">🖼 Changer l’image (tous les réseaux)<input type="file" accept="image/*" class="sp-img" data-id="${esc(p.id)}" data-v="*" hidden></label>`:''}</div>
     <div style="flex:2 1 280px">${(p.nets||[]).map(n=>{ const r=(p.results||{})[n]||{}, cap=(p.captions||{})[n]||'';
+      const own = (p.images||{})[n];
       return `<div class="panel" style="margin:0 0 10px"><div class="toolbar" style="margin-bottom:6px"><b style="flex:1">${esc(NETS[n])}</b>${spChip(p,n)}</div>${r.err?`<p class="small" style="color:var(--danger);margin:0 0 6px">${esc(r.err)}</p>`:''}
-        <textarea class="input" readonly id="spc-${n}" style="min-height:90px;font-size:13px">${esc(cap)}</textarea>
+        <div class="row" style="gap:10px;align-items:center;margin-bottom:8px;flex-wrap:wrap"><img src="${imOf(n)}" alt="" style="width:52px;height:52px;object-fit:cover;border-radius:8px;flex:none"><span class="muted small" style="flex:1 1 120px">${own?'Image propre à '+esc(NETS[n]):'Image commune'}</span>
+          ${own?`<a class="btn ghost sm" style="flex:none" href="${imOf(n)}" download="foufouni-${esc(p.id)}-${n}.jpg">⬇️</a>`:''}${edit?`<label class="btn ghost sm" style="flex:none;cursor:pointer">🖼 Changer<input type="file" accept="image/*" class="sp-img" data-id="${esc(p.id)}" data-v="${n}" hidden></label>${own?`<button class="btn ghost sm" style="flex:none" data-a="spImgReset" data-id="${esc(p.id)}" data-v="${n}">↩ Commune</button>`:''}`:''}</div>
+        <textarea class="input" ${edit?'':'readonly'} id="spc-${n}" style="min-height:90px;font-size:13px">${esc(cap)}</textarea>${edit?`<button class="btn ghost sm" style="margin-top:6px" data-a="spSaveCap" data-id="${esc(p.id)}" data-v="${n}">Enregistrer le texte</button>`:''}
         <div class="row" style="gap:6px;flex-wrap:wrap;margin-top:6px"><button class="btn ghost sm" data-a="spCopy" data-v="${n}">Copier le texte</button>${n==='whatsapp'?`<a class="btn ghost sm" target="_blank" rel="noopener" href="https://wa.me/?text=${encodeURIComponent(cap)}">Ouvrir WhatsApp</a>`:n==='x'?`<a class="btn ghost sm" target="_blank" rel="noopener" href="https://x.com/intent/post?text=${encodeURIComponent(cap)}">Ouvrir X</a>`:SP_OPEN[n]&&!r.ok?`<a class="btn ghost sm" target="_blank" rel="noopener" href="${SP_OPEN[n]}">Ouvrir ${esc(NETS[n])}</a>`:''}${!r.ok?`<button class="btn ghost sm" data-a="spDone" data-id="${esc(p.id)}" data-v="${n}">✓ Publié</button>`:''}</div></div>`; }).join('')}</div></div></div></div>`;
 }
 function paneStudio(){
@@ -4447,6 +4464,12 @@ document.addEventListener('change', async e=>{
   if(t.dataset.stk==='cat'){ S.stCat=t.value; schedule(); }
   if(t.dataset.fin==='acc'){ S.trAcc=t.value; schedule(); }
   if(t.id==='rv-q'){ S.rvQ=t.value; schedule(); }
+  if(t.classList && t.classList.contains('sp-own') && t.files[0]){ try{ const o = await spReadImg(t.files[0]); if(S.spOwn) URL.revokeObjectURL(S.spOwn.url); S.spOwn = o; schedule(); toast('Votre photo sera utilisée pour cette publication.'); }catch(err){ toast(err.message); } }
+  if(t.classList && t.classList.contains('sp-img') && t.files[0]){ const id = t.dataset.id, net = t.dataset.v, p = (S.socialPosts||[]).find(x=>x.id===id); if(!p) return;
+    try{ toast('Envoi de l’image…'); const o = await spReadImg(t.files[0]), im = {...(p.images||{})};
+      if(net==='*'){ const up = {image: await spUpload(o.blob), size:`${o.w}×${o.h}`}; delete im.instagram; if((p.nets||[]).includes('instagram') && !spIgOk(o.w,o.h)) im.instagram = await spUpload(await spFit(o.blob)); await patch('social-posts', id, {...up, images:im}); }
+      else { im[net] = await spUpload(net==='instagram' ? await spFit(o.blob) : o.blob); await patch('social-posts', id, {images:im}); }
+      URL.revokeObjectURL(o.url); toast('Image changée ✓'); setTimeout(()=>spOpen(id), 400); }catch(err){ toast(err.message); } }
   if(t.id==='rv-sort'){ S.rvSort=t.value; schedule(); }
   if(t.dataset.fin==='type'){ S.trType=t.value; schedule(); }
   if(a==='role'){ const m=structuredClone(S.team.members); m[+t.dataset.i].role=t.value; saveTeam(m); }
@@ -4512,6 +4535,10 @@ document.addEventListener('click', async e=>{
     case 'sdCopy': try{ await navigator.clipboard.writeText($('#sd-cap').value); toast('Texte copié'); }catch(err){} break;
     case 'spSchedule': spSchedule(el.dataset.v==='now'); break;
     case 'spOpen': spOpen(id); break;
+    case 'spOwnOff': if(S.spOwn) URL.revokeObjectURL(S.spOwn.url); S.spOwn = null; schedule(); break;
+    case 'spSaveAt': { const p=(S.socialPosts||[]).find(x=>x.id===id), t=new Date($('#spe-at').value).getTime(); if(!p) break; if(!(t>Date.now()-60e3)) { toast('Choisissez une heure à venir.'); break; } await patch('social-posts', id, {at:t}); toast('Nouvelle heure : '+spDate(t)); setTimeout(()=>spOpen(id), 400); break; }
+    case 'spSaveCap': { const p=(S.socialPosts||[]).find(x=>x.id===id); if(!p) break; await patch('social-posts', id, {captions:{...(p.captions||{}), [el.dataset.v]:$('#spc-'+el.dataset.v).value}}); toast('Texte enregistré'); break; }
+    case 'spImgReset': { const p=(S.socialPosts||[]).find(x=>x.id===id); if(!p) break; const im={...(p.images||{})}; delete im[el.dataset.v]; await patch('social-posts', id, {images:im}); toast('Image commune rétablie'); setTimeout(()=>spOpen(id), 400); break; }
     case 'spCopy': try{ await navigator.clipboard.writeText($('#spc-'+el.dataset.v).value); toast('Texte copié'); }catch(err){ $('#spc-'+el.dataset.v).select(); } break;
     case 'spDone': { const p=(S.socialPosts||[]).find(x=>x.id===id); if(!p) break; const R={...(p.results||{})}; R[el.dataset.v]={...(R[el.dataset.v]||{}), ok:true, manual:true, at:Date.now()}; const all=(p.nets||[]).every(n=>R[n]&&R[n].ok);
       await patch('social-posts', id, {results:R, ...(all?{status:'done'}:{})}); toast('Marqué comme publié'); setTimeout(()=>spOpen(id), 300); break; }
