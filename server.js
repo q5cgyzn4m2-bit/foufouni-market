@@ -711,6 +711,16 @@ app.post('/api/admin/social/meta', requireStaff, requireManager, express.json({ 
       pages = pages.filter((p, i, a) => p.access_token && a.findIndex(x => x.id === p.id) === i);
     } catch (e) {}
   }
+  /* dernier recours : les pages cochées dans la fenêtre Facebook (« granular scopes » du jeton), interrogées une par une */
+  let dbg = null;
+  if (!pages.length) {
+    try {
+      dbg = (await graph('debug_token', { input_token: LT, access_token: `${appId}|${secret}` }, 'GET')).data || null;
+      const ids = [...new Set(((dbg && dbg.granular_scopes) || []).filter(g => /^pages_/.test(g.scope)).flatMap(g => g.target_ids || []))].slice(0, 20);
+      for (const pid of ids) { try { const pg = await graph(String(pid).replace(/\D/g, ''), { fields: PF, access_token: LT }, 'GET'); if (pg && pg.access_token) pages.push(pg); } catch (e) {} }
+    } catch (e) {}
+  }
+  if (!pages.length && dbg && !((dbg.granular_scopes || []).some(g => /^pages_/.test(g.scope) && (g.target_ids || []).length))) throw httpErr(400, 'Le jeton est valide mais AUCUNE page n’a été cochée dans la fenêtre Facebook. Facebook garde l’ancien choix : allez sur facebook.com › Paramètres › Intégrations professionnelles, retirez l’app « ' + (dbg.application || 'foufouni publications') + ' », puis regénérez le jeton : la fenêtre vous redemandera quelles pages autoriser, cochez foûfoûni-Market.');
   if (!pages.length) throw httpErr(400, 'Aucune page Facebook trouvée avec ce jeton. Dans la fenêtre Facebook qui s’ouvre après « Generate Access Token », cliquez sur « Modifier l’accès » et COCHEZ votre page foûfoûni (et votre Instagram), puis recommencez avec le nouveau jeton.' + (granted.includes('business_management') ? '' : ' Ajoutez aussi l’autorisation business_management si la page appartient à un portefeuille d’entreprise.'));
   if (pages.length > 1 && !want) return res.json({ choose: pages.map(p => ({ id: p.id, name: p.name, ig: p.instagram_business_account ? p.instagram_business_account.username || 'Instagram relié' : '' })) });
   const p = pages.find(x => x.id === want) || pages[0];
