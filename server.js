@@ -694,8 +694,24 @@ app.post('/api/admin/social/meta', requireStaff, requireManager, express.json({ 
   const appId = String(req.body?.appId || '').trim(), secret = String(req.body?.appSecret || '').trim(), tok = String(req.body?.userToken || '').trim(), want = String(req.body?.pageId || '');
   if (!/^\d{5,25}$/.test(appId) || !/^[a-f0-9]{20,64}$/i.test(secret) || tok.length < 50) throw httpErr(400, 'Vérifiez l’identifiant de l’application, sa clé secrète et le jeton d’accès.');
   const long = await graph('oauth/access_token', { grant_type: 'fb_exchange_token', client_id: appId, client_secret: secret, fb_exchange_token: tok }, 'GET');
-  const pages = (await graph('me/accounts', { fields: 'id,name,access_token,instagram_business_account{id,username}', limit: '50', access_token: long.access_token }, 'GET')).data || [];
-  if (!pages.length) throw httpErr(400, 'Aucune page Facebook trouvée : à la création du jeton, cochez votre page foûfoûni et les autorisations demandées.');
+  const LT = long.access_token, PF = 'id,name,access_token,instagram_business_account{id,username}';
+  /* autorisations réellement accordées au jeton : on dit précisément ce qui manque */
+  let granted = [];
+  try { granted = ((await graph('me/permissions', { access_token: LT }, 'GET')).data || []).filter(x => x.status === 'granted').map(x => x.permission); } catch (e) {}
+  const need = ['pages_show_list', 'pages_read_engagement', 'pages_manage_posts'], missing = need.filter(x => granted.length && !granted.includes(x));
+  if (missing.length) throw httpErr(400, `Autorisations manquantes dans le jeton : ${missing.join(', ')}. Ajoutez-les dans l’Explorateur, puis cliquez de nouveau sur « Generate Access Token ».`);
+  let pages = (await graph('me/accounts', { fields: PF, limit: '50', access_token: LT }, 'GET')).data || [];
+  /* page rattachée à un portefeuille d'entreprise (Business Manager) : elle n'apparaît pas toujours dans me/accounts */
+  if (!pages.length) {
+    try {
+      const biz = (await graph('me/businesses', { fields: 'id,name', limit: '25', access_token: LT }, 'GET')).data || [];
+      for (const b of biz) for (const edge of ['owned_pages', 'client_pages']) {
+        try { pages.push(...((await graph(`${b.id}/${edge}`, { fields: PF, limit: '50', access_token: LT }, 'GET')).data || [])); } catch (e) {}
+      }
+      pages = pages.filter((p, i, a) => p.access_token && a.findIndex(x => x.id === p.id) === i);
+    } catch (e) {}
+  }
+  if (!pages.length) throw httpErr(400, 'Aucune page Facebook trouvée avec ce jeton. Dans la fenêtre Facebook qui s’ouvre après « Generate Access Token », cliquez sur « Modifier l’accès » et COCHEZ votre page foûfoûni (et votre Instagram), puis recommencez avec le nouveau jeton.' + (granted.includes('business_management') ? '' : ' Ajoutez aussi l’autorisation business_management si la page appartient à un portefeuille d’entreprise.'));
   if (pages.length > 1 && !want) return res.json({ choose: pages.map(p => ({ id: p.id, name: p.name, ig: p.instagram_business_account ? p.instagram_business_account.username || 'Instagram relié' : '' })) });
   const p = pages.find(x => x.id === want) || pages[0];
   putDoc('social-config', 'meta', { pageId: p.id, pageName: p.name, pageToken: p.access_token, igId: p.instagram_business_account ? p.instagram_business_account.id : '', igUsername: p.instagram_business_account ? p.instagram_business_account.username || '' : '', appId, connectedAt: Date.now(), by: req.user.id });
