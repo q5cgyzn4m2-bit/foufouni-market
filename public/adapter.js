@@ -31,7 +31,13 @@
       S.settings.testMode = false;
     } catch (e) {
       if (e.status === 401 && me) { location.reload(); return; }
-      toast('Connexion au serveur impossible. Nouvel essai dans un instant.');
+      if (Date.now() - (load._warned || 0) > 60000) { load._warned = Date.now(); toast('Connexion au serveur impossible. Nouvel essai dans un instant.'); }
+    }
+    /* ne pas redessiner la page pendant une saisie (sinon le champ perd le texte collé ou le menu Coller se ferme) : on attend la sortie du champ */
+    const a = document.activeElement;
+    if (S.ready && a && /^(INPUT|TEXTAREA|SELECT)$/.test(a.tagName) && a.type !== 'checkbox' && a.closest('#main,#overlay') && !a.closest('.search')) {
+      if (!load._waiting) { load._waiting = true; a.addEventListener('blur', () => { load._waiting = false; setTimeout(schedule, 50); }, { once: true }); }
+      return;
     }
     schedule();
   }
