@@ -601,6 +601,18 @@ tr.click:hover td{background:var(--surface-2)}
 .sp-card .row>*,.sp-card>.row>*{flex:0 0 auto}
 .sp-nl>*{flex:0 0 auto!important;width:auto!important;margin:0}
 .input.secret{-webkit-text-security:disc; text-security:disc; font-family:monospace}
+.ud-box{display:grid; gap:10px; margin-top:16px}
+.ud{position:relative; display:flex; gap:12px; align-items:center; padding:14px 12px 12px; border:1px solid var(--line); border-radius:14px; background:var(--surface, rgba(255,255,255,.03))}
+.ud.up{border-color:color-mix(in srgb, var(--indigo) 55%, var(--line))}
+.ud.down{border-color:color-mix(in srgb, var(--in, #4CC97A) 45%, var(--line))}
+.ud-tag{position:absolute; top:-9px; left:12px; font-size:11.5px; font-weight:800; padding:1px 8px; border-radius:999px; background:var(--bg, #14110d); border:1px solid currentColor}
+.ud.up .ud-tag{color:var(--indigo)} .ud.down .ud-tag{color:var(--in, #4CC97A)}
+.ud-img{width:58px; height:58px; flex:none; border-radius:10px; overflow:hidden; display:grid; place-items:center; font-size:28px; background:var(--line); padding:0; border:0}
+.ud-img img{width:100%; height:100%; object-fit:cover}
+.ud-txt{flex:1; min-width:0; display:grid; gap:2px} .ud-txt small{line-height:1.3}
+.ud-name{all:unset; cursor:pointer; font-weight:700; overflow:hidden; text-overflow:ellipsis; white-space:nowrap}
+.ud-plus{color:var(--indigo); font-weight:800} .ud-minus{color:var(--in, #4CC97A); font-weight:800}
+.ud .btn{flex:none}
 @media (max-width:980px){
   .admin{grid-template-columns:1fr}
   .side{position:static; flex-direction:row; overflow-x:auto; scrollbar-width:none; gap:4px}
@@ -2509,6 +2521,35 @@ function optionPicker(p){
     return `<div class="opt"><div class="small muted">${esc(o.name)} : <b style="color:var(--ink)">${esc(sel[oi]||'à choisir')}</b></div><div class="opt-vals">${o.values.map(val=>`<button class="opt-btn${avail(val)?'':' out'}" data-a="optPick" data-o="${oi}" data-v="${esc(val)}" aria-pressed="${sel[oi]===val}">${isColorOpt(o.name)?swatch(val):''}${esc(val)}</button>`).join('')}</div></div>`;
   }).join('');
 }
+/* ===================== Upsell (version supérieure) et downsell (alternative moins chère) ===================== */
+const udOk = x => x && x.active!==false && x.name && !isPartner(x) && x.price>0 && (x.stock>0 || hasVar(x));
+function upsellFor(p){ if(!p || isPartner(p) || p.upsell==='off') return null;
+  if(p.upsell && p.upsell!=='auto'){ const x = S.products.find(y=>y.id===p.upsell); return udOk(x) && x.id!==p.id ? x : null; }
+  return S.products.filter(x=>x.id!==p.id && udOk(x) && x.category===p.category && x.price>p.price*1.1 && x.price<=p.price*3).sort((a,b)=>a.price-b.price)[0] || null; }
+function downsellFor(p){ if(!p || isPartner(p) || p.downsell==='off') return null;
+  if(p.downsell && p.downsell!=='auto'){ const x = S.products.find(y=>y.id===p.downsell); return udOk(x) && x.id!==p.id ? x : null; }
+  return S.products.filter(x=>x.id!==p.id && udOk(x) && x.category===p.category && x.price<p.price*0.92 && x.price>=p.price*0.25).sort((a,b)=>b.price-a.price)[0] || null; }
+const udWhy = x => esc((lines(x.highlights)[0] || x.description || '').slice(0,90));
+function udCard(x, kind, base){ const d = x.price - base.price, rt = productRating(x.id);
+  return `<div class="ud ${kind}"><span class="ud-tag">${kind==='up'?'⬆️ Version supérieure':'💡 Petit budget ?'}</span>
+    <button class="ud-img" data-a="product" data-id="${x.id}" aria-label="Voir ${esc(x.name)}">${pImg(x)}</button>
+    <div class="ud-txt"><button class="ud-name" data-a="product" data-id="${x.id}">${esc(x.name)}</button>
+      <div><b>${fmt(x.price)}</b> <span class="${kind==='up'?'ud-plus':'ud-minus'}">${kind==='up'?'+'+fmt(d):'−'+fmt(-d)}</span>${rt.n?` <span class="small">⭐ ${(Math.round(rt.avg*10)/10).toString().replace('.',',')}</span>`:''}</div>
+      ${udWhy(x)?`<small class="muted">${udWhy(x)}</small>`:''}</div>
+    <button class="btn ${kind==='up'?'primary':'ghost'} sm" data-a="udAdd" data-id="${x.id}" data-from="${base.id}" data-k="${kind}">${kind==='up'?'Choisir':'Ajouter'}</button></div>`; }
+function udBlock(p){ const up = upsellFor(p), down = downsellFor(p); if(!up && !down) return '';
+  return `<div class="ud-box" aria-label="Autres choix">${up?udCard(up,'up',p):''}${down?udCard(down,'down',p):''}</div>`; }
+function upsellModal(p, n){ const up = upsellFor(p); if(!up) return; S._upShown = S._upShown || {}; if(S._upShown[p.id]) return; S._upShown[p.id] = 1;
+  const d = up.price - p.price;
+  $('#overlay').innerHTML = `<div class="scrim" data-a="closeAll"><div class="modal" role="dialog" aria-modal="true" aria-label="Offre"><div class="m-h"><h2>✅ Ajouté au panier</h2><button class="x" data-a="closeAll" aria-label="Fermer">×</button></div>
+    <div class="m-b"><p style="margin:0 0 12px">Pour seulement <b class="ud-plus">+${fmt(d)}</b>, passez à la version supérieure :</p>
+    <div class="ud up" style="margin:0"><span class="ud-tag">⬆️ Recommandé</span><span class="ud-img">${pImg(up)}</span><div class="ud-txt"><b>${esc(up.name)}</b><div><b>${fmt(up.price)}</b> <span class="strike">${fmt(p.price)}</span></div>${udWhy(up)?`<small class="muted">${udWhy(up)}</small>`:''}</div></div>
+    <div class="row" style="gap:8px;margin-top:14px;flex-wrap:wrap"><button class="btn primary" data-a="udSwap" data-id="${up.id}" data-from="${p.id}" data-n="${n||1}" style="flex:1 1 200px">Oui, je prends ${esc(up.name.length>28?up.name.slice(0,26)+'…':up.name)}</button><button class="btn ghost" data-a="closeAll" style="flex:1 1 160px">Non merci, je garde mon choix</button></div>
+    <button class="btn ghost sm" style="margin-top:8px;width:100%" data-a="product" data-id="${up.id}">Voir le détail de ${esc(up.name.length>30?up.name.slice(0,28)+'…':up.name)}</button></div></div></div>`;
+}
+function cartDownBanner(){ const c = S.cartDown; if(!c) return ''; const from = S.products.find(x=>x.id===c.from), to = S.products.find(x=>x.id===c.to);
+  if(!from || !udOk(to) || S.cart.some(l=>l.id===to.id)) return '';
+  return `<div class="ud down" style="margin:0 0 14px"><span class="ud-tag">💡 Le prix vous freine ?</span><span class="ud-img">${pImg(to)}</span><div class="ud-txt"><b>${esc(to.name)}</b><div><b>${fmt(to.price)}</b> <span class="ud-minus">−${fmt(from.price-to.price)}</span> <span class="muted small">au lieu de ${esc(from.name)}</span></div></div><button class="btn primary sm" data-a="udAdd" data-id="${to.id}" data-from="${from.id}" data-k="down">Ajouter</button></div>`; }
 function viewProduct(){
   const p = S.products.find(x=>x.id===S.pid && x.active!==false); if(!p){ S.view='shop'; return viewShop(); }
   const imgs = galleryFor(p), st = S.settings, save = p.comparePrice>p.price ? p.comparePrice-p.price : 0;
@@ -2545,6 +2586,7 @@ function viewProduct(){
       <div class="mini-codes">${qrSVG(payLink(p, hasVar(p)?selVariant(p):null), 64)}<div>${eanSVG(hasVar(p)&&selVariant(p)?vCode(p,selVariant(p)):pCode(p), 150, 50)}<span>Scannez le QR pour payer sur votre téléphone · code produit ${esc(hasVar(p)&&selVariant(p)?vCode(p,selVariant(p)):pCode(p))}</span></div></div>
       ${hasLanding(p)?`<button class="lp-banner" data-a="openLanding" data-id="${p.id}"><span style="font-size:26px">✨</span><span style="flex:1"><b>Découvrez ce produit en détail</b><span class="muted small">${[(p.angleCaps||[]).some(c=>c&&c.t)?'photos sous tous les angles':'', (p.lpVideo||p.lpVideoFile)?'vidéo':'', (p.spin||[]).length>=4?'vue à 360°':'', productRating(p.id).n?'avis clients':'', 'questions fréquentes'].filter(Boolean).join(' · ')}</span></span><span style="font-weight:800;color:var(--indigo)">Voir ›</span></button>`:''}
       <div class="row" style="gap:8px;margin-top:14px;flex-wrap:wrap"><button class="btn ghost sm" data-a="openLanding" data-id="${p.id}" style="flex:0;white-space:nowrap">✨ Page de vente</button><button class="btn ghost sm" data-a="shareProduct" data-id="${p.id}" style="flex:0">↗ Partager</button>${S.isAdmin?`<button class="btn ghost sm" data-a="visual" data-id="${p.id}" style="flex:0">🖼 Visuel</button><button class="btn ghost sm" data-a="editProduct" data-id="${p.id}" style="flex:0">✏️ Modifier</button>${isPartner(p)?'':`<button class="btn ghost sm" data-a="promote" data-id="${p.id}" style="flex:0">📣 Promouvoir</button>`}`:''}</div>
+      ${out&&!isPartner(p)&&downsellFor(p)?`<p class="small" style="margin:14px 0 6px"><b>Ce produit est épuisé.</b> Voici une alternative disponible :</p>`:''}${udBlock(p)}
       ${inBundles.length?`<div style="margin-top:14px">${inBundles.map(b=>`<button class="btn ghost block" style="margin-top:8px" data-a="addBundle" data-id="${b.id}">Aussi en lot : ${esc(b.name)} · ${fmt(b.price)}</button>`).join('')}</div>`:''}
     </div></div>
   ${hl.length?`<section class="pdp-sec"><h2>Points forts</h2><div class="hl">${hl.map(x=>`<div><i>✓</i><span>${esc(x)}</span></div>`).join('')}</div></section>`:''}
@@ -2748,8 +2790,8 @@ function computeTotals(cart, promo, delivery, dest){
 }
 function cartBody(){
   const t = computeTotals(S.cart, S.appliedPromo, 'livraison');
-  if(!t.lines.length) return `<div class="empty" style="margin-top:20px"><h3>Votre panier est vide</h3><p>Ajoutez des articles depuis le catalogue.</p><button class="btn primary" data-a="closeAll">Continuer mes achats</button></div>`;
-  return `${t.lines.map(l=>`<div class="line-item"><div class="li-img">${pImg(l.img)}</div>
+  if(!t.lines.length) return `${cartDownBanner()}<div class="empty" style="margin-top:20px"><h3>Votre panier est vide</h3><p>Ajoutez des articles depuis le catalogue.</p><button class="btn primary" data-a="closeAll">Continuer mes achats</button></div>`;
+  return `${cartDownBanner()}${t.lines.map(l=>`<div class="line-item"><div class="li-img">${pImg(l.img)}</div>
       <div><b class="small">${esc(l.name)}</b><div class="muted small">${fmt(l.unit)}${l.unit<l.regular?` <span class="strike">${fmt(l.regular)}</span>`:''}</div>
       ${l.bulk?`<div class="bulk">Prix de gros appliqué</div>`:''}${l.kind==='bundle'?`<div class="muted small">${l.comps.map(c=>`${c.qty} × ${esc(c.p.name)}`).join(' · ')}</div>`:''}
       <div class="qty" style="margin-top:6px"><button data-a="qty" data-id="${esc(l.key)}" data-d="-1" aria-label="Retirer un">−</button><span>${l.qty}</span><button data-a="qty" data-id="${esc(l.key)}" data-d="1" aria-label="Ajouter un">+</button></div></div>
@@ -4049,6 +4091,11 @@ function productForm(p){
             <div id="pf-spin" class="small muted"></div><div class="row" style="gap:8px;margin-top:6px"><label class="btn ghost sm" style="flex:0;white-space:nowrap">📸 Ajouter les photos 360°<input type="file" accept="image/*" multiple id="pf-spinf" class="sr"></label><button type="button" class="btn ghost sm" id="pf-spinx" style="flex:0;white-space:nowrap">Retirer la vue 360°</button></div></div>
           ${p.id?`<button type="button" class="btn ghost sm" data-a="openLanding" data-id="${p.id}" style="margin-top:12px">Voir la page de vente</button>`:''}</div>
         <div class="field"><label for="pf-war">Garantie / retour (facultatif)</label><input class="input" id="pf-war" value="${esc(p.warranty||'')}" placeholder="ex. Garantie 6 mois, échange sous 7 jours"></div>
+        ${(()=>{ const others = S.products.filter(x=>x.id!==p.id && x.name && !isPartner(x)).sort((a,b)=>a.category.localeCompare(b.category)||a.price-b.price);
+          const opts = sel => `<option value="auto" ${!sel||sel==='auto'?'selected':''}>Automatique (même catégorie)</option><option value="off" ${sel==='off'?'selected':''}>Aucun</option>${others.map(x=>`<option value="${x.id}" ${sel===x.id?'selected':''}>${esc(x.name)} · ${fmt(x.price)}</option>`).join('')}`;
+          return `<div class="row" style="gap:10px;flex-wrap:wrap"><div class="field" style="flex:1 1 220px"><label for="pf-up">⬆️ Upsell : version supérieure proposée</label><select class="input" id="pf-up">${opts(p.upsell)}</select></div>
+            <div class="field" style="flex:1 1 220px"><label for="pf-down">💡 Downsell : alternative moins chère</label><select class="input" id="pf-down">${opts(p.downsell)}</select></div></div>
+            <p class="muted small" style="margin:-6px 0 12px">Affichés sur la page du produit ; l’upsell est aussi proposé juste après « Ajouter au panier », le downsell quand le client retire ce produit du panier (ou s’il est épuisé).</p>`; })()}
         <div class="field"><label for="pf-desc">Description courte (sous le nom du produit)</label><textarea class="input" id="pf-desc">${esc(p.description)}</textarea></div>
         <details class="panel" style="padding:12px 14px;margin:0 0 14px" ${(p.seoTitle||p.seoDesc)&&!p.seoAuto?'':'open'}><summary style="cursor:pointer;font-weight:800">🔎 Référencement Google (SEO)</summary>
           <p class="muted small" style="margin:8px 0 10px">Ce que Google affiche dans ses résultats. Laissez vide : c’est rempli automatiquement à l’enregistrement.</p>
@@ -4164,6 +4211,7 @@ function productForm(p){
       ...(()=>{ if(!$('#pf-seot')) return {}; const a = autoSeo({...p, name:v('#pf-name'), price:Number(v('#pf-price').replace(/\s/g,'')), comparePrice:Number(v('#pf-cmp').replace(/\s/g,''))||0, highlights:v('#pf-hl'), description:v('#pf-desc'), condition:$('#pf-cond').value}); return {seoTitle:v('#pf-seot')||a.title, seoDesc:v('#pf-seod')||a.desc, seoAuto:!v('#pf-seot') && !v('#pf-seod')}; })(),
       lpHook:v('#lp-hook'), lpSub:v('#lp-sub'), lpProblem:$('#lp-pb').value.trim(), lpSolution:$('#lp-so').value.trim(), lpUsages:$('#lp-us').value.trim(), lpFaq:$('#lp-faq').value.trim(), lpOffer:v('#lp-off'), lpUntil:$('#lp-until').value, lpVideo:(pv=>pv&&!pv.short)(parseVideo(v('#lp-vid')))?v('#lp-vid'):'', lpVideoTitle:v('#lp-vidt'),
       highlights:$('#pf-hl').value.trim(), details:$('#pf-details').value.trim(), specs:$('#pf-specs').value.trim(), warranty:v('#pf-war'), active:$('#pf-active').checked,
+      upsell:($('#pf-up')||{}).value||'auto', downsell:($('#pf-down')||{}).value||'auto',
       bulkMin:Math.max(0,parseInt(v('#pf-bmin'))||0), bulkPrice:Number(v('#pf-bprice').replace(/\s/g,''))||0,
       newUntil:(()=>{ if(!$('#pf-new').checked) return 0; const d = $('#pf-newdays').value; if(d==='keep') return isNew(p) ? p.newUntil : Date.now()+30*DAY; return Date.now()+Number(d)*DAY; })(),
       carousel:({on:true, off:false})[$('#pf-car').value],
@@ -4552,7 +4600,12 @@ document.addEventListener('click', async e=>{
     case 'add': addToCart(id); break;
     case 'product': openBest(id); break;
     case 'addClose': addToCart(id); closeAll(); break;
-    case 'qty': changeQty('cart', id, Number(el.dataset.d)); if(!S.cart.length) openCart(); break;
+    case 'qty': { const before = S.cart.find(x=>lineKey(x)===id); changeQty('cart', id, Number(el.dataset.d));
+      if(before && before.id && !S.cart.includes(before)){ const bp = S.products.find(x=>x.id===before.id), dn = downsellFor(bp); S.cartDown = dn ? {from:bp.id, to:dn.id} : null; if(dn) openCart(); }
+      if(!S.cart.length) openCart(); break; }
+    case 'udAdd': { const x = S.products.find(y=>y.id===id); if(!x) break; if(hasVar(x)){ closeAll(); openProduct(id); break; } addToCart(id); S.cartDown = null; try{ ttTrack('AddToCart', {content_id:id, content_name:x.name, value:x.price, quantity:1, source:el.dataset.k==='up'?'upsell':'downsell'}); }catch(e){} if($('.drawer')) openCart(); break; }
+    case 'udSwap': { const x = S.products.find(y=>y.id===id), n = Math.max(1, Number(el.dataset.n)||1); if(!x) break; if(hasVar(x)){ closeAll(); openProduct(id); break; }
+      S.cart = S.cart.filter(l=>!(l.id===el.dataset.from && !l.b && !l.v)); saveCart(); closeAll(); for(let k=0;k<n;k++) addToCart(id); toast(`👍 ${x.name} dans votre panier`); schedule(); break; }
     case 'addBundle': addBundle(id); break;
     case 'posBundle': addBundle(id,'pos'); break;
     case 'copyCode': { const c=el.dataset.v; try{ await navigator.clipboard.writeText(c); toast(`Code ${c} copié : collez-le dans le panier`); }catch(err){ toast(`Votre code : ${c}`); } break; }
@@ -4655,7 +4708,7 @@ document.addEventListener('click', async e=>{
       const same = l=>!l.b&&l.id===p.id&&(l.v||'')===v, before=S.cart.reduce((t,l)=>t+(same(l)?l.qty:0),0);
       for(let k=0;k<n;k++) addLine('cart', same, ()=>(v?{id:p.id, qty:1, v}:{id:p.id, qty:1}), '');
       const added=S.cart.reduce((t,l)=>t+(same(l)?l.qty:0),0)-before; saveCart();
-      if(added>0) toast(`${added} × ${p.name}${v?' — '+v:''} ajouté${added>1?'s':''} au panier`);
+      if(added>0){ if(a==='pdpAdd' && !v && upsellFor(p) && !(S._upShown||{})[p.id]) upsellModal(p, added); else toast(`${added} × ${p.name}${v?' — '+v:''} ajouté${added>1?'s':''} au panier`); }
       if(a==='pdpBuy' && added>0){ if(!enabledProcs().length){ openCart(); break; } openCheckout(); } break; }
     case 'pdpCat': S.cat=el.dataset.v; S.view='shop'; try{ history.pushState({},'',catPathC(el.dataset.v)); }catch(e){} schedule(); setTimeout(()=>$('#catalogue')?.scrollIntoView({behavior:'smooth'}),80); break;
     case 'pushProduct': S.pushPre = id; S.view = 'admin'; S.tab = 'alerts'; closeAll(); schedule(); break;

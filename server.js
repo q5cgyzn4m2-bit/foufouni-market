@@ -995,6 +995,7 @@ function sold30(id) {
 }
 const publicProduct = p => ({ ...(isPartnerS(p) ? { partner: { platform: ['amazon', 'aliexpress', 'temu', 'jumia', 'autre'].includes(p.partner.platform) ? p.partner.platform : 'autre', url: p.partner.url } } : {}), id: p.id, name: p.name, sku: p.sku, category: p.category, price: p.price, comparePrice: p.comparePrice, stock: p.stock, lowStock: p.lowStock, emoji: p.emoji, image: p.image, description: p.description, active: true, createdAt: p.createdAt, bulkMin: p.bulkMin || 0, bulkPrice: p.bulkPrice || 0, newUntil: p.newUntil || 0, ...(typeof p.carousel === 'boolean' ? { carousel: p.carousel } : {}),
   condition: p.condition || 'neuf', conditionNote: p.conditionNote || '',
+  upsell: /^(auto|off|[A-Za-z0-9_-]{1,40})$/.test(p.upsell || '') ? p.upsell : 'auto', downsell: /^(auto|off|[A-Za-z0-9_-]{1,40})$/.test(p.downsell || '') ? p.downsell : 'auto',
   lpHook: p.lpHook || '', lpSub: p.lpSub || '', lpProblem: p.lpProblem || '', lpSolution: p.lpSolution || '', lpUsages: p.lpUsages || '', lpFaq: p.lpFaq || '', lpOffer: p.lpOffer || '', lpUntil: p.lpUntil || '',
   angleCaps: Array.isArray(p.angleCaps) ? p.angleCaps : [], spin: Array.isArray(p.spin) ? p.spin : [],
   lpVideo: p.lpVideo || '', lpVideoFile: /^(https?:\/\/[^/]+)?\/media\/v[a-z0-9]{6,30}\.(mp4|mov|webm)$/i.test(p.lpVideoFile || '') ? p.lpVideoFile : '', lpVideoTitle: p.lpVideoTitle || '', sold30: sold30(p.id),
