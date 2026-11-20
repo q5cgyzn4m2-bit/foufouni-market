@@ -671,6 +671,70 @@ app.get('/media/:file', h(async (req, res) => {
   res.set('Content-Length', size).send(f.data);
 }));
 
+/* ===================== API de conversion (Meta, TikTok, Pinterest) : l'achat est aussi envoyé par le serveur ===================== */
+/* Plus fiable que le pixel seul (bloqueurs de publicité, iPhone, réseau lent) ; même identifiant d'événement que le pixel pour éviter les doublons. */
+const convCfg = () => getDoc('conv-config', 'main') || {};
+const sha = v => v ? crypto.createHash('sha256').update(String(v).trim().toLowerCase()).digest('hex') : undefined;
+const cookieOf = (req, k) => { const m = String(req && req.headers && req.headers.cookie || '').match(new RegExp('(?:^|;\\s*)' + k + '=([^;]+)')); return m ? decodeURIComponent(m[1]).slice(0, 200) : ''; };
+const convLog = [];
+function pushConvLog(net, ok, msg, test) { convLog.unshift({ net, ok, msg: String(msg || '').slice(0, 200), test: !!test, at: Date.now() }); convLog.length = Math.min(convLog.length, 20); }
+async function convPost(url, body, headers = {}) {
+  const r = await fetch(url, { method: 'POST', headers: { 'Content-Type': 'application/json', ...headers }, body: JSON.stringify(body), signal: AbortSignal.timeout(15000) });
+  const j = await r.json().catch(() => ({}));
+  if (!r.ok || j.error || (j.code && j.code !== 0)) throw new Error((j.error && (j.error.error_user_msg || j.error.message)) || j.message || ('HTTP ' + r.status));
+  return j;
+}
+async function sendConversions(id, order, req, test) {
+  const cfg = convCfg(), s = settings(), c = order.customer || {}, phone = String(c.phone || '').replace(/\D/g, ''), now = Math.floor((order.createdAt || Date.now()) / 1000);
+  const [fn, ...ln] = String(c.name || '').trim().split(/\s+/), items = (order.items || []).filter(l => !l.bundle);
+  const ip = String((req && (req.headers['x-forwarded-for'] || '').split(',')[0]) || (req && req.ip) || '').trim(), ua = String(req && req.headers['user-agent'] || '').slice(0, 400);
+  const url = BASE_URL + '/', value = Math.round(order.total || 0), ext = sha(phone || id), out = {};
+  const jobs = [];
+  if (cfg.meta && cfg.meta.token && s.metaPixel) jobs.push(['meta', () => convPost(`${(env.META_GRAPH_URL || 'https://graph.facebook.com').replace(/\/$/, '')}/${env.META_GRAPH_VERSION || 'v25.0'}/${encodeURIComponent(s.metaPixel)}/events?access_token=${encodeURIComponent(cfg.meta.token)}`, {
+    data: [{ event_name: 'Purchase', event_time: now, event_id: 'order-' + order.number, action_source: 'website', event_source_url: url,
+      user_data: { ph: phone ? [sha(phone)] : undefined, em: c.email ? [sha(c.email)] : undefined, fn: fn ? [sha(fn)] : undefined, ln: ln.length ? [sha(ln.join(' '))] : undefined, ct: c.city ? [sha(String(c.city).replace(/\s/g, ''))] : undefined, country: [sha((c.country || 'ML').toLowerCase())], external_id: [ext], client_ip_address: ip || undefined, client_user_agent: ua || undefined, fbp: cookieOf(req, '_fbp') || undefined, fbc: cookieOf(req, '_fbc') || undefined },
+      custom_data: { currency: 'XOF', value, order_id: order.number, content_type: 'product', content_ids: items.map(l => String(l.id)), contents: items.map(l => ({ id: String(l.id), quantity: l.qty, item_price: l.price })), num_items: items.reduce((t, l) => t + (l.qty || 1), 0) } }],
+    ...((test || cfg.meta.testMode) && cfg.meta.test ? { test_event_code: cfg.meta.test } : {}) })]);
+  if (cfg.tiktok && cfg.tiktok.token && s.tiktokPixel) jobs.push(['tiktok', () => convPost((env.TIKTOK_API_URL || 'https://business-api.tiktok.com') + '/open_api/v1.3/event/track/', {
+    event_source: 'web', event_source_id: s.tiktokPixel, ...((test || cfg.tiktok.testMode) && cfg.tiktok.test ? { test_event_code: cfg.tiktok.test } : {}),
+    data: [{ event: 'PlaceAnOrder', event_time: now, event_id: 'order-' + order.number,
+      user: { phone: phone ? sha('+' + phone) : undefined, email: c.email ? sha(c.email) : undefined, external_id: ext, ip: ip || undefined, user_agent: ua || undefined, ttp: cookieOf(req, '_ttp') || undefined },
+      properties: { currency: 'XOF', value, order_id: order.number, content_type: 'product', contents: items.map(l => ({ content_id: String(l.id), content_name: l.name, quantity: l.qty, price: l.price })) },
+      page: { url } }] }, { 'Access-Token': cfg.tiktok.token })]);
+  if (cfg.pinterest && cfg.pinterest.token && cfg.pinterest.adAccount) jobs.push(['pinterest', () => convPost(`${env.PINTEREST_API_URL || 'https://api.pinterest.com'}/v5/ad_accounts/${encodeURIComponent(cfg.pinterest.adAccount)}/events${test || cfg.pinterest.testMode ? '?test=true' : ''}`, {
+    data: [{ event_name: 'checkout', action_source: 'web', event_time: now, event_id: 'order-' + order.number, event_source_url: url,
+      user_data: { ph: phone ? [sha(phone)] : undefined, em: c.email ? [sha(c.email)] : undefined, external_id: [ext], country: [sha((c.country || 'ML').toLowerCase())], client_ip_address: ip || undefined, client_user_agent: ua || undefined, click_id: cookieOf(req, '_epik') || undefined },
+      custom_data: { currency: 'XOF', value: String(value), order_id: order.number, content_ids: items.map(l => String(l.id)), contents: items.map(l => ({ item_price: String(l.price), quantity: l.qty })), num_items: items.reduce((t, l) => t + (l.qty || 1), 0) } }] }, { Authorization: 'Bearer ' + cfg.pinterest.token })]);
+  for (const [net, run] of jobs) { try { await run(); out[net] = { ok: true }; pushConvLog(net, true, `${order.number} · ${money(value)}`, test); } catch (e) { out[net] = { ok: false, err: e.message }; pushConvLog(net, false, e.message, test); } }
+  return out;
+}
+app.get('/api/admin/conversions', requireStaff, (req, res) => {
+  const c = convCfg(), s = settings();
+  res.json({ meta: { on: !!(c.meta && c.meta.token), test: (c.meta && c.meta.test) || '', testMode: !!(c.meta && c.meta.testMode), pixel: s.metaPixel || '' },
+    tiktok: { on: !!(c.tiktok && c.tiktok.token), test: (c.tiktok && c.tiktok.test) || '', testMode: !!(c.tiktok && c.tiktok.testMode), pixel: s.tiktokPixel || '' },
+    pinterest: { on: !!(c.pinterest && c.pinterest.token && c.pinterest.adAccount), adAccount: (c.pinterest && c.pinterest.adAccount) || '', testMode: !!(c.pinterest && c.pinterest.testMode) }, log: convLog });
+});
+app.post('/api/admin/conversions', requireStaff, requireManager, express.json({ limit: '20kb' }), (req, res) => {
+  const b = req.body || {}, c = { ...convCfg() }, tok = v => String(v || '').trim().replace(/\s/g, '').slice(0, 600);
+  for (const net of ['meta', 'tiktok', 'pinterest']) {
+    const x = b[net]; if (!x || typeof x !== 'object') continue;
+    if (x.remove) { delete c[net]; continue; }
+    const cur = { ...(c[net] || {}) };
+    if (x.token) { if (tok(x.token).length < 20) return res.status(400).json({ error: 'Jeton trop court : copiez-le en entier.' }); cur.token = tok(x.token); }
+    if ('test' in x) cur.test = String(x.test || '').trim().replace(/[^A-Za-z0-9_-]/g, '').slice(0, 40);
+    if ('testMode' in x) cur.testMode = !!x.testMode;
+    if ('adAccount' in x) cur.adAccount = String(x.adAccount || '').replace(/\D/g, '').slice(0, 30);
+    c[net] = cur;
+  }
+  putDoc('conv-config', 'main', c); res.json({ ok: true });
+});
+app.post('/api/admin/conversions/test', requireStaff, requireManager, h(async (req, res) => {
+  if (limited('convtest:' + req.user.id, 20, 3600e3)) throw httpErr(429, 'Trop d’essais en une heure.');
+  const p = liveProducts()[0] || { id: 'test', name: 'Produit test', price: 1000 };
+  const order = { number: 'TEST-' + rnd(4), total: p.price || 1000, createdAt: Date.now(), items: [{ id: p.id, name: p.name, qty: 1, price: p.price || 1000 }], customer: { name: 'Test Foufouni', phone: '+22370000000', city: settings().city || 'Bamako', country: 'ML' } };
+  res.json(await sendConversions('test' + Date.now().toString(36), order, req, true));
+}));
+
 /* ===================== Calendrier réseaux : publications programmées ===================== */
 /* Facebook (Page) et Instagram (compte professionnel) : publication automatique par l'API Graph de Meta.
    TikTok, Pinterest, WhatsApp, X, LinkedIn : rappel sur le téléphone du gérant à l'heure prévue (ces réseaux exigent une validation de l'application pour publier publiquement). */
@@ -1256,6 +1320,7 @@ app.post('/api/orders', h(async (req, res) => {
     status: 'en_attente', channel: 'en ligne', stockApplied: false, createdAt: Date.now(), createdBy: 'web', token: randomToken()
   };
   putDoc('orders', id, order);
+  sendConversions(id, order, req).catch(e => console.warn('API de conversion :', e.message));
   const cartId = String(b.cartId || '');
   if (/^[a-z0-9]{8,40}$/.test(cartId) && getDoc('carts', cartId)) patchDoc('carts', cartId, { converted: true, orderId: id });
   if (method === 'cod') notify({ title: `Nouvelle commande : ${money(order.total)}`, tags: ['shopping_bags'], priority: 4, click: waLink(customer.phone, `Bonjour ${customer.name}, merci pour votre commande ${order.number} chez ${settings().shopName}.`) || BASE_URL,
@@ -1823,6 +1888,7 @@ function sendCatalog(res, rows, cols, map) {
 }
 const META_COLS = ['id', 'title', 'description', 'availability', 'condition', 'price', 'sale_price', 'link', 'image_link', 'additional_image_link', 'brand', 'product_type', 'inventory'];
 app.get(['/catalogue/facebook.csv', '/catalogue/meta.csv'], (req, res) => sendCatalog(res, catalogRows('facebook'), META_COLS, {}));
+app.get('/catalogue/pinterest.csv', (req, res) => sendCatalog(res, catalogRows('pinterest'), META_COLS.filter(c => c !== 'inventory'), {}));
 app.get('/catalogue/tiktok.csv', (req, res) => sendCatalog(res, catalogRows('tiktok'), ['sku_id', ...META_COLS.slice(1)], { sku_id: 'id' }));
 app.get('/sitemap.xml', (req, res) => {
   const live = liveProducts(), cats = [...new Set(live.map(x => x.category).filter(Boolean))].sort();
