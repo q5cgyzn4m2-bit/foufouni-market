@@ -23,7 +23,7 @@
   --bg:#100E0B; --surface:#191612; --surface-2:#221E18; --ink:#F2EBDD; --muted:#A99E8A; --line:#342E25;
   --indigo:#C9A45C; --indigo-soft:#2A2419; --on-indigo:#14110D;
   --saffron:#E3C27E; --saffron-soft:#2E2719; --on-saffron:#14110D;
-  --kola:#8DBF9C; --kola-soft:#1B2A20; --danger:#E08B78; --danger-soft:#33201B;
+  --kola:#8DBF9C; --kola-soft:#1B2A20; --danger:#E08B78; --danger-soft:#33201B; --in:#4CC97A; --in-soft:rgba(76,201,122,.10); --out:#F06B5B; --out-soft:rgba(240,107,91,.10);
   --r-s:8px; --r-m:14px; --r-l:24px;
   --shadow:0 1px 2px rgba(0,0,0,.45),0 22px 48px rgba(0,0,0,.5);
   --f-d:'Cormorant Garamond','Cormorant',Garamond,'Times New Roman',serif;
@@ -38,7 +38,7 @@
   --bg:#FAF8F3; --surface:#FFFFFF; --surface-2:#F1ECE1; --ink:#1A1712; --muted:#6B6253; --line:#E3DBCC;
   --indigo:#8A6A2B; --indigo-soft:#F3EBDA; --on-indigo:#FFFFFF;
   --saffron:#B8913F; --saffron-soft:#F6EDDA; --on-saffron:#1A1712;
-  --kola:#2C6A4F; --kola-soft:#DCEDE4; --danger:#B23B2A; --danger-soft:#F6E0DC;
+  --kola:#2C6A4F; --kola-soft:#DCEDE4; --danger:#B23B2A; --danger-soft:#F6E0DC; --in:#15803D; --in-soft:rgba(21,128,61,.08); --out:#C0392B; --out-soft:rgba(192,57,43,.08);
   --shadow:0 1px 2px rgba(26,23,18,.06),0 12px 32px rgba(26,23,18,.10); color-scheme:light;
 }
 *,*::before,*::after{box-sizing:border-box}
@@ -192,8 +192,17 @@ textarea.input{min-height:84px; resize:vertical}
 .b-row{display:grid; grid-template-columns:minmax(0,1fr) 90px auto; gap:8px; margin-bottom:8px}
 /* Trésorerie, clients, fournisseurs */
 .kpi.acct{border-left:3px solid var(--indigo)}
-.amt-in{color:var(--kola); font-weight:700; white-space:nowrap}
-.amt-out{color:var(--danger); font-weight:700; white-space:nowrap}
+.amt-in{color:var(--in); font-weight:800; white-space:nowrap}
+.amt-out{color:var(--out); font-weight:800; white-space:nowrap}
+.amt-mv{color:var(--indigo); font-weight:800; white-space:nowrap}
+/* trésorerie : entrées en vert, charges et dépenses en rouge */
+tr.mv-in td{background:var(--in-soft)} tr.mv-in td:first-child{box-shadow:inset 3px 0 0 var(--in)}
+tr.mv-out td{background:var(--out-soft)} tr.mv-out td:first-child{box-shadow:inset 3px 0 0 var(--out)}
+tr.mv-tr td:first-child{box-shadow:inset 3px 0 0 var(--indigo)}
+.kpi.k-in{border-left:3px solid var(--in)} .kpi.k-in b{color:var(--in)}
+.kpi.k-out{border-left:3px solid var(--out)} .kpi.k-out b{color:var(--out)}
+.catbar.out i b{background:var(--out)}
+.fin-legend{display:flex; gap:14px; flex-wrap:wrap; font-size:12.5px; margin:6px 0 10px} .fin-legend span::before{content:''; display:inline-block; width:10px; height:10px; border-radius:3px; margin-right:6px; vertical-align:-1px; background:var(--c)}
 .fin-actions{display:flex; gap:8px; flex-wrap:wrap; margin-bottom:18px}
 .fin-actions .btn{border-radius:999px}
 .catbar{display:grid; grid-template-columns:minmax(0,1fr) auto; gap:4px 10px; font-size:13.5px; margin-bottom:10px}
@@ -3395,7 +3404,8 @@ function balances(){
 }
 const partyBalance = (type,id) => S.ledger.filter(l=>l.partyType===type && l.partyId===id).reduce((t,l)=>t+(l.kind==='facture'?l.amount:-l.amount),0);
 const partyName = (type,id) => ((type==='client'?S.clients:S.suppliers).find(x=>x.id===id)||{}).name || '';
-const signAmt = a => `<span class="${a>=0?'amt-in':'amt-out'}">${a>=0?'+':'−'}${fmt(Math.abs(a))}</span>`;
+const signAmt = (a, tr) => `<span class="${tr?'amt-mv':a>=0?'amt-in':'amt-out'}">${a>=0?'+':'−'}${fmt(Math.abs(a))}</span>`;
+const mvClass = m => m.type==='virement' ? 'mv-tr' : m.amount>=0 ? 'mv-in' : 'mv-out';
 const dateOnly = d => d ? new Date(d+'T12:00:00').toLocaleDateString('fr-FR') : '';
 const addDays = (d,n) => { const x = new Date((d||today())+'T12:00:00'); x.setDate(x.getDate()+n); return x.toISOString().slice(0,10); };
 const daysBetween = (a,b) => Math.round((new Date(b+'T12:00:00')-new Date(a+'T12:00:00'))/864e5);
@@ -3470,10 +3480,10 @@ function viewTreasury(){
   return `${rl.length?`<div class="alert"><span><b>${rl.length} client${rl.length>1?'s':''}</b> ${rl.length>1?'ont':'a'} une créance arrivée à échéance, pour un total de <b>${fmt(rl.reduce((t,r)=>t+r.amount,0))}</b>.</span><button class="btn primary sm" data-a="reminders">Voir les rappels</button></div>`:''}
   <div class="sec-h"><h2>Trésorerie</h2><span class="muted small">Disponible au total : <b>${fmt(total)}</b></span></div>
   ${onlineCashBlock()}
-  <div class="kpis">${Object.entries(ACCOUNTS).map(([k,l])=>`<div class="kpi acct"><span>${l}</span><b style="color:${b[k]<0?'var(--danger)':'inherit'}">${fmt(b[k])}</b></div>`).join('')}
+  <div class="kpis">${Object.entries(ACCOUNTS).map(([k,l])=>`<div class="kpi acct ${b[k]<0?'k-out':'k-in'}"><span>${l}</span><b>${fmt(b[k])}</b></div>`).join('')}
     <div class="kpi"><span>Créances clients</span><b>${fmt(recv)}</b></div></div>
-  <div class="kpis" style="grid-template-columns:repeat(3,1fr)"><div class="kpi"><span>Dettes fournisseurs</span><b style="color:${debt?'var(--danger)':'inherit'}">${fmt(debt)}</b></div>
-    <div class="kpi"><span>Entrées du mois</span><b>${fmt(inM)}</b></div><div class="kpi"><span>Dépenses du mois</span><b>${fmt(expM)}</b></div></div>
+  <div class="kpis" style="grid-template-columns:repeat(3,1fr)"><div class="kpi ${debt?'k-out':''}"><span>Dettes fournisseurs</span><b>${fmt(debt)}</b></div>
+    <div class="kpi k-in"><span>↗ Entrées du mois</span><b>+${fmt(inM)}</b></div><div class="kpi k-out"><span>↘ Dépenses du mois</span><b>−${fmt(expM)}</b></div></div>
   <div class="fin-actions">
     <button class="btn primary" data-a="finAction" data-v="depense">Enregistrer une dépense</button>
     <button class="btn ghost" data-a="finAction" data-v="encaissement">Encaissement</button>
@@ -3486,11 +3496,12 @@ function viewTreasury(){
       <label class="sr" for="tr-acc">Compte</label><select class="input" id="tr-acc" data-fin="acc" style="max-width:170px"><option value="all">Tous les comptes</option>${Object.entries(ACCOUNTS).map(([k,l])=>`<option value="${k}" ${S.trAcc===k?'selected':''}>${l}</option>`).join('')}</select>
       <label class="sr" for="tr-type">Type</label><select class="input" id="tr-type" data-fin="type" style="max-width:190px"><option value="all">Tous les types</option>${Object.entries(MOVE_TYPES).map(([k,l])=>`<option value="${k}" ${S.trType===k?'selected':''}>${l}</option>`).join('')}</select>
       ${dl?'<button class="btn ghost sm" data-a="exportMoves">Exporter</button>':''}</div>
+    <div class="fin-legend"><span style="--c:var(--in)">Entrées (caisse, banque, mobile money)</span><span style="--c:var(--out)">Charges et dépenses</span><span style="--c:var(--indigo)">Virements entre comptes</span></div>
     <div class="tbl-wrap">${list.length?`<table><thead><tr><th>Date</th><th>Libellé</th><th>Compte</th><th style="text-align:right">Montant</th><th></th></tr></thead><tbody>
-    ${list.map(m=>`<tr><td class="small" style="white-space:nowrap">${dateOnly(m.date)}</td><td><b class="small">${esc(m.label||MOVE_TYPES[m.type])}</b><div class="muted small">${MOVE_TYPES[m.type]||''}${m.category?' · '+esc(m.category):''}${m.partyId?' · '+esc(partyName(m.type==='reg_client'||m.type==='vente'?'client':'supplier',m.partyId)):''}${m.ref?' · '+esc(m.ref):''}</div></td>
-      <td class="small">${ACCOUNTS[m.account]||''}</td><td style="text-align:right">${signAmt(m.amount)}</td><td><button class="btn sm ghost" data-a="delMove" data-id="${m.id}" aria-label="Supprimer l’écriture">×</button></td></tr>`).join('')}</tbody></table>`
+    ${list.map(m=>`<tr class="${mvClass(m)}"><td class="small" style="white-space:nowrap">${dateOnly(m.date)}</td><td><b class="small">${esc(m.label||MOVE_TYPES[m.type])}</b><div class="muted small">${MOVE_TYPES[m.type]||''}${m.category?' · '+esc(m.category):''}${m.partyId?' · '+esc(partyName(m.type==='reg_client'||m.type==='vente'?'client':'supplier',m.partyId)):''}${m.ref?' · '+esc(m.ref):''}</div></td>
+      <td class="small">${ACCOUNTS[m.account]||''}</td><td style="text-align:right">${signAmt(m.amount, m.type==='virement')}</td><td><button class="btn sm ghost" data-a="delMove" data-id="${m.id}" aria-label="Supprimer l’écriture">×</button></td></tr>`).join('')}</tbody></table>`
     :'<div class="empty"><h3>Aucun mouvement</h3><p>Les ventes en caisse et les ventes en ligne encaissées s’inscrivent ici automatiquement. Ajoutez vos dépenses, virements et règlements avec les boutons ci-dessus.</p></div>'}</div></div>
-  <div class="panel"><h3>Dépenses du mois par catégorie</h3>${cats.length?cats.map(([c,v])=>`<div class="catbar"><span>${esc(c)}</span><b>${fmt(v)}</b><i><b style="width:${Math.round(v/maxC*100)}%"></b></i></div>`).join(''):'<p class="muted">Aucune dépense ce mois-ci.</p>'}</div></div>`;
+  <div class="panel"><h3>Dépenses du mois par catégorie</h3>${cats.length?cats.map(([c,v])=>`<div class="catbar out"><span>${esc(c)}</span><b>${fmt(v)}</b><i><b style="width:${Math.round(v/maxC*100)}%"></b></i></div>`).join(''):'<p class="muted">Aucune dépense ce mois-ci.</p>'}</div></div>`;
 }
 
 function finForm(kind, preset={}){
