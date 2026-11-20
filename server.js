@@ -714,7 +714,7 @@ app.get('/api/admin/conversions', requireStaff, (req, res) => {
     tiktok: { on: !!(c.tiktok && c.tiktok.token), test: (c.tiktok && c.tiktok.test) || '', testMode: !!(c.tiktok && c.tiktok.testMode), pixel: s.tiktokPixel || '' },
     pinterest: { on: !!(c.pinterest && c.pinterest.token && c.pinterest.adAccount), adAccount: (c.pinterest && c.pinterest.adAccount) || '', testMode: !!(c.pinterest && c.pinterest.testMode) }, log: convLog });
 });
-app.post('/api/admin/conversions', requireStaff, requireManager, express.json({ limit: '20kb' }), (req, res) => {
+app.post('/api/admin/conversions', requireStaff, requireManager, express.json({ limit: '20kb' }), h(async (req, res) => {
   const b = req.body || {}, c = { ...convCfg() }, tok = v => String(v || '').trim().replace(/\s/g, '').slice(0, 600);
   for (const net of ['meta', 'tiktok', 'pinterest']) {
     const x = b[net]; if (!x || typeof x !== 'object') continue;
@@ -726,8 +726,12 @@ app.post('/api/admin/conversions', requireStaff, requireManager, express.json({ 
     if ('adAccount' in x) cur.adAccount = String(x.adAccount || '').replace(/\D/g, '').slice(0, 30);
     c[net] = cur;
   }
-  putDoc('conv-config', 'main', c); res.json({ ok: true });
-});
+  putDoc('conv-config', 'main', c);
+  if (!(await store.flush())) throw httpErr(500, 'L’enregistrement dans la base de données a échoué : réessayez dans un instant.');
+  const saved = getDoc('conv-config', 'main') || {};
+  console.log('API de conversion enregistrée :', ['meta', 'tiktok', 'pinterest'].filter(n => saved[n] && saved[n].token).join(', ') || 'aucune');
+  res.json({ ok: true, on: ['meta', 'tiktok', 'pinterest'].filter(n => saved[n] && saved[n].token) });
+}));
 app.post('/api/admin/conversions/test', requireStaff, requireManager, h(async (req, res) => {
   if (limited('convtest:' + req.user.id, 20, 3600e3)) throw httpErr(429, 'Trop d’essais en une heure.');
   const p = liveProducts()[0] || { id: 'test', name: 'Produit test', price: 1000 };
