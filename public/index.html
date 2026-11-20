@@ -2227,6 +2227,7 @@ function studioCaption(d, net){
 }
 S.studio = {subject:'shop', net:'facebook', fmt:'post'};
 try{ S.spDeep = new URLSearchParams(location.search).get('social') || null; }catch(e){}
+try{ S.convOpen = localStorage.getItem('ffm-conv-open')==='1'; }catch(e){}
 /* Publicités : catalogue automatique + ouverture des gestionnaires de publicités */
 const ADS_MGR = {facebook:'https://adsmanager.facebook.com/adsmanager/manage/campaigns', instagram:'https://adsmanager.facebook.com/adsmanager/manage/campaigns', tiktok:'https://ads.tiktok.com/'};
 function catalogPanel(){
@@ -2367,14 +2368,15 @@ function spOpen(id){ const p = (S.socialPosts||[]).find(x=>x.id===id); if(!p) re
 /* API de conversion : l'achat est aussi envoyé par le serveur à Meta, TikTok et Pinterest */
 function convPanel(){
   if(!isServer()) return '';
-  const c = S.conv; if(S.convOpen && !c && !S._convLoading){ S._convLoading = true; window.convApi('GET','/api/admin/conversions').then(r=>{ S.conv = r; S._convLoading = false; schedule(); }).catch(()=>{ S._convLoading = false; }); }
+  const c = S.conv; if(!c && !S._convLoading){ S._convLoading = true; window.convApi('GET','/api/admin/conversions').then(r=>{ S.conv = r; S._convLoading = false; schedule(); }).catch(()=>{ S._convLoading = false; }); }
   const st = n => c && c[n] && c[n].on ? '<span class="pill ok">✅ actif</span>' : '<span class="pill">non relié</span>';
   const box = (n, title, help, extra) => `<div class="panel" style="margin:10px 0"><div class="toolbar" style="margin-bottom:6px"><b style="flex:1">${title}</b>${st(n)}</div><p class="muted small" style="margin:0 0 8px">${help}</p>
     ${extra||''}<div class="field"><label for="cv-${n}-tok">Jeton d’accès ${c&&c[n]&&c[n].on?'(laisser vide pour garder l’actuel)':''}</label><input class="input" id="cv-${n}-tok" type="password" autocomplete="off" placeholder="${c&&c[n]&&c[n].on?'•••••••• enregistré':'collez le jeton'}"></div>
     ${n!=='pinterest'?`<div class="field"><label for="cv-${n}-test">Code de test (facultatif)</label><input class="input" id="cv-${n}-test" value="${esc(c&&c[n]?c[n].test||'':'')}" placeholder="${n==='meta'?'ex. TEST12345':'ex. TEST67890'}"></div>`:''}
     <label class="row small sp-nl" style="gap:6px;margin-bottom:8px"><input type="checkbox" id="cv-${n}-tm" ${c&&c[n]&&c[n].testMode?'checked':''}> Mode test (les vrais achats sont envoyés comme tests)</label>
     <div class="row" style="gap:6px;flex-wrap:wrap"><button class="btn primary sm" data-a="cvSave" data-v="${n}">Enregistrer</button>${c&&c[n]&&c[n].on?`<button class="btn ghost sm" data-a="cvTest">📨 Envoyer un achat test</button><button class="btn ghost sm" data-a="cvDel" data-v="${n}">Retirer</button>`:''}</div></div>`;
-  return `<details class="panel" id="conv-panel" ${S.convOpen?'open':''}><summary style="cursor:pointer;font-weight:800">📡 API de conversion : suivi des achats par le serveur ${c?['meta','tiktok','pinterest'].filter(n=>c[n]&&c[n].on).map(n=>({meta:'Meta',tiktok:'TikTok',pinterest:'Pinterest'})[n]).join(', ')||'':''}</summary>
+  const actifs = c ? ['meta','tiktok','pinterest'].filter(n=>c[n]&&c[n].on).map(n=>({meta:'Meta',tiktok:'TikTok',pinterest:'Pinterest'})[n]) : [];
+  return `<details class="panel" id="conv-panel" ${S.convOpen?'open':''} style="border-left:3px solid ${actifs.length?'var(--in)':'var(--indigo)'}"><summary style="cursor:pointer;font-weight:800">📡 API de conversion (Meta, TikTok, Pinterest) · ${!c?'<span class="muted small">chargement…</span>':actifs.length?`<span class="pill ok">✅ ${actifs.join(' + ')} actif${actifs.length>1?'s':''}</span>`:'<span class="pill">à relier</span>'} <span class="muted small">— cliquez pour ouvrir</span></summary>
     <p class="muted small" style="margin:10px 0">Chaque commande est envoyée <b>par le serveur</b> à Facebook/Instagram, TikTok et Pinterest, en plus du pixel du navigateur : les achats ne sont plus perdus à cause des bloqueurs de pub, des iPhone ou d’un réseau lent, et les publicités apprennent mieux qui achète. Les données des clients sont <b>chiffrées (SHA-256)</b> avant l’envoi. Pas de doublon : le même identifiant est utilisé que pour le pixel.</p>
     ${!c?'<p class="muted">Chargement…</p>':`
     ${box('meta','Meta (Facebook / Instagram)', `Pixel ${esc(c.meta.pixel||'—')}. Jeton : Gestionnaire d’événements › votre pixel › <i>Paramètres</i> › <i>API Conversions</i> › <b>Générer un jeton d’accès</b>. Code de test : onglet <i>Tester les événements</i>.`)}
@@ -2788,7 +2790,7 @@ async function validatePromo(code, subtotal){
 let CO = null;
 try{ if(localStorage.getItem('ffm-inst-hide')) S.instHide = true; }catch(e){}
 document.addEventListener('input', e=>{ const t = e.target; if(t && /^mt-(app|sec|tok)$/.test(t.id)){ S._mt = {...(S._mt||{}), [t.id]: t.value.trim()}; } }, true);
-document.addEventListener('toggle', e=>{ if(e.target && e.target.id==='cat-panel') S.catOpen = e.target.open; if(e.target && e.target.id==='conv-panel'){ const was = S.convOpen; S.convOpen = e.target.open; if(S.convOpen && !was) schedule(); } }, true);
+document.addEventListener('toggle', e=>{ if(e.target && e.target.id==='cat-panel') S.catOpen = e.target.open; if(e.target && e.target.id==='conv-panel'){ S.convOpen = e.target.open; try{ localStorage.setItem('ffm-conv-open', S.convOpen?'1':''); }catch(err){} } }, true);
 document.addEventListener('change', e=>{ if(e.target && e.target.id==='co-city' && CO){ const before = CO.city; readCO(); if(CO.city!==before || !(QUARTIERS[CO.city]||[]).length) setTimeout(()=>{ if($('#co-city') || CO.step===2) drawCheckout(); }, 0); } });
 function openCheckout(){
   { const t0 = computeTotals(S.cart, S.appliedPromo, 'livraison'); ttTrack('InitiateCheckout', {value:Math.round(t0.subtotal), contents:t0.lines.filter(l=>l.kind==='product').map(l=>ttItem(l.p, l.qty, l.unit))}); }
