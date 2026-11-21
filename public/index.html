@@ -3042,11 +3042,37 @@ function showReceipt(o, fresh){
   window._lastReceipt = o;
 }
 
+/* ===================== Bénéfice par article (réservé au gérant) ===================== */
+const isGerant = () => isServer() ? !!S.isGerant : !!S.isAdmin;
+const PROFIT_SHARE = 0.25;
+/* coût unitaire d'une ligne (lot = somme des composants) ; null si un prix d'achat manque */
+function unitCost(it){ if(it.bundle || (it.id && String(it.id).startsWith('b:'))){ const comps = it.components || (it.comps||[]).map(c=>({id:c.p.id, qty:c.qty})); let t = 0; for(const c of comps){ const k = costOf(c.id); if(!k) return null; t += k*c.qty; } return t; }
+  const k = costOf(it.id); return k ? k : null; }
+function lineProfit(it){ const c = unitCost(it); if(c===null) return null; const net = (Number(it.price ?? it.unit)||0) - c; return Math.round(net * (Number(it.qty)||1)); }
+const profitCells = it => { const pr = lineProfit(it); return pr===null ? `<td class="small muted" title="Prix d’achat manquant">—</td><td class="small muted">—</td>` : `<td style="text-align:right">${signAmt(pr)}</td><td style="text-align:right"><b class="${pr>=0?'amt-in':'amt-out'}">${fmt(Math.round(pr*PROFIT_SHARE))}</b></td>`; };
+function viewSalesLog(){
+  const g = isGerant(), f = S.slF || 'caisse', day = S.slDay || 'today', now = new Date(), d0 = new Date(now.getFullYear(), now.getMonth(), now.getDate()).getTime();
+  const since = {today:d0, week:d0-6*864e5, month:new Date(now.getFullYear(), now.getMonth(), 1).getTime(), all:0}[day] ?? d0;
+  const os = S.orders.filter(o=>o.status!=='annulee' && (o.createdAt||0)>=since && (f==='all' || (f==='caisse' ? o.channel==='caisse' : o.channel!=='caisse' && ['payee','preparation','expediee','livree'].includes(o.status)))).sort((a,b)=>b.createdAt-a.createdAt).slice(0,150);
+  let tot = 0, prof = 0, miss = 0; os.forEach(o=>{ tot += o.total||0; (o.items||[]).forEach(it=>{ const p = lineProfit(it); if(p===null) miss++; else prof += p; }); });
+  const disc = o => { const sub = Number(o.subtotal)||0; return sub>0 ? Math.max(0, sub-(Number(o.discount)||0))/sub : 1; };
+  return `<div class="sec-h"><h2>Ventes</h2><span class="muted small">${os.length} vente${os.length>1?'s':''}</span></div>
+  <div class="cats" style="margin-bottom:8px">${[['today','Aujourd’hui'],['week','7 jours'],['month','Ce mois'],['all','Tout']].map(([k,l])=>`<button aria-pressed="${day===k}" data-a="slDay" data-v="${k}">${l}</button>`).join('')}</div>
+  <div class="cats" style="margin-bottom:14px">${[['caisse','En caisse'],['online','En ligne'],['all','Toutes']].map(([k,l])=>`<button aria-pressed="${f===k}" data-a="slF" data-v="${k}">${l}</button>`).join('')}</div>
+  <div class="kpis" style="grid-template-columns:repeat(${g?3:1},minmax(0,1fr))"><div class="kpi k-in"><span>Chiffre d’affaires</span><b>${fmt(tot)}</b></div>${g?`<div class="kpi ${prof>=0?'k-in':'k-out'}"><span>Bénéfice</span><b>${fmt(prof)}</b></div><div class="kpi k-in"><span>25 % du bénéfice</span><b>${fmt(Math.round(prof*PROFIT_SHARE))}</b></div>`:''}</div>
+  ${g&&miss?`<div class="alert"><span>⚠️ ${miss} article${miss>1?'s':''} sans <b>prix d’achat</b> : leur bénéfice n’est pas compté (« — »). Renseignez-le dans Gestion › Produits › Modifier › Prix d’achat.</span></div>`:''}
+  ${g?`<p class="muted small" style="margin:0 0 10px">🔒 Les colonnes <b>Bénéfice</b> et <b>25 %</b> ne sont visibles que par le gérant. Bénéfice = (prix de vente − prix d’achat) × quantité, d’après le prix d’achat actuel.</p>`:''}
+  <div class="panel tbl-wrap"><table><thead><tr><th>Vente</th><th>Article</th><th style="text-align:right">Qté</th><th style="text-align:right">Prix</th><th style="text-align:right">Total</th>${g?'<th style="text-align:right">Bénéfice</th><th style="text-align:right">25 % du bénéfice</th>':''}</tr></thead><tbody>
+  ${os.length?os.map(o=>{ const k = disc(o), its = o.items||[]; return its.map((it,i)=>{ const it2 = {...it, price:(Number(it.price)||0)*k};
+    return `<tr${i===its.length-1?' style="border-bottom:2px solid var(--line)"':''}>${i===0?`<td rowspan="${its.length}" class="small" style="vertical-align:top;white-space:nowrap"><b class="click" data-a="orderDetail" data-id="${o.id}">${esc(o.number||'')}</b><div class="muted">${new Date(o.createdAt).toLocaleString('fr-FR',{day:'numeric',month:'short',hour:'2-digit',minute:'2-digit'})}</div>${o.channel==='caisse'?'<span class="pill" style="font-size:10.5px">Caisse</span>':'<span class="pill info" style="font-size:10.5px">En ligne</span>'}</td>`:''}
+      <td class="small">${esc(it.name||'')}${k<1?' <span class="muted">(remise)</span>':''}</td><td style="text-align:right">${it.qty}</td><td style="text-align:right" class="small">${fmt(Math.round(it2.price))}</td><td style="text-align:right">${fmt(Math.round(it2.price*it.qty))}</td>${g?profitCells(it2):''}</tr>`; }).join(''); }).join('')
+  :`<tr><td colspan="${g?7:5}" class="muted" style="text-align:center;padding:20px">Aucune vente sur cette période.</td></tr>`}</tbody></table></div>`;
+}
 /* --- Caisse (POS) --- */
 function viewPos(){
-  const tabs = [['vente','Vente'],['tresorerie','Trésorerie'],['clients','Clients'],['fournisseurs','Fournisseurs']];
+  const tabs = [['vente','Vente'],['ventes','Ventes'],['tresorerie','Trésorerie'],['clients','Clients'],['fournisseurs','Fournisseurs']];
   const nav = `<div class="cats" role="tablist" aria-label="Caisse" style="margin-bottom:22px">${tabs.map(([k,l])=>`<button role="tab" aria-pressed="${S.posTab===k}" data-a="posTab" data-v="${k}">${l}</button>`).join('')}</div>`;
-  const v = {vente:viewSale, tresorerie:viewTreasury, clients:()=>viewParties('client'), fournisseurs:()=>viewParties('supplier')}[S.posTab] || viewSale;
+  const v = {vente:viewSale, ventes:viewSalesLog, tresorerie:viewTreasury, clients:()=>viewParties('client'), fournisseurs:()=>viewParties('supplier')}[S.posTab] || viewSale;
   return nav + v();
 }
 function viewSale(){
@@ -3064,7 +3090,7 @@ function viewSale(){
     <div class="pos-grid">${!q?S.bundles.filter(b=>b.active!==false&&bundleInfo(b).ok).map(b=>`<button class="pos-item" data-a="posBundle" data-id="${b.id}" ${bundleInfo(b).max<=0?'disabled style="opacity:.45"':''}><span class="e" style="width:44px;overflow:hidden;border-radius:8px">${bundleVisual(b)}</span><b>Lot · ${esc(b.name)}</b><span class="price" style="font-size:14px">${fmt(b.price)}</span><span class="muted small">Disponible ${bundleInfo(b).max}</span></button>`).join(''):''}${list.map(p=>`<button class="pos-item" data-a="posAdd" data-id="${p.id}" ${p.stock<=0?'disabled style="opacity:.45"':''}><span class="e">${p.image?`<img src="${esc(p.image)}" alt="">`:esc(p.emoji||'📦')}</span><b>${esc(p.name)}</b><span class="price" style="font-size:14px">${fmt(p.price)}</span><span class="muted small">Stock ${p.stock}</span></button>`).join('') || '<div class="empty">Aucun produit.</div>'}</div>
   </div>
   <aside class="pos-ticket" aria-label="Ticket en cours"><div class="m-h"><h2>Ticket</h2>${S.pos.length?'<button class="btn sm ghost" data-a="posClear">Vider</button>':''}</div>
-    <div class="m-b">${t.lines.length?t.lines.map(l=>`<div class="line-item" style="grid-template-columns:1fr auto"><div><b class="small">${esc(l.name)}</b>${l.bulk?' <span class="bulk">gros</span>':''}<div class="qty" style="margin-top:6px"><button data-a="posQty" data-id="${esc(l.key)}" data-d="-1" aria-label="Retirer un">−</button><span>${l.qty}</span><button data-a="posQty" data-id="${esc(l.key)}" data-d="1" aria-label="Ajouter un">+</button></div></div><b>${fmt(l.unit*l.qty)}</b></div>`).join(''):'<p class="muted">Touchez un produit pour l’ajouter.</p>'}
+    <div class="m-b">${t.lines.length?t.lines.map(l=>`<div class="line-item" style="grid-template-columns:1fr auto"><div><b class="small">${esc(l.name)}</b>${l.bulk?' <span class="bulk">gros</span>':''}${isGerant()?(()=>{ const pr = lineProfit(l.kind==='bundle'?{bundle:true, comps:l.comps, price:l.unit, qty:l.qty}:{id:l.id, price:l.unit, qty:l.qty}); return `<div class="small" style="margin-top:2px">${pr===null?'<span class="muted">Bénéfice : — (prix d’achat manquant)</span>':`Bénéfice <b class="${pr>=0?'amt-in':'amt-out'}">${fmt(pr)}</b> · 25 % <b class="amt-in">${fmt(Math.round(pr*PROFIT_SHARE))}</b>`}</div>`; })():''}<div class="qty" style="margin-top:6px"><button data-a="posQty" data-id="${esc(l.key)}" data-d="-1" aria-label="Retirer un">−</button><span>${l.qty}</span><button data-a="posQty" data-id="${esc(l.key)}" data-d="1" aria-label="Ajouter un">+</button></div></div><b>${fmt(l.unit*l.qty)}</b></div>`).join(''):'<p class="muted">Touchez un produit pour l’ajouter.</p>'}
     <div style="margin:14px 0">${promoBox('pos')}</div>
     <div class="totals"><div><span>Sous-total</span><span>${fmt(t.subtotal)}</span></div>${t.discount?`<div style="color:var(--kola)"><span>Remise</span><span>−${fmt(t.discount)}</span></div>`:''}<div class="grand"><span>Total</span><span>${fmt(t.total)}</span></div></div></div>
     <div class="m-f" style="justify-content:stretch"><button class="btn accent block" data-a="posPay" ${t.lines.length?'':'disabled'}>Encaisser ${fmt(t.total)}</button></div>
@@ -4771,6 +4797,8 @@ document.addEventListener('click', async e=>{
     case 'voiceSearch': voiceSearch(el); break;
     case 'blog': openBlog(); break;
     case 'about': openAbout(); break;
+    case 'slDay': S.slDay = el.dataset.v; schedule(); break;
+    case 'slF': S.slF = el.dataset.v; schedule(); break;
     case 'coCarrier': readCO(); CO.carrier = el.dataset.v; drawCheckout(); break;
     case 'trAddCar': { const L = readTransport(); L.push({id:newId('tc'), name:'', mode:'route', active:false, phone:'', note:'', rates:[{country:'ML', city:'', price:null, days:''}]}); S.trDraft = L; S.trFresh = true; S.trLocal = $('#tr-local')?.value; schedule(); break; }
     case 'trSugg': { const L = readTransport(); CARRIER_SUGG.forEach(([n,m])=>{ if(!L.some(c=>normCity(c.name)===normCity(n))) L.push({id:newId('tc'), name:n, mode:m, active:false, phone:'', note:'', rates:[]}); }); S.trDraft = L; S.trFresh = true; S.trLocal = $('#tr-local')?.value; schedule(); toast('Compagnies ajoutées, désactivées : appelez-les pour leurs tarifs, puis activez-les.'); break; }

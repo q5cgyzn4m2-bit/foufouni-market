@@ -128,7 +128,7 @@
 
   /* ---------- démarrage ---------- */
   window.boot = async function () {
-    try { me = (await api('GET', '/api/me')).user; } catch (e) { me = null; }
+    try { me = (await api('GET', '/api/me')).user; } catch (e) { me = null; } S.isGerant = !!(me && me.role === 'Gérant');
     await pushState();
     try { if (new URLSearchParams(location.search).get('vue') === 'commandes') S.view = 'orders'; } catch (e) {}
     S.isAdmin = !!me; S.myName = me ? me.name : ''; S.uid = me ? me.id : null; S.live = false;
@@ -392,6 +392,7 @@
   window.renderTop = function () {
     baseTop();
     const sm = document.querySelector('#topbar .brand small'); if (sm) sm.textContent = me ? `Connecté : ${me.role}` : 'Boutique en ligne';
+    S.isGerant = !!(me && me.role === 'Gérant');
     const cart = document.querySelector('#topbar [data-a="cart"]');
     const b = document.createElement('button'); b.className = 'btn ghost sm'; b.dataset.srv = me ? 'logout' : 'login';
     b.textContent = me ? 'Déconnexion' : 'Espace équipe'; cart.before(b);

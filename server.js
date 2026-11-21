@@ -1496,7 +1496,7 @@ app.get('/api/admin/state', requireStaff, (req, res) => {
   res.json({
     products: allDocs('products').sort((a, b) => (b.createdAt || 0) - (a.createdAt || 0)),
     affiliates: allDocs('affiliates').sort((a, b) => a.name.localeCompare(b.name)), affPayouts: allDocs('aff-payouts').sort((a, b) => b.createdAt - a.createdAt),
-    costs: allDocs('costs'), stockMoves: allDocs('stock-moves').sort((a, b) => b.createdAt - a.createdAt).slice(0, 1000),
+    costs: ['Gérant', 'Gestionnaire de stock'].includes(req.user.role) ? allDocs('costs') : [], stockMoves: allDocs('stock-moves').sort((a, b) => b.createdAt - a.createdAt).slice(0, 1000),
     ai: !!env.ANTHROPIC_API_KEY, socialPosts: allDocs('social-posts').sort((a, b) => (a.at || 0) - (b.at || 0)), social: socialStatus(),
     drivers: allDocs('drivers').sort((a, b) => a.name.localeCompare(b.name)),
     lpStats: allDocs('lp-stats'), articles: allDocs('articles'), affClicks: allDocs('aff-clicks'),
