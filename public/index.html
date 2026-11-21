@@ -894,6 +894,14 @@ function render(){
   if(!S.ready) return;
   if(!S._blogDeep){ S._blogDeep = true; const ut = urlTarget(); if(ut.kind==='blog') S.view='blog'; else if(ut.kind==='art'){ S.view='article'; S.aid=ut.id; } else if(ut.kind==='about') S.view='about'; }
   const m = $('#main');
+  /* garder les modifications pas encore enregistrées d'un formulaire quand la page se redessine (rafraîchissement automatique) */
+  const pageKey = S.view+'|'+(S.tab||'')+'|'+(S.posTab||''), keep = [];
+  if(S._pageKey === pageKey) m.querySelectorAll('input[id],textarea[id],select[id]').forEach(el=>{
+    if(el.type==='file' || el.type==='password') return;
+    if(el.type==='checkbox' || el.type==='radio'){ if(el.checked !== el.defaultChecked) keep.push([el.id, 'c', el.checked]); }
+    else if(el.tagName==='SELECT'){ const d = [...el.options].findIndex(o=>o.defaultSelected); if(el.selectedIndex !== (d<0?0:d)) keep.push([el.id, 'v', el.value]); }
+    else if(el.value !== el.defaultValue) keep.push([el.id, 'v', el.value]); });
+  S._pageKey = pageKey;
   if(S.view==='shop') m.innerHTML = viewShop();
   else if(S.view==='product') m.innerHTML = viewProduct();
   else if(S.view==='landing') m.innerHTML = viewLanding();
@@ -905,6 +913,7 @@ function render(){
   else if(S.view==='pos' && S.isAdmin) m.innerHTML = viewPos();
   else if(S.view==='admin' && S.isAdmin) m.innerHTML = viewAdmin();
   else { S.view='shop'; m.innerHTML = viewShop(); }
+  keep.forEach(([id,k,v])=>{ const el = document.getElementById(id); if(!el || !m.contains(el)) return; if(k==='c') el.checked = v; else el.value = v; });
   if(fid){ const el = document.getElementById(fid); if(el && el.closest('#main,#topbar')){ el.focus(); try{ if(ss!=null) el.setSelectionRange(ss,ss); }catch(e){} } }
   if(S.view==='admin' && S.tab==='team') resolveNames();
   if(S.view==='admin' && S.tab==='studio') setTimeout(studioRender, 0);
