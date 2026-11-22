@@ -118,7 +118,7 @@ const h = fn => (req, res) => Promise.resolve().then(() => fn(req, res)).catch(e
 
 /* ================= Réglages et moyens de paiement ================= */
 const DEFAULT_SETTINGS = {
-  shopName: 'foûfoûni-Market', currency: 'FCFA', deliveryFee: 1500, freeFrom: 50000, city: 'Bamako',
+  shopName: 'foûfoûni-Market', currency: 'FCFA', deliveryFee: 1500, freeFrom: 50000, city: 'Bamako', giftOn: true, giftFrom: 50000, giftName: 'Cadeau surprise', deliveryDays: '1-2',
   affDefaultPct: 5, affDiscountPct: 5, affDays: 30, tiktokPixel: 'DBOVIVRC77UASCMHBLD0', gtmId: 'GTM-WJVTWPWW', metaPixel: '1784224236125858',
   assistantOn: true, assistantName: 'Fanta', assistantInfo: '', relaunchCode: '', relaunchPush: true,
   tagline: 'Le marché, sans les embouteillages.', intro: 'Commandez en ligne, payez par mobile money ou à la livraison, et recevez vos articles chez vous.',
@@ -140,6 +140,7 @@ function publicSettings() {
   const s = settings();
   const procs = {}; for (const [k, v] of Object.entries(s.processors || {})) procs[k] = { enabled: !!v.enabled, ...(typeof v.showLogo === 'boolean' ? { showLogo: v.showLogo } : {}), ...(/^data:image\/(png|jpeg|webp);base64,/.test(v.logo || '') && v.logo.length < 250000 ? { logo: v.logo } : {}) }; // jamais d'identifiants côté public, seulement le logo
   return { shopName: s.shopName, tagline: s.tagline, intro: s.intro, currency: s.currency, deliveryFee: s.deliveryFee, freeFrom: s.freeFrom, city: s.city, phone: s.phone, processors: procs,
+    giftOn: s.giftOn !== false, giftFrom: Math.max(0, Number(s.giftFrom) || 0), giftName: String(s.giftName || 'Cadeau surprise').slice(0, 60), deliveryDays: String(s.deliveryDays || '1-2').slice(0, 10),
     carouselOn: s.carouselOn !== false, carouselMode: ['both', 'new', 'sale'].includes(s.carouselMode) ? s.carouselMode : 'both', carouselSpeed: ['lent', 'normal', 'rapide'].includes(s.carouselSpeed) ? s.carouselSpeed : 'normal',
     showTrust: s.showTrust !== false, deliveryPromise: String(s.deliveryPromise || '').slice(0, 40), returnPolicy: String(s.returnPolicy || '').slice(0, 40),
     manualPay: manualPay(), shipCountries: Array.isArray(s.shipCountries) ? s.shipCountries : ['ML'], carriers: cleanCarriers(s.carriers).filter(c => c.active).map(({ phone, ...c }) => c), localCities: String(s.localCities || '').slice(0, 400),
@@ -1298,6 +1299,8 @@ const publicOrder = (o, id) => {
   const { sessionId, payToken, notifToken, ...pay } = rest.payment || {};
   return { ...rest, id, payment: pay };
 };
+/* Cadeau offert à partir d'un montant d'achat (réglé dans Gestion › Réglages) */
+const giftOf = sub => { const s = settings(); return s.giftOn !== false && Number(s.giftFrom) > 0 && sub >= Number(s.giftFrom) ? String(s.giftName || 'Cadeau surprise').slice(0, 60) : ''; };
 app.post('/api/orders', h(async (req, res) => {
   if (limited('order:' + req.ip, 15, 600e3)) throw httpErr(429, 'Trop de commandes en peu de temps. Réessayez plus tard.');
   const b = req.body || {};
@@ -1318,7 +1321,7 @@ app.post('/api/orders', h(async (req, res) => {
   const id = newOrderId();
   const order = {
     number: 'FM-' + new Date().toISOString().slice(2, 10).replace(/-/g, '') + '-' + rnd(4),
-    items: t.lines, subtotal: t.subtotal, discount: t.discount, shipping: t.shipping, total: t.total, promoCode: t.promoCode, affiliate: t.affiliate, ...(t.carrier ? { carrier: t.carrier } : {}), ...(t.shipQuote ? { shipQuote: true } : {}),
+    items: t.lines, subtotal: t.subtotal, discount: t.discount, shipping: t.shipping, total: t.total, promoCode: t.promoCode, affiliate: t.affiliate, ...(t.carrier ? { carrier: t.carrier } : {}), ...(t.shipQuote ? { shipQuote: true } : {}), ...(giftOf(t.subtotal) ? { gift: giftOf(t.subtotal) } : {}),
     lpPids: (Array.isArray(b.lpPids) ? b.lpPids : []).map(String).filter(x => validId(x) && t.lines.some(l => l.id === x)).slice(0, 20),
     source: String(b.source || '').toLowerCase().replace(/[^a-z0-9_-]/g, '').slice(0, 20), campaign: String(b.campaign || '').replace(/[^A-Za-z0-9_-]/g, '').slice(0, 30),
     customer, delivery, payment: { method, status: method === 'cod' ? 'à encaisser' : manual ? 'à vérifier' : 'en attente', ref: manual ? String(b.payRef || '').trim().slice(0, 60) : '', manual: !!manual, to: manual || '' },

@@ -525,6 +525,34 @@ tr.mv-tr td:first-child{box-shadow:inset 3px 0 0 var(--indigo)}
 .qty button{border:0; background:var(--surface-2); width:30px; height:30px; font-weight:700}
 .qty span{min-width:32px; text-align:center; font-weight:700; font-size:14px}
 .totals{display:grid; gap:6px; font-size:14px}
+/* Tiroir panier : paliers, délai, suggestions */
+.cd-tier{position:sticky; top:-20px; z-index:2; margin:-20px -22px 14px; padding:14px 22px 16px; background:linear-gradient(180deg,var(--saffron-soft),var(--surface)); border-bottom:1px solid var(--line)}
+.cd-msg{font-size:14px; line-height:1.35; text-align:center; margin-bottom:12px}
+.cd-msg b{color:var(--ink)}
+.cd-track{position:relative; height:10px; border-radius:99px; background:var(--surface-2); margin:0 22px 30px 8px}
+.cd-fill{position:absolute; inset:0 auto 0 0; border-radius:99px; background:linear-gradient(90deg,var(--saffron),var(--kola)); transition:width .5s cubic-bezier(.2,.8,.2,1)}
+.cd-fill.done{background:var(--kola)}
+.cd-mk{position:absolute; top:50%; transform:translate(-50%,-50%); display:flex; flex-direction:column; align-items:center; gap:3px}
+.cd-mk i{font-style:normal; width:30px; height:30px; border-radius:50%; display:grid; place-items:center; font-size:15px; background:var(--surface); border:2px solid var(--line); filter:grayscale(1); opacity:.75; margin-top:22px}
+.cd-mk.on i{border-color:var(--kola); background:var(--kola-soft); filter:none; opacity:1; animation:cdpop .45s ease-out}
+.cd-mk small{font-size:10.5px; font-weight:700; color:var(--muted); white-space:nowrap}
+.cd-mk.on small{color:var(--kola)}
+@keyframes cdpop{0%{transform:scale(.6)}70%{transform:scale(1.18)}100%{transform:scale(1)}}
+.cd-eta{display:flex; gap:10px; align-items:flex-start; padding:10px 12px; border-radius:12px; background:var(--surface-2); font-size:13.5px; line-height:1.4; margin-bottom:6px}
+.cd-eta>span:first-child{font-size:18px; line-height:1.1}
+.line-item.gift{background:var(--kola-soft); border-radius:12px; padding:10px; margin-top:8px; border:1px dashed var(--kola)}
+.line-item.gift .li-img{background:var(--surface)}
+.cd-reco{margin:16px 0 4px}
+.cd-h{font:800 15px var(--f-d); margin-bottom:10px}
+.cd-row{display:flex; gap:10px; overflow-x:auto; scroll-snap-type:x mandatory; padding-bottom:6px; margin:0 -22px; padding-left:22px; padding-right:22px; scrollbar-width:thin}
+.cd-card{position:relative; flex:0 0 138px; scroll-snap-align:start; border:1px solid var(--line); border-radius:14px; padding:8px; display:flex; flex-direction:column; gap:4px; background:var(--surface)}
+.cd-img{border:0; padding:0; width:100%; aspect-ratio:1; border-radius:10px; overflow:hidden; background:var(--surface-2); display:grid; place-items:center; font-size:34px}
+.cd-img img{width:100%; height:100%; object-fit:cover}
+.cd-n{font-size:12.5px; line-height:1.25; display:-webkit-box; -webkit-line-clamp:2; -webkit-box-orient:vertical; overflow:hidden; min-height:31px}
+.cd-p{font-size:13px; font-weight:800}
+.cd-p .strike{font-weight:400; font-size:11px}
+.cd-badge{position:absolute; top:12px; left:12px; background:var(--kola); color:#fff; font-size:10.5px; font-weight:800; padding:3px 7px; border-radius:99px}
+.cd-card .btn{margin-top:auto; width:100%}
 .totals div{display:flex; justify-content:space-between}
 .totals .grand{font:800 20px/1.2 var(--f-d); padding-top:8px; border-top:1px solid var(--line); margin-top:4px}
 .promo-in{display:flex; gap:8px}
@@ -694,6 +722,7 @@ const DEFAULT_SETTINGS = {
   shopName:'foûfoûni-Market', tagline:'Le marché, sans les embouteillages.',
   intro:'Commandez en ligne, payez par mobile money ou à la livraison, et recevez vos articles chez vous.',
   currency:'FCFA', deliveryFee:1500, freeFrom:50000, city:'Bamako', phone:'',
+  giftOn:true, giftFrom:50000, giftName:'Cadeau surprise', deliveryDays:'1-2',
   affDefaultPct:5, affDiscountPct:5, affDays:30, siteUrl:'',
   shipCountries:['ML','SN','CI','BF','GN','NE','BJ','TG','GH','NG','MR','GM','GW','SL','LR','CV'],
   showTrust:true, deliveryPromise:'', returnPolicy:'', lpFirst:true,
@@ -948,7 +977,7 @@ function render(){
   if(!S._deep && S.ready && S.products.length){ S._deep = true; let pid=''; const ut1 = urlTarget(); if(ut1.kind==='p') pid = ut1.id;
     if(pid && S.products.some(x=>x.id===pid && x.active!==false) && S.view==='shop'){ S.view='product'; S.pid=pid; S.pqty=1; schedule(); } }
   if(S.isAdmin && !S._remShown){ const n = reminders().late.length; if(n){ S._remShown = true; toast(`${n} créance${n>1?'s':''} client arrivée${n>1?'s':''} à échéance : touchez la cloche pour relancer`); } }
-  const dr = $('#drawer-body'); if(dr) dr.innerHTML = cartBody();
+  if($('#drawer-body')) refreshCart();
 }
 const cartCount = () => S.cart.reduce((n,i)=>n+i.qty,0);
 const svgSearch = '<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4"><circle cx="11" cy="11" r="7"/><path d="m20 20-3.5-3.5"/></svg>';
@@ -1706,7 +1735,7 @@ setTimeout(function instPopup(){
   try{ const force = /[?&]installer=1/.test(location.search);
     if(force){ try{ history.replaceState(null,'',location.pathname); }catch(e){} return installGuide(null, true); }
     if(isStandalone() || S.isAdmin || window.FFM_STAFF) return;
-    if(S.view!=='shop' || document.querySelector('#overlay .scrim') || document.querySelector('.ai-panel')){ return setTimeout(instPopup, 8000); }
+    if(S.view!=='shop' || document.querySelector('#overlay .scrim, #overlay .drawer-wrap, #overlay .cat-drawer') || document.querySelector('.ai-panel')){ return setTimeout(instPopup, 8000); }
     const last = Number(localStorage.getItem('ffm-inst-pop')||0), never = localStorage.getItem('ffm-inst-never');
     if(never || Date.now()-last < 7*864e5) return;
     localStorage.setItem('ffm-inst-pop', String(Date.now())); installGuide(null, true); }catch(e){} }, 5000);
@@ -2797,19 +2826,59 @@ function computeTotals(cart, promo, delivery, dest){
   }
   return {lines, subtotal, shipping, discount, total:Math.max(0, subtotal+shipping-discount), carrier, remote, quote, offers};
 }
+/* ===================== Tiroir panier : paliers, délai de livraison, suggestions ===================== */
+const giftOk = (st=S.settings) => st.giftOn!==false && Number(st.giftFrom)>0;
+const giftLabel = (st=S.settings) => String(st.giftName||'Cadeau surprise').trim().slice(0,60) || 'Cadeau surprise';
+const giftFor = sub => giftOk() && sub>=Number(S.settings.giftFrom) ? giftLabel() : '';
+function cartTiers(){ const st = S.settings, t = [];
+  if(Number(st.freeFrom)>0) t.push({at:Number(st.freeFrom), ic:'🚚', lb:['Livraison offerte']});
+  if(giftOk()){ const g = Number(st.giftFrom), same = t.find(x=>x.at===g); if(same){ same.ic='🎁'; same.lb.push(giftLabel()); } else t.push({at:g, ic:'🎁', lb:[giftLabel()]}); }
+  return t.sort((a,b)=>a.at-b.at); }
+const shortF = n => n>=1000 ? (Math.round(n/100)/10).toString().replace('.',',')+' k' : String(n);
+function tierBar(sub){ const ts = cartTiers(); if(!ts.length) return '';
+  const max = ts[ts.length-1].at, pct = Math.max(sub>0?4:0, Math.min(100, sub/max*100)), next = ts.find(x=>sub<x.at);
+  const lbl = x => x.lb.map(y=>'<b>'+esc(y)+'</b>').join(' + ');
+  const msg = next ? `Plus que <b style="color:var(--kola)">${fmt(next.at-sub)}</b> pour débloquer ${next.ic} ${lbl(next)}`
+    : `🎉 Bravo ! Vous avez débloqué ${ts.map(lbl).join(' + ')}`;
+  return `<div class="cd-tier" role="status" aria-live="polite"><div class="cd-msg">${msg}</div>
+    <div class="cd-track"><div class="cd-fill${next?'':' done'}" style="width:${pct}%"></div>
+    ${ts.map(x=>`<div class="cd-mk${sub>=x.at?' on':''}" style="left:${Math.min(100,x.at/max*100)}%"><i aria-hidden="true">${x.ic}</i><small>${shortF(x.at)}</small></div>`).join('')}</div></div>`; }
+function etaText(){ const raw = String(S.settings.deliveryDays||'1-2'), m = raw.match(/(\d+)\s*(?:[-–à]+\s*(\d+))?/);
+  const a = m ? +m[1] : 1, b = m && m[2] ? Math.max(+m[2], a) : a;
+  const day = n => { const d = new Date(); let k = 0; while(k<n){ d.setDate(d.getDate()+1); if(d.getDay()!==0) k++; } if(d.getDay()===0) d.setDate(d.getDate()+1); return d; };
+  const f = n => n===0 && new Date().getDay()!==0 ? 'aujourd’hui' : n===1 && new Date().getDay()!==6 ? 'demain' : day(n).toLocaleDateString('fr-FR',{weekday:'short', day:'numeric', month:'short'});
+  return a===b ? f(a) : `entre ${f(a)} et ${f(b)}`; }
+function etaLine(){ const st = S.settings;
+  return `<div class="cd-eta"><span aria-hidden="true">📦</span><span>Commandez maintenant, livraison estimée <b>${etaText()}</b> à ${esc(st.city||'Bamako')}.<br><span class="muted small">Hors de ${esc(st.city||'Bamako')} : délai selon le transporteur choisi à la commande.</span></span></div>`; }
+function cartRecos(sub){
+  const inCart = new Set(S.cart.map(l=>l.id).filter(Boolean)), prods = S.cart.map(l=>S.products.find(p=>p.id===l.id)).filter(Boolean);
+  const cats = new Set(prods.map(p=>p.category).filter(Boolean)), next = cartTiers().find(x=>sub<x.at), gap = next && S.cart.length ? next.at-sub : 0;
+  const sc = x => (cats.has(x.category)?3:0) + (gap && x.price>=gap && x.price<=gap*2.5 ? 5 : 0) + (x.comparePrice>x.price?1:0) + (productRating(x.id).n?1:0);
+  return S.products.filter(x=>!inCart.has(x.id) && udOk(x)).map(x=>({x, s:sc(x)}))
+    .sort((a,b)=>b.s-a.s || (gap ? Math.abs(a.x.price-gap)-Math.abs(b.x.price-gap) : (b.x.stock||0)-(a.x.stock||0))).slice(0,8)
+    .map(o=>({p:o.x, unlock: gap>0 && o.x.price>=gap})); }
+function recoBlock(sub, title){ const rs = cartRecos(sub); if(!rs.length) return '';
+  return `<div class="cd-reco"><div class="cd-h">${title}</div><div class="cd-row">${rs.map(({p:x, unlock})=>`<div class="cd-card">
+      <button class="cd-img" data-a="product" data-id="${x.id}" aria-label="Voir ${esc(x.name)}">${pImg(x)}</button>${unlock?`<span class="cd-badge">${cartTiers().find(t=>sub<t.at)?.ic||'🎁'} Débloque</span>`:''}
+      <span class="cd-n">${esc(x.name)}</span><span class="cd-p">${fmt(x.price)}${x.comparePrice>x.price?` <span class="strike">${fmt(x.comparePrice)}</span>`:''}</span>
+      <button class="btn sm ${unlock?'primary':'ghost'}" data-a="udAdd" data-id="${x.id}" data-k="cross">${hasVar(x)?'Choisir':'+ Ajouter'}</button></div>`).join('')}</div></div>`; }
 function cartBody(){
   const t = computeTotals(S.cart, S.appliedPromo, 'livraison');
-  if(!t.lines.length) return `${cartDownBanner()}<div class="empty" style="margin-top:20px"><h3>Votre panier est vide</h3><p>Ajoutez des articles depuis le catalogue.</p><button class="btn primary" data-a="closeAll">Continuer mes achats</button></div>`;
-  return `${cartDownBanner()}${t.lines.map(l=>`<div class="line-item"><div class="li-img">${pImg(l.img)}</div>
+  if(!t.lines.length) return `${tierBar(0)}${cartDownBanner()}<div class="empty" style="margin-top:20px"><h3>Votre panier est vide</h3><p>Ajoutez des articles depuis le catalogue.</p><button class="btn primary" data-a="closeAll">Continuer mes achats</button></div>${recoBlock(0,'🔥 Les plus demandés')}`;
+  const gift = giftFor(t.subtotal);
+  return `${tierBar(t.subtotal)}${cartDownBanner()}${t.lines.map(l=>`<div class="line-item"><div class="li-img">${pImg(l.img)}</div>
       <div><b class="small">${esc(l.name)}</b><div class="muted small">${fmt(l.unit)}${l.unit<l.regular?` <span class="strike">${fmt(l.regular)}</span>`:''}</div>
       ${l.bulk?`<div class="bulk">Prix de gros appliqué</div>`:''}${l.kind==='bundle'?`<div class="muted small">${l.comps.map(c=>`${c.qty} × ${esc(c.p.name)}`).join(' · ')}</div>`:''}
       <div class="qty" style="margin-top:6px"><button data-a="qty" data-id="${esc(l.key)}" data-d="-1" aria-label="Retirer un">−</button><span>${l.qty}</span><button data-a="qty" data-id="${esc(l.key)}" data-d="1" aria-label="Ajouter un">+</button></div></div>
       <b>${fmt(l.unit*l.qty)}</b></div>`).join('')}
-    <div style="margin:18px 0 12px">${promoBox('cart')}</div>
+    ${gift?`<div class="line-item gift"><div class="li-img">🎁</div><div><b class="small">${esc(gift)}</b><div class="muted small">Glissé dans votre colis, avec nos remerciements</div></div><b style="color:var(--kola)">Offert</b></div>`:''}
+    ${recoBlock(t.subtotal, '✨ Complétez votre commande')}
+    <div style="margin:14px 0 10px">${etaLine()}</div>
+    <div style="margin:12px 0">${promoBox('cart')}</div>
     <div class="totals"><div><span>Sous-total</span><span>${fmt(t.subtotal)}</span></div>
       ${t.discount?`<div style="color:var(--kola)"><span>Remise ${S.appliedPromo.affiliate?'ambassadeur ':''}${esc(S.appliedPromo.code)}</span><span>−${fmt(t.discount)}</span></div>`:''}
       <div class="muted"><span>Livraison</span><span>${t.shipping?fmt(t.shipping):'Offerte'}</span></div>
-      ${t.subtotal<S.settings.freeFrom?`<div class="muted small"><span>Plus que ${fmt(S.settings.freeFrom-t.subtotal)} pour la livraison offerte</span></div>`:''}
+      ${gift?`<div style="color:var(--kola)"><span>🎁 ${esc(gift)}</span><span>Offert</span></div>`:''}
       <div class="grand"><span>Total</span><span>${fmt(t.total)}</span></div></div>`;
 }
 function promoBox(target){
@@ -2817,14 +2886,18 @@ function promoBox(target){
   if(ap) return `<div class="row" style="align-items:center"><span class="pill ok">Code ${esc(ap.code)} appliqué</span><button class="btn sm ghost" data-a="removePromo" data-t="${target}" style="flex:0">Retirer</button></div>`;
   return `<label class="sr" for="promo-${target}">Code promo</label><div class="promo-in"><input class="input" id="promo-${target}" placeholder="Code promo" autocomplete="off"><button class="btn ghost" data-a="applyPromo" data-t="${target}">Appliquer</button></div><div class="small" id="promo-msg-${target}" style="margin-top:6px;color:var(--danger)"></div>`;
 }
-function openCart(){
+function cartFoot(){ return `${S.cart.length?`<div class="small muted" style="text-align:center">Payez avec</div><div style="display:flex;justify-content:center">${payRow(false)}</div>`:''}<button class="btn primary block ${S.cart.length?'btn-live':''}" data-a="checkout" ${S.cart.length?'':'disabled'}>Passer la commande</button>${S.cart.length&&shopWa()?`<button class="btn wa block btn-live" data-a="waOrder" style="margin-top:8px">${WA_ICON}Commander sur WhatsApp</button><div class="muted small" style="text-align:center">Votre panier part sur WhatsApp : nous confirmons le prix, le paiement et la livraison.</div>`:''}`; }
+function cartHead(){ const n = cartCount(); return `Panier${n?` <span class="muted" style="font:600 14px var(--f-b)">(${n} article${n>1?'s':''})</span>`:''}`; }
+function refreshCart(){ const b = $('#drawer-body'); if(!b) return; const y = b.scrollTop, r = b.querySelector('.cd-row'), x = r ? r.scrollLeft : 0; b.innerHTML = cartBody(); b.scrollTop = y; const r2 = b.querySelector('.cd-row'); if(r2) r2.scrollLeft = x; $('#drawer-foot').innerHTML = cartFoot(); $('#drawer-title').innerHTML = cartHead(); }
+function openCart(){ if($('.drawer #drawer-body')) return refreshCart();
   try{ const pc = localStorage.getItem('ffm-promo'); if(pc && !S.appliedPromo){ const sub = computeTotals(S.cart, null, 'livraison').subtotal; validatePromo(pc, sub).then(r=>{ if(r.promo && !S.appliedPromo){ S.appliedPromo = r.promo; localStorage.removeItem('ffm-promo'); toast(`Code ${pc} appliqué`); const d=$('#drawer-body'); if(d) d.innerHTML = cartBody(); } }).catch(()=>{}); } }catch(e){}
   const rc = refCode();
   if(rc && !S.appliedPromo) validatePromo(rc, 0).then(r=>{ if(r.promo && r.promo.affiliate && !S.appliedPromo){ S.appliedPromo = r.promo; if(r.promo.value) toast(`Remise ambassadeur ${rc} appliquée : −${r.promo.value} %`); const d=$('#drawer-body'); if(d) d.innerHTML = cartBody(); } }).catch(()=>{});
+  const foot = cartFoot(), head = cartHead();
   $('#overlay').innerHTML = `<div class="drawer-wrap" data-a="closeAll"><aside class="drawer" role="dialog" aria-modal="true" aria-label="Panier">
-    <div class="m-h"><h2>Panier</h2><button class="x" data-a="closeAll" aria-label="Fermer">×</button></div>
+    <div class="m-h"><h2 id="drawer-title">${head}</h2><button class="x" data-a="closeAll" aria-label="Fermer">×</button></div>
     <div class="m-b" id="drawer-body">${cartBody()}</div>
-    <div class="m-f" style="flex-direction:column;align-items:stretch">${S.cart.length?`<div class="small muted" style="text-align:center">Payez avec</div><div style="display:flex;justify-content:center">${payRow(false)}</div>`:''}<button class="btn primary block ${S.cart.length?'btn-live':''}" data-a="checkout" ${S.cart.length?'':'disabled'}>Passer la commande</button>${S.cart.length&&shopWa()?`<button class="btn wa block btn-live" data-a="waOrder" style="margin-top:8px">${WA_ICON}Commander sur WhatsApp</button><div class="muted small" style="text-align:center">Votre panier part sur WhatsApp : nous confirmons le prix, le paiement et la livraison.</div>`:''}</div></aside></div>`;
+    <div class="m-f" id="drawer-foot" style="flex-direction:column;align-items:stretch">${foot}</div></aside></div>`;
 }
 async function validatePromo(code, subtotal){
   const c = code.trim().toUpperCase();
@@ -2937,7 +3010,7 @@ function drawCheckout(){
     ${S.settings.testMode?'<div class="test-note"><b>Mode test.</b> Aucun débit réel n’est effectué : le paiement est simulé.</div>':''}
     <div class="totals" style="margin-top:18px"><div><span>Sous-total</span><span>${fmt(t.subtotal)}</span></div>
     ${t.discount?`<div style="color:var(--kola)"><span>Remise</span><span>−${fmt(t.discount)}</span></div>`:''}
-    <div><span>${t.carrier?'Transport · '+esc(t.carrier.name):'Livraison'}</span><span>${t.quote?'Sur devis':t.shipping?fmt(t.shipping):'Offerte'}</span></div><div class="grand"><span>À payer</span><span>${fmt(t.total)}</span></div></div>
+    <div><span>${t.carrier?'Transport · '+esc(t.carrier.name):'Livraison'}</span><span>${t.quote?'Sur devis':t.shipping?fmt(t.shipping):'Offerte'}</span></div>${giftFor(t.subtotal)?`<div style="color:var(--kola)"><span>🎁 ${esc(giftFor(t.subtotal))}</span><span>Offert</span></div>`:''}<div class="grand"><span>À payer</span><span>${fmt(t.total)}</span></div></div>
     ${t.quote?`<p class="muted small" style="margin:8px 0 0">Le transport vers ${esc(CO.city)} n’est pas inclus : nous vous confirmons son prix sur WhatsApp avant l’expédition.</p>`:''}`;
   }
   $('#overlay').innerHTML = `<div class="scrim" data-a="closeAll"><div class="modal" role="dialog" aria-modal="true" aria-label="Commande">
@@ -2978,7 +3051,7 @@ async function coNext(){
     const order = {
       number:'FM-'+new Date().toISOString().slice(2,10).replace(/-/g,'')+'-'+rnd(4),
       items:orderItems(t.lines),
-      subtotal:t.subtotal, discount:t.discount, shipping:t.shipping, total:t.total, ...(t.carrier?{carrier:t.carrier}:{}), ...(t.quote?{shipQuote:true}:{}),
+      subtotal:t.subtotal, discount:t.discount, shipping:t.shipping, total:t.total, ...(t.carrier?{carrier:t.carrier}:{}), ...(t.quote?{shipQuote:true}:{}), ...(giftFor(t.subtotal)?{gift:giftFor(t.subtotal)}:{}),
       promoCode:S.appliedPromo?S.appliedPromo.code:'',
       source:srcCode(), campaign:cmpCode(), lpPids:lpSeen().filter(id=>S.cart.some(l=>l.id===id)),
       affiliate:S.appliedPromo&&S.appliedPromo.affiliate?{id:S.appliedPromo.affiliate.id, code:S.appliedPromo.code, discountPct:S.appliedPromo.value, commission:affCommission(t.lines, S.appliedPromo.value)}:null,
@@ -3033,6 +3106,7 @@ function receiptHTML(o){
     <div class="rr"><span>Sous-total</span><span>${fmt(o.subtotal)}</span></div>
     ${o.discount?`<div class="rr"><span>Remise ${esc(o.promoCode)}</span><span>−${fmt(o.discount)}</span></div>`:''}
     ${o.carrier?`<div class="rr"><span>Transport · ${esc(o.carrier.name)}${o.carrier.days?' ('+esc(o.carrier.days)+')':''}</span><span>${fmt(o.shipping)}</span></div>`:o.shipping?`<div class="rr"><span>Livraison</span><span>${fmt(o.shipping)}</span></div>`:''}${o.shipQuote?`<div class="rr"><span>Transport</span><span>Sur devis</span></div>`:''}
+    ${o.gift?`<div class="rr" style="color:var(--kola)"><span>🎁 ${esc(o.gift)}</span><span>Offert</span></div>`:''}
     <div class="rr" style="font:800 18px var(--f-d); margin-top:6px"><span>Total</span><span>${fmt(o.total)}</span></div>
     <div class="rr muted small"><span>Paiement</span><span>${esc(PROCESSORS[o.payment?.method]?.name || (o.payment?.method==='cash'?'Espèces':o.payment?.method==='credit'?'À crédit':o.payment?.method))}</span></div>
     ${o.payment?.received?`<div class="rr muted small"><span>Reçu / rendu</span><span>${fmt(o.payment.received)} / ${fmt(Math.max(0,o.payment.received-o.total))}</span></div>`:''}
@@ -4319,6 +4393,7 @@ function orderDetail(o){
       <div>${o.affiliate?`<div class="panel"><h3>Ambassadeur</h3><p style="margin:0"><b>${esc(o.affiliate.code)}</b> · ${esc((S.affiliates.find(a=>a.id===o.affiliate.id)||{}).name||'')}<br>Commission ${fmt(o.affiliate.commission)} <span class="pill ${AFF_ST[affState(o)].c}">${AFF_ST[affState(o)].l}</span></p></div>`:''}<div class="panel"><h3>Client</h3><p style="margin:0">${esc(c.name||'—')}<br>${esc(c.phone||'')}<br>${o.delivery==='livraison'?esc([c.address, c.city, c.country&&c.country!=='ML'?WA[c.country]:''].filter(Boolean).join(', ')):'Retrait en boutique'}${c.note?`<br><span class="muted">Repère : ${esc(c.note)}</span>`:''}</p>
       <div class="fin-actions" style="margin:10px 0 0">${c.phone?`<a class="btn ghost sm" href="tel:${esc(c.phone.replace(/\s/g,''))}">Appeler</a>`:''}
       ${o.delivery==='livraison'&&mapsLink(c)?`<a class="btn ghost sm" href="${esc(mapsLink(c))}" target="_blank" rel="noopener">📍 Google Maps${c.geo?' (position exacte)':''}</a><button class="btn ghost sm" data-a="copyMaps" data-v="${esc(mapsLink(c))}">Copier le lien</button>`:''}</div></div>
+      ${o.gift?`<div class="panel" style="border:2px dashed var(--kola)"><h3>🎁 Cadeau à joindre au colis</h3><p style="margin:0"><b>${esc(o.gift)}</b> : le client a commandé pour ${fmt(o.subtotal)}.</p></div>`:''}
       ${o.delivery==='livraison'&&(o.carrier||o.shipQuote)?`<div class="panel"><h3>${o.carrier?SHIP_MODES[o.carrier.mode||'route'][0]:'🌍'} Transport vers ${esc(o.customer?.city||'')}</h3>${o.carrier?`<p style="margin:0"><b>${esc(o.carrier.name)}</b> · ${esc(SHIP_MODES[o.carrier.mode||'route'][1])} · <b>${fmt(o.carrier.price)}</b>${o.carrier.days?' · '+esc(o.carrier.days):''}</p>${o.carrier.note?`<p class="muted small" style="margin:6px 0 0">${esc(o.carrier.note)}</p>`:''}${(()=>{ const c=(S.settings.carriers||[]).find(x=>x.id===o.carrier.id); return c&&c.phone?`<a class="btn ghost sm" style="margin-top:8px" href="tel:${esc(String(c.phone).replace(/\s/g,''))}">📞 Appeler ${esc(c.name)}</a>`:''; })()}`:`<p style="margin:0">Transport <b>sur devis</b> : aucune compagnie n’a de tarif pour cette destination. Confirmez le prix au client sur WhatsApp.</p>`}</div>`:''}
       ${o.delivery==='livraison'?`<div class="panel"><h3>🛵 Livraison</h3>
         <div class="row" style="align-items:flex-end;gap:8px"><div class="field" style="margin:0"><label for="od-drv">Livreur</label><select class="input" id="od-drv"><option value="">— Choisir —</option>${S.drivers.filter(d=>d.active!==false||(o.driver&&o.driver.id===d.id)).map(d=>`<option value="${d.id}" ${o.driver&&o.driver.id===d.id?'selected':''}>${esc(d.name)} · ${esc(d.phone)}</option>`).join('')}</select></div><button class="btn ghost sm" data-a="drivers" style="flex:0;white-space:nowrap">＋ Livreurs</button></div>
@@ -4455,6 +4530,12 @@ function panePayments(){
     <div class="field"><label for="st-free">Livraison offerte dès</label><input class="input" id="st-free" inputmode="numeric" value="${esc(st.freeFrom)}"></div>
     <div class="field"><label for="st-cur">Devise</label><input class="input" id="st-cur" value="${esc(st.currency)}"></div>
     <div class="field"><label for="st-phone">Téléphone boutique</label><input class="input" id="st-phone" value="${esc(st.phone)}"></div></div>
+    <h4 style="margin:16px 0 6px">🎁 Panier : cadeau offert et délai affiché</h4>
+    <label class="check-row" style="display:flex;gap:8px;align-items:center;margin-bottom:8px"><input type="checkbox" id="st-gift-on" ${st.giftOn!==false?'checked':''}> Offrir un cadeau à partir d’un montant d’achat (barre de progression dans le panier)</label>
+    <div class="row"><div class="field"><label for="st-gift-from">Cadeau offert dès (FCFA)</label><input class="input" id="st-gift-from" inputmode="numeric" value="${esc(st.giftFrom??50000)}"></div>
+    <div class="field"><label for="st-gift-name">Nom du cadeau</label><input class="input" id="st-gift-name" maxlength="60" value="${esc(st.giftName||'Cadeau surprise')}" placeholder="ex. Cadeau surprise, Porte-clés foûfoûni"></div>
+    <div class="field"><label for="st-days">Délai de livraison (jours ouvrés)</label><input class="input" id="st-days" maxlength="10" value="${esc(st.deliveryDays||'1-2')}" placeholder="ex. 1-2 ou 0-1"></div></div>
+    <p class="muted small" style="margin:4px 0 0">Le panier affiche « Plus que X FCFA pour débloquer… », la date de livraison estimée (dimanches exclus) et des produits suggérés pour atteindre le palier. Le cadeau apparaît sur la commande et le reçu ; pensez à le glisser dans le colis.</p>
   </div>
   <div style="margin-top:16px;display:flex;justify-content:flex-end"><button class="btn primary" data-a="saveSettings">Enregistrer les réglages</button></div>`;
 }
@@ -4531,6 +4612,7 @@ async function saveSettings(){
   const s = structuredClone(S.settings), v = id=>($(id)?.value||'').trim();
   s.shopName=v('#st-name')||'foûfoûni-Market'; s.city=v('#st-city'); s.tagline=v('#st-tag'); s.intro=v('#st-intro'); s.currency=v('#st-cur')||'FCFA'; s.phone=v('#st-phone');
   s.deliveryFee=Number(v('#st-fee'))||0; s.freeFrom=Number(v('#st-free'))||0; s.testMode=$('#st-test').checked;
+  if($('#st-gift-on')){ s.giftOn=$('#st-gift-on').checked; s.giftFrom=Math.max(0, Number(v('#st-gift-from').replace(/\D/g,''))||0); s.giftName=v('#st-gift-name').slice(0,60)||'Cadeau surprise'; s.deliveryDays=v('#st-days').slice(0,10)||'1-2'; }
   document.querySelectorAll('[data-proc]').forEach(i=>{ s.processors[i.dataset.proc].account=i.value.trim(); });
   document.querySelectorAll('[data-proc-on]').forEach(i=>{ s.processors[i.dataset.procOn].enabled=i.checked; });
   document.querySelectorAll('[data-proc-show]').forEach(i=>{ const k = i.dataset.procShow; s.processors[k] = {...(s.processors[k]||{}), showLogo:i.checked}; });
@@ -4641,7 +4723,7 @@ document.addEventListener('click', async e=>{
     case 'qty': { const before = S.cart.find(x=>lineKey(x)===id); changeQty('cart', id, Number(el.dataset.d));
       if(before && before.id && !S.cart.includes(before)){ const bp = S.products.find(x=>x.id===before.id), dn = downsellFor(bp); S.cartDown = dn ? {from:bp.id, to:dn.id} : null; if(dn) openCart(); }
       if(!S.cart.length) openCart(); break; }
-    case 'udAdd': { const x = S.products.find(y=>y.id===id); if(!x) break; if(hasVar(x)){ closeAll(); openProduct(id); break; } addToCart(id); S.cartDown = null; try{ ttTrack('AddToCart', {content_id:id, content_name:x.name, value:x.price, quantity:1, source:el.dataset.k==='up'?'upsell':'downsell'}); }catch(e){} if($('.drawer')) openCart(); break; }
+    case 'udAdd': { const x = S.products.find(y=>y.id===id); if(!x) break; if(hasVar(x)){ closeAll(); openProduct(id); break; } addToCart(id); S.cartDown = null; try{ ttTrack('AddToCart', {content_id:id, content_name:x.name, value:x.price, quantity:1, source:({up:'upsell',down:'downsell'})[el.dataset.k]||'cart_reco'}); }catch(e){} if($('.drawer')) openCart(); break; }
     case 'udSwap': { const x = S.products.find(y=>y.id===id), n = Math.max(1, Number(el.dataset.n)||1); if(!x) break; if(hasVar(x)){ closeAll(); openProduct(id); break; }
       S.cart = S.cart.filter(l=>!(l.id===el.dataset.from && !l.b && !l.v)); saveCart(); closeAll(); for(let k=0;k<n;k++) addToCart(id); toast(`👍 ${x.name} dans votre panier`); schedule(); break; }
     case 'addBundle': addBundle(id); break;
