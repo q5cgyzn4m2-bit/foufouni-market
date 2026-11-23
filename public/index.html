@@ -543,6 +543,18 @@ tr.mv-tr td:first-child{box-shadow:inset 3px 0 0 var(--indigo)}
 .line-item.gift{background:var(--kola-soft); border-radius:12px; padding:10px; margin-top:8px; border:1px dashed var(--kola)}
 .line-item.gift .li-img{background:var(--surface)}
 .cd-reco{margin:16px 0 4px}
+.gift-pick,.gift-next{margin-top:10px; padding:10px 12px; border-radius:12px; background:var(--surface-2)}
+.gift-next{border:1px dashed var(--line); background:transparent}
+.gp-row{display:flex; gap:8px; margin-top:8px; overflow-x:auto}
+.gp{flex:0 0 auto; width:96px; display:flex; flex-direction:column; align-items:center; gap:4px; padding:6px; border-radius:12px; border:2px solid var(--line); background:var(--surface); font:inherit; color:inherit; text-align:center}
+button.gp{cursor:pointer}
+.gp.on{border-color:var(--kola); background:var(--kola-soft)}
+.gp-img{width:56px; height:56px; border-radius:10px; overflow:hidden; display:grid; place-items:center; font-size:28px; background:var(--surface-2)}
+.gp-img img{width:100%; height:100%; object-fit:cover}
+.gp-n{font-size:11.5px; line-height:1.2; font-weight:700}
+.gift-next .gp{opacity:.8; filter:saturate(.6)}
+.gt-tier{border:1px solid var(--line); border-radius:12px; padding:10px 12px; margin-bottom:10px}
+.gt-item .field{margin-bottom:6px}
 .cd-h{font:800 15px var(--f-d); margin-bottom:10px}
 .cd-row{display:flex; gap:10px; overflow-x:auto; scroll-snap-type:x mandatory; padding-bottom:6px; margin:0 -22px; padding-left:22px; padding-right:22px; scrollbar-width:thin}
 .cd-card{position:relative; flex:0 0 138px; scroll-snap-align:start; border:1px solid var(--line); border-radius:14px; padding:8px; display:flex; flex-direction:column; gap:4px; background:var(--surface)}
@@ -2827,13 +2839,32 @@ function computeTotals(cart, promo, delivery, dest){
   return {lines, subtotal, shipping, discount, total:Math.max(0, subtotal+shipping-discount), carrier, remote, quote, offers};
 }
 /* ===================== Tiroir panier : paliers, délai de livraison, suggestions ===================== */
-const giftOk = (st=S.settings) => st.giftOn!==false && Number(st.giftFrom)>0;
-const giftLabel = (st=S.settings) => String(st.giftName||'Cadeau surprise').trim().slice(0,60) || 'Cadeau surprise';
-const giftFor = sub => giftOk() && sub>=Number(S.settings.giftFrom) ? giftLabel() : '';
+/* Paliers de cadeaux (jusqu'à 3) avec jusqu'à 3 cadeaux au choix ; un cadeau peut être un produit (photo, stock déduit) ou un texte */
+function giftTiersOf(st=S.settings){
+  if(st.giftOn===false) return [];
+  const raw = Array.isArray(st.giftTiers) ? st.giftTiers : [{at:Number(st.giftFrom??50000), items:[{name:st.giftName||'Cadeau surprise'}]}];
+  return raw.slice(0,3).map(t=>({at:Math.round(Number(t.at)||0), label:String(t.label||'').slice(0,60), items:(t.items||[]).slice(0,3).map((it,j)=>{
+      const p = it.pid ? S.products.find(x=>x.id===it.pid) : null, name = String(it.name || (p&&p.name) || '').trim().slice(0,60);
+      if(!name || (it.pid && !p && it.ok===undefined)) return null;
+      return {key:it.key || it.pid || 't'+j, pid:it.pid||'', name, image: p ? (p.image||'') : (it.image||''), emoji: p ? (p.emoji||'🎁') : (it.emoji||'🎁'), ok: p ? !hasVar(p) && (p.stock||0)>0 : it.ok!==false};
+    }).filter(Boolean)})).filter(t=>t.at>0 && t.items.some(i=>i.ok)).sort((a,b)=>a.at-b.at); }
+try{ S.giftPick = JSON.parse(localStorage.getItem('ffm-gift')||'{}') || {}; }catch(e){ S.giftPick = {}; }
+const tierName = t => t.label || (t.items.filter(i=>i.ok).length>1 ? 'Cadeau au choix' : (t.items.find(i=>i.ok)||{}).name || 'Cadeau');
+function giftFor(sub){ const t = giftTiersOf().filter(x=>sub>=x.at).pop(); if(!t) return null;
+  const ok = t.items.filter(i=>i.ok), item = ok.find(i=>i.key===(S.giftPick||{})[t.at]) || ok[0]; return item ? {tier:t, item, ok} : null; }
+function giftPickKey(){ const g = giftFor(computeTotals(S.cart, S.appliedPromo, 'livraison').subtotal); return g ? g.item.key : ''; }
+const giftLine = sub => { const g = giftFor(sub); return g && g.item.pid ? [{id:g.item.pid, name:'🎁 '+g.item.name+' (offert)', price:0, qty:1, gift:true}] : []; };
+const giftImg = i => i.image ? `<img src="${esc(i.image)}" alt="" loading="lazy">` : `<span aria-hidden="true">${esc(i.emoji||'🎁')}</span>`;
 function cartTiers(){ const st = S.settings, t = [];
   if(Number(st.freeFrom)>0) t.push({at:Number(st.freeFrom), ic:'🚚', lb:['Livraison offerte']});
-  if(giftOk()){ const g = Number(st.giftFrom), same = t.find(x=>x.at===g); if(same){ same.ic='🎁'; same.lb.push(giftLabel()); } else t.push({at:g, ic:'🎁', lb:[giftLabel()]}); }
+  giftTiersOf().forEach(g=>{ const same = t.find(x=>x.at===g.at); if(same){ same.ic='🎁'; same.lb.push(tierName(g)); } else t.push({at:g.at, ic:'🎁', lb:[tierName(g)]}); });
   return t.sort((a,b)=>a.at-b.at); }
+function giftBlock(sub){ if(!S.cart.length) return ''; const g = giftFor(sub), next = giftTiersOf().find(t=>sub<t.at); let h = '';
+  if(g){ h += `<div class="line-item gift"><div class="li-img">${giftImg(g.item)}</div><div><b class="small">🎁 ${esc(g.item.name)}</b><div class="muted small">Offert, glissé dans votre colis</div></div><b style="color:var(--kola)">Offert</b></div>`;
+    if(g.ok.length>1) h += `<div class="gift-pick"><div class="small"><b>Choisissez votre cadeau :</b></div><div class="gp-row">${g.ok.map(i=>`<button class="gp${i.key===g.item.key?' on':''}" data-a="giftPick" data-at="${g.tier.at}" data-k="${esc(i.key)}" aria-pressed="${i.key===g.item.key}"><span class="gp-img">${giftImg(i)}</span><span class="gp-n">${esc(i.name)}</span></button>`).join('')}</div></div>`; }
+  if(next){ const ok = next.items.filter(i=>i.ok);
+    h += `<div class="gift-next"><div class="small"><b>🎁 Dès ${fmt(next.at)}${g?', votre cadeau passe au niveau supérieur':''} :</b> ${ok.length>1?'vous choisissez parmi':'vous recevez'}</div><div class="gp-row">${ok.map(i=>`<span class="gp"><span class="gp-img">${giftImg(i)}</span><span class="gp-n">${esc(i.name)}</span></span>`).join('')}</div></div>`; }
+  return h; }
 const shortF = n => n>=1000 ? (Math.round(n/100)/10).toString().replace('.',',')+' k' : String(n);
 function tierBar(sub){ const ts = cartTiers(); if(!ts.length) return '';
   const max = ts[ts.length-1].at, pct = Math.max(sub>0?4:0, Math.min(100, sub/max*100)), next = ts.find(x=>sub<x.at);
@@ -2865,13 +2896,13 @@ function recoBlock(sub, title){ const rs = cartRecos(sub); if(!rs.length) return
 function cartBody(){
   const t = computeTotals(S.cart, S.appliedPromo, 'livraison');
   if(!t.lines.length) return `${tierBar(0)}${cartDownBanner()}<div class="empty" style="margin-top:20px"><h3>Votre panier est vide</h3><p>Ajoutez des articles depuis le catalogue.</p><button class="btn primary" data-a="closeAll">Continuer mes achats</button></div>${recoBlock(0,'🔥 Les plus demandés')}`;
-  const gift = giftFor(t.subtotal);
+  const g = giftFor(t.subtotal), gift = g ? g.item.name : '';
   return `${tierBar(t.subtotal)}${cartDownBanner()}${t.lines.map(l=>`<div class="line-item"><div class="li-img">${pImg(l.img)}</div>
       <div><b class="small">${esc(l.name)}</b><div class="muted small">${fmt(l.unit)}${l.unit<l.regular?` <span class="strike">${fmt(l.regular)}</span>`:''}</div>
       ${l.bulk?`<div class="bulk">Prix de gros appliqué</div>`:''}${l.kind==='bundle'?`<div class="muted small">${l.comps.map(c=>`${c.qty} × ${esc(c.p.name)}`).join(' · ')}</div>`:''}
       <div class="qty" style="margin-top:6px"><button data-a="qty" data-id="${esc(l.key)}" data-d="-1" aria-label="Retirer un">−</button><span>${l.qty}</span><button data-a="qty" data-id="${esc(l.key)}" data-d="1" aria-label="Ajouter un">+</button></div></div>
       <b>${fmt(l.unit*l.qty)}</b></div>`).join('')}
-    ${gift?`<div class="line-item gift"><div class="li-img">🎁</div><div><b class="small">${esc(gift)}</b><div class="muted small">Glissé dans votre colis, avec nos remerciements</div></div><b style="color:var(--kola)">Offert</b></div>`:''}
+    ${giftBlock(t.subtotal)}
     ${recoBlock(t.subtotal, '✨ Complétez votre commande')}
     <div style="margin:14px 0 10px">${etaLine()}</div>
     <div style="margin:12px 0">${promoBox('cart')}</div>
@@ -3010,7 +3041,7 @@ function drawCheckout(){
     ${S.settings.testMode?'<div class="test-note"><b>Mode test.</b> Aucun débit réel n’est effectué : le paiement est simulé.</div>':''}
     <div class="totals" style="margin-top:18px"><div><span>Sous-total</span><span>${fmt(t.subtotal)}</span></div>
     ${t.discount?`<div style="color:var(--kola)"><span>Remise</span><span>−${fmt(t.discount)}</span></div>`:''}
-    <div><span>${t.carrier?'Transport · '+esc(t.carrier.name):'Livraison'}</span><span>${t.quote?'Sur devis':t.shipping?fmt(t.shipping):'Offerte'}</span></div>${giftFor(t.subtotal)?`<div style="color:var(--kola)"><span>🎁 ${esc(giftFor(t.subtotal))}</span><span>Offert</span></div>`:''}<div class="grand"><span>À payer</span><span>${fmt(t.total)}</span></div></div>
+    <div><span>${t.carrier?'Transport · '+esc(t.carrier.name):'Livraison'}</span><span>${t.quote?'Sur devis':t.shipping?fmt(t.shipping):'Offerte'}</span></div>${giftFor(t.subtotal)?`<div style="color:var(--kola)"><span>🎁 ${esc(giftFor(t.subtotal).item.name)}</span><span>Offert</span></div>`:''}<div class="grand"><span>À payer</span><span>${fmt(t.total)}</span></div></div>
     ${t.quote?`<p class="muted small" style="margin:8px 0 0">Le transport vers ${esc(CO.city)} n’est pas inclus : nous vous confirmons son prix sur WhatsApp avant l’expédition.</p>`:''}`;
   }
   $('#overlay').innerHTML = `<div class="scrim" data-a="closeAll"><div class="modal" role="dialog" aria-modal="true" aria-label="Commande">
@@ -3050,8 +3081,8 @@ async function coNext(){
     const id = newId('o');
     const order = {
       number:'FM-'+new Date().toISOString().slice(2,10).replace(/-/g,'')+'-'+rnd(4),
-      items:orderItems(t.lines),
-      subtotal:t.subtotal, discount:t.discount, shipping:t.shipping, total:t.total, ...(t.carrier?{carrier:t.carrier}:{}), ...(t.quote?{shipQuote:true}:{}), ...(giftFor(t.subtotal)?{gift:giftFor(t.subtotal)}:{}),
+      items:[...orderItems(t.lines), ...giftLine(t.subtotal)],
+      subtotal:t.subtotal, discount:t.discount, shipping:t.shipping, total:t.total, ...(t.carrier?{carrier:t.carrier}:{}), ...(t.quote?{shipQuote:true}:{}), ...(giftFor(t.subtotal)?{gift:giftFor(t.subtotal).item.name, giftItem:{name:giftFor(t.subtotal).item.name, pid:giftFor(t.subtotal).item.pid, at:giftFor(t.subtotal).tier.at}}:{}),
       promoCode:S.appliedPromo?S.appliedPromo.code:'',
       source:srcCode(), campaign:cmpCode(), lpPids:lpSeen().filter(id=>S.cart.some(l=>l.id===id)),
       affiliate:S.appliedPromo&&S.appliedPromo.affiliate?{id:S.appliedPromo.affiliate.id, code:S.appliedPromo.code, discountPct:S.appliedPromo.value, commission:affCommission(t.lines, S.appliedPromo.value)}:null,
@@ -4393,7 +4424,7 @@ function orderDetail(o){
       <div>${o.affiliate?`<div class="panel"><h3>Ambassadeur</h3><p style="margin:0"><b>${esc(o.affiliate.code)}</b> · ${esc((S.affiliates.find(a=>a.id===o.affiliate.id)||{}).name||'')}<br>Commission ${fmt(o.affiliate.commission)} <span class="pill ${AFF_ST[affState(o)].c}">${AFF_ST[affState(o)].l}</span></p></div>`:''}<div class="panel"><h3>Client</h3><p style="margin:0">${esc(c.name||'—')}<br>${esc(c.phone||'')}<br>${o.delivery==='livraison'?esc([c.address, c.city, c.country&&c.country!=='ML'?WA[c.country]:''].filter(Boolean).join(', ')):'Retrait en boutique'}${c.note?`<br><span class="muted">Repère : ${esc(c.note)}</span>`:''}</p>
       <div class="fin-actions" style="margin:10px 0 0">${c.phone?`<a class="btn ghost sm" href="tel:${esc(c.phone.replace(/\s/g,''))}">Appeler</a>`:''}
       ${o.delivery==='livraison'&&mapsLink(c)?`<a class="btn ghost sm" href="${esc(mapsLink(c))}" target="_blank" rel="noopener">📍 Google Maps${c.geo?' (position exacte)':''}</a><button class="btn ghost sm" data-a="copyMaps" data-v="${esc(mapsLink(c))}">Copier le lien</button>`:''}</div></div>
-      ${o.gift?`<div class="panel" style="border:2px dashed var(--kola)"><h3>🎁 Cadeau à joindre au colis</h3><p style="margin:0"><b>${esc(o.gift)}</b> : le client a commandé pour ${fmt(o.subtotal)}.</p></div>`:''}
+      ${o.gift?`<div class="panel" style="border:2px dashed var(--kola)"><h3>🎁 Cadeau à joindre au colis</h3><p style="margin:0"><b>${esc(o.gift)}</b> : le client a commandé pour ${fmt(o.subtotal)}${o.giftItem&&o.giftItem.at?` (palier ${fmt(o.giftItem.at)})`:''}.${o.giftItem&&o.giftItem.pid?' <span class="muted small">Ce produit est retiré du stock avec la commande.</span>':''}</p></div>`:''}
       ${o.delivery==='livraison'&&(o.carrier||o.shipQuote)?`<div class="panel"><h3>${o.carrier?SHIP_MODES[o.carrier.mode||'route'][0]:'🌍'} Transport vers ${esc(o.customer?.city||'')}</h3>${o.carrier?`<p style="margin:0"><b>${esc(o.carrier.name)}</b> · ${esc(SHIP_MODES[o.carrier.mode||'route'][1])} · <b>${fmt(o.carrier.price)}</b>${o.carrier.days?' · '+esc(o.carrier.days):''}</p>${o.carrier.note?`<p class="muted small" style="margin:6px 0 0">${esc(o.carrier.note)}</p>`:''}${(()=>{ const c=(S.settings.carriers||[]).find(x=>x.id===o.carrier.id); return c&&c.phone?`<a class="btn ghost sm" style="margin-top:8px" href="tel:${esc(String(c.phone).replace(/\s/g,''))}">📞 Appeler ${esc(c.name)}</a>`:''; })()}`:`<p style="margin:0">Transport <b>sur devis</b> : aucune compagnie n’a de tarif pour cette destination. Confirmez le prix au client sur WhatsApp.</p>`}</div>`:''}
       ${o.delivery==='livraison'?`<div class="panel"><h3>🛵 Livraison</h3>
         <div class="row" style="align-items:flex-end;gap:8px"><div class="field" style="margin:0"><label for="od-drv">Livreur</label><select class="input" id="od-drv"><option value="">— Choisir —</option>${S.drivers.filter(d=>d.active!==false||(o.driver&&o.driver.id===d.id)).map(d=>`<option value="${d.id}" ${o.driver&&o.driver.id===d.id?'selected':''}>${esc(d.name)} · ${esc(d.phone)}</option>`).join('')}</select></div><button class="btn ghost sm" data-a="drivers" style="flex:0;white-space:nowrap">＋ Livreurs</button></div>
@@ -4508,6 +4539,19 @@ function openTickets(){
 }
 
 /* --- Paiements & boutique --- */
+function giftEditor(st){
+  const tiers = Array.isArray(st.giftTiers) ? st.giftTiers : [{at:Number(st.giftFrom??50000), items:[{name:st.giftName||'Cadeau surprise'}]}];
+  const prods = S.products.filter(p=>!hasVar(p) && !isPartner(p)).sort((a,b)=>String(a.name).localeCompare(String(b.name),'fr'));
+  return `<div class="gt-wrap">${[0,1,2].map(i=>{ const t = tiers[i] || {}, its = t.items || [];
+    return `<div class="gt-tier"><div class="row" style="align-items:flex-end"><div class="field" style="flex:0 1 200px"><label for="gt-at-${i}">Palier ${i+1} : cadeau dès (FCFA)</label><input class="input" id="gt-at-${i}" inputmode="numeric" value="${esc(t.at||'')}" placeholder="${['ex. 50000','ex. 100000 (facultatif)','ex. 150000 (facultatif)'][i]}"></div>
+      <div class="field"><label for="gt-lb-${i}">Titre dans la barre (facultatif)</label><input class="input" id="gt-lb-${i}" maxlength="60" value="${esc(t.label||'')}" placeholder="ex. Cadeau au choix"></div></div>
+      ${[0,1,2].map(j=>{ const it = its[j] || {}; return `<div class="row gt-item"><div class="field"><label for="gt-p-${i}-${j}">Cadeau ${j+1}${j?' (au choix)':''}</label><select class="input" id="gt-p-${i}-${j}"><option value="">${j?'— Aucun / texte libre —':'Texte libre (pas de stock)'}</option>${prods.map(p=>`<option value="${esc(p.id)}" ${p.id===it.pid?'selected':''}>${esc(p.name)} · stock ${p.stock||0}</option>`).join('')}</select></div>
+        <div class="field"><label for="gt-n-${i}-${j}">Nom affiché</label><input class="input" id="gt-n-${i}-${j}" maxlength="60" value="${esc(it.name||'')}" placeholder="${it.pid?'Nom du produit':'ex. Lampe torche LED'}"></div></div>`; }).join('')}</div>`; }).join('')}</div>`; }
+function readGiftEditor(){ const out = [];
+  for(let i=0;i<3;i++){ const at = Number(($('#gt-at-'+i)?.value||'').replace(/\D/g,''))||0, items = [];
+    for(let j=0;j<3;j++){ const pid = $(`#gt-p-${i}-${j}`)?.value || '', name = ($(`#gt-n-${i}-${j}`)?.value||'').trim().slice(0,60); if(pid || name) items.push(pid ? {pid, name} : {name}); }
+    if(at>0 && items.length) out.push({at, label:($('#gt-lb-'+i)?.value||'').trim().slice(0,60), items}); }
+  return out.sort((a,b)=>a.at-b.at); }
 function panePayments(){
   const st = S.settings;
   return `<h2 style="font-size:24px;margin-bottom:16px">Paiements et boutique</h2>
@@ -4530,12 +4574,11 @@ function panePayments(){
     <div class="field"><label for="st-free">Livraison offerte dès</label><input class="input" id="st-free" inputmode="numeric" value="${esc(st.freeFrom)}"></div>
     <div class="field"><label for="st-cur">Devise</label><input class="input" id="st-cur" value="${esc(st.currency)}"></div>
     <div class="field"><label for="st-phone">Téléphone boutique</label><input class="input" id="st-phone" value="${esc(st.phone)}"></div></div>
-    <h4 style="margin:16px 0 6px">🎁 Panier : cadeau offert et délai affiché</h4>
-    <label class="check-row" style="display:flex;gap:8px;align-items:center;margin-bottom:8px"><input type="checkbox" id="st-gift-on" ${st.giftOn!==false?'checked':''}> Offrir un cadeau à partir d’un montant d’achat (barre de progression dans le panier)</label>
-    <div class="row"><div class="field"><label for="st-gift-from">Cadeau offert dès (FCFA)</label><input class="input" id="st-gift-from" inputmode="numeric" value="${esc(st.giftFrom??50000)}"></div>
-    <div class="field"><label for="st-gift-name">Nom du cadeau</label><input class="input" id="st-gift-name" maxlength="60" value="${esc(st.giftName||'Cadeau surprise')}" placeholder="ex. Cadeau surprise, Porte-clés foûfoûni"></div>
-    <div class="field"><label for="st-days">Délai de livraison (jours ouvrés)</label><input class="input" id="st-days" maxlength="10" value="${esc(st.deliveryDays||'1-2')}" placeholder="ex. 1-2 ou 0-1"></div></div>
-    <p class="muted small" style="margin:4px 0 0">Le panier affiche « Plus que X FCFA pour débloquer… », la date de livraison estimée (dimanches exclus) et des produits suggérés pour atteindre le palier. Le cadeau apparaît sur la commande et le reçu ; pensez à le glisser dans le colis.</p>
+    <h4 style="margin:16px 0 6px">🎁 Panier : cadeaux offerts et délai affiché</h4>
+    <label class="check-row" style="display:flex;gap:8px;align-items:center;margin-bottom:8px"><input type="checkbox" id="st-gift-on" ${st.giftOn!==false?'checked':''}> Offrir des cadeaux à partir d’un montant d’achat (barre de progression dans le panier)</label>
+    ${giftEditor(st)}
+    <div class="row"><div class="field" style="max-width:260px"><label for="st-days">Délai de livraison (jours ouvrés)</label><input class="input" id="st-days" maxlength="10" value="${esc(st.deliveryDays||'1-2')}" placeholder="ex. 1-2 ou 0-1"></div></div>
+    <p class="muted small" style="margin:4px 0 0">Jusqu’à 3 paliers, et jusqu’à 3 cadeaux au choix par palier : le client reçoit le cadeau du palier le plus haut atteint et choisit lui-même s’il y en a plusieurs. Un cadeau choisi parmi vos produits affiche sa photo et sort du stock avec la commande ; en texte libre, rien n’est déduit. Un produit en rupture n’est plus proposé.</p>
   </div>
   <div style="margin-top:16px;display:flex;justify-content:flex-end"><button class="btn primary" data-a="saveSettings">Enregistrer les réglages</button></div>`;
 }
@@ -4612,7 +4655,7 @@ async function saveSettings(){
   const s = structuredClone(S.settings), v = id=>($(id)?.value||'').trim();
   s.shopName=v('#st-name')||'foûfoûni-Market'; s.city=v('#st-city'); s.tagline=v('#st-tag'); s.intro=v('#st-intro'); s.currency=v('#st-cur')||'FCFA'; s.phone=v('#st-phone');
   s.deliveryFee=Number(v('#st-fee'))||0; s.freeFrom=Number(v('#st-free'))||0; s.testMode=$('#st-test').checked;
-  if($('#st-gift-on')){ s.giftOn=$('#st-gift-on').checked; s.giftFrom=Math.max(0, Number(v('#st-gift-from').replace(/\D/g,''))||0); s.giftName=v('#st-gift-name').slice(0,60)||'Cadeau surprise'; s.deliveryDays=v('#st-days').slice(0,10)||'1-2'; }
+  if($('#st-gift-on')){ s.giftOn=$('#st-gift-on').checked; s.giftTiers = readGiftEditor(); s.giftFrom = s.giftTiers[0]?.at || 0; s.giftName = s.giftTiers[0]?.items[0]?.name || ''; s.deliveryDays=v('#st-days').slice(0,10)||'1-2'; }
   document.querySelectorAll('[data-proc]').forEach(i=>{ s.processors[i.dataset.proc].account=i.value.trim(); });
   document.querySelectorAll('[data-proc-on]').forEach(i=>{ s.processors[i.dataset.procOn].enabled=i.checked; });
   document.querySelectorAll('[data-proc-show]').forEach(i=>{ const k = i.dataset.procShow; s.processors[k] = {...(s.processors[k]||{}), showLogo:i.checked}; });
@@ -4723,6 +4766,7 @@ document.addEventListener('click', async e=>{
     case 'qty': { const before = S.cart.find(x=>lineKey(x)===id); changeQty('cart', id, Number(el.dataset.d));
       if(before && before.id && !S.cart.includes(before)){ const bp = S.products.find(x=>x.id===before.id), dn = downsellFor(bp); S.cartDown = dn ? {from:bp.id, to:dn.id} : null; if(dn) openCart(); }
       if(!S.cart.length) openCart(); break; }
+    case 'giftPick': { S.giftPick = {...(S.giftPick||{}), [el.dataset.at]: el.dataset.k}; try{ localStorage.setItem('ffm-gift', JSON.stringify(S.giftPick)); }catch(err){} refreshCart(); break; }
     case 'udAdd': { const x = S.products.find(y=>y.id===id); if(!x) break; if(hasVar(x)){ closeAll(); openProduct(id); break; } addToCart(id); S.cartDown = null; try{ ttTrack('AddToCart', {content_id:id, content_name:x.name, value:x.price, quantity:1, source:({up:'upsell',down:'downsell'})[el.dataset.k]||'cart_reco'}); }catch(e){} if($('.drawer')) openCart(); break; }
     case 'udSwap': { const x = S.products.find(y=>y.id===id), n = Math.max(1, Number(el.dataset.n)||1); if(!x) break; if(hasVar(x)){ closeAll(); openProduct(id); break; }
       S.cart = S.cart.filter(l=>!(l.id===el.dataset.from && !l.b && !l.v)); saveCart(); closeAll(); for(let k=0;k<n;k++) addToCart(id); toast(`👍 ${x.name} dans votre panier`); schedule(); break; }

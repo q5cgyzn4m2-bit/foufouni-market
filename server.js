@@ -140,7 +140,7 @@ function publicSettings() {
   const s = settings();
   const procs = {}; for (const [k, v] of Object.entries(s.processors || {})) procs[k] = { enabled: !!v.enabled, ...(typeof v.showLogo === 'boolean' ? { showLogo: v.showLogo } : {}), ...(/^data:image\/(png|jpeg|webp);base64,/.test(v.logo || '') && v.logo.length < 250000 ? { logo: v.logo } : {}) }; // jamais d'identifiants côté public, seulement le logo
   return { shopName: s.shopName, tagline: s.tagline, intro: s.intro, currency: s.currency, deliveryFee: s.deliveryFee, freeFrom: s.freeFrom, city: s.city, phone: s.phone, processors: procs,
-    giftOn: s.giftOn !== false, giftFrom: Math.max(0, Number(s.giftFrom) || 0), giftName: String(s.giftName || 'Cadeau surprise').slice(0, 60), deliveryDays: String(s.deliveryDays || '1-2').slice(0, 10),
+    giftOn: s.giftOn !== false, giftFrom: Math.max(0, Number(s.giftFrom) || 0), giftName: String(s.giftName || 'Cadeau surprise').slice(0, 60), giftTiers: giftTiers(s), deliveryDays: String(s.deliveryDays || '1-2').slice(0, 10),
     carouselOn: s.carouselOn !== false, carouselMode: ['both', 'new', 'sale'].includes(s.carouselMode) ? s.carouselMode : 'both', carouselSpeed: ['lent', 'normal', 'rapide'].includes(s.carouselSpeed) ? s.carouselSpeed : 'normal',
     showTrust: s.showTrust !== false, deliveryPromise: String(s.deliveryPromise || '').slice(0, 40), returnPolicy: String(s.returnPolicy || '').slice(0, 40),
     manualPay: manualPay(), shipCountries: Array.isArray(s.shipCountries) ? s.shipCountries : ['ML'], carriers: cleanCarriers(s.carriers).filter(c => c.active).map(({ phone, ...c }) => c), localCities: String(s.localCities || '').slice(0, 400),
@@ -1300,7 +1300,20 @@ const publicOrder = (o, id) => {
   return { ...rest, id, payment: pay };
 };
 /* Cadeau offert à partir d'un montant d'achat (réglé dans Gestion › Réglages) */
-const giftOf = sub => { const s = settings(); return s.giftOn !== false && Number(s.giftFrom) > 0 && sub >= Number(s.giftFrom) ? String(s.giftName || 'Cadeau surprise').slice(0, 60) : ''; };
+/* Paliers de cadeaux : jusqu'à 3 paliers, jusqu'à 3 cadeaux au choix par palier ; un cadeau peut être un produit (stock déduit) ou un simple texte */
+function giftTiers(s = settings()) {
+  if (s.giftOn === false) return [];
+  const raw = Array.isArray(s.giftTiers) ? s.giftTiers : [{ at: Number(s.giftFrom ?? 50000), items: [{ name: s.giftName || 'Cadeau surprise' }] }];
+  return raw.slice(0, 3).map(t => ({ at: Math.max(0, Math.round(Number(t.at) || 0)), label: String(t.label || '').slice(0, 60),
+    items: (Array.isArray(t.items) ? t.items : []).slice(0, 3).map((it, j) => {
+      const pid = validId(String(it.pid || '')) ? String(it.pid) : '', p = pid && getDoc('products', pid);
+      if (pid && !p) return null;
+      const name = String(it.name || (p && p.name) || '').trim().slice(0, 60); if (!name) return null;
+      return { key: pid || 't' + j, pid, name, image: p ? (p.image || '') : '', emoji: p ? (p.emoji || '🎁') : '🎁', ok: p ? !hasVar(p) && (Number(p.stock) || 0) > 0 : true };
+    }).filter(Boolean) })).filter(t => t.at > 0 && t.items.some(i => i.ok)).sort((a, b) => a.at - b.at);
+}
+const giftOf = (sub, pick) => { const t = giftTiers().filter(x => sub >= x.at).pop(); if (!t) return null;
+  const ok = t.items.filter(i => i.ok), item = ok.find(i => i.key === String(pick || '')) || ok[0]; return item ? { at: t.at, item } : null; };
 app.post('/api/orders', h(async (req, res) => {
   if (limited('order:' + req.ip, 15, 600e3)) throw httpErr(429, 'Trop de commandes en peu de temps. Réessayez plus tard.');
   const b = req.body || {};
@@ -1318,10 +1331,12 @@ app.post('/api/orders', h(async (req, res) => {
   const t = computeOrder(b.items, b.promoCode, delivery, b.ref, { country: customer.country, city: customer.city, carrier: b.carrier });
   if (method !== 'cod' && t.total < 100) throw httpErr(400, 'Montant trop faible pour un paiement mobile.');
 
+  const gift = giftOf(t.subtotal, b.giftPick);
+  if (gift && gift.item.pid) t.lines.push({ id: gift.item.pid, name: '🎁 ' + gift.item.name + ' (offert)', price: 0, qty: 1, gift: true });
   const id = newOrderId();
   const order = {
     number: 'FM-' + new Date().toISOString().slice(2, 10).replace(/-/g, '') + '-' + rnd(4),
-    items: t.lines, subtotal: t.subtotal, discount: t.discount, shipping: t.shipping, total: t.total, promoCode: t.promoCode, affiliate: t.affiliate, ...(t.carrier ? { carrier: t.carrier } : {}), ...(t.shipQuote ? { shipQuote: true } : {}), ...(giftOf(t.subtotal) ? { gift: giftOf(t.subtotal) } : {}),
+    items: t.lines, subtotal: t.subtotal, discount: t.discount, shipping: t.shipping, total: t.total, promoCode: t.promoCode, affiliate: t.affiliate, ...(t.carrier ? { carrier: t.carrier } : {}), ...(t.shipQuote ? { shipQuote: true } : {}), ...(gift ? { gift: gift.item.name, giftItem: { name: gift.item.name, pid: gift.item.pid, at: gift.at } } : {}),
     lpPids: (Array.isArray(b.lpPids) ? b.lpPids : []).map(String).filter(x => validId(x) && t.lines.some(l => l.id === x)).slice(0, 20),
     source: String(b.source || '').toLowerCase().replace(/[^a-z0-9_-]/g, '').slice(0, 20), campaign: String(b.campaign || '').replace(/[^A-Za-z0-9_-]/g, '').slice(0, 30),
     customer, delivery, payment: { method, status: method === 'cod' ? 'à encaisser' : manual ? 'à vérifier' : 'en attente', ref: manual ? String(b.payRef || '').trim().slice(0, 60) : '', manual: !!manual, to: manual || '' },
