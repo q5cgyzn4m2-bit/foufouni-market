@@ -543,6 +543,22 @@ tr.mv-tr td:first-child{box-shadow:inset 3px 0 0 var(--indigo)}
 .line-item.gift{background:var(--kola-soft); border-radius:12px; padding:10px; margin-top:8px; border:1px dashed var(--kola)}
 .line-item.gift .li-img{background:var(--surface)}
 .cd-reco{margin:16px 0 4px}
+.gift-banner{display:flex; align-items:center; gap:12px; width:100%; margin:14px 0 0; padding:12px 14px; border-radius:14px; border:1.5px dashed var(--kola); background:var(--kola-soft); color:inherit; font:inherit; text-align:left; cursor:pointer}
+.gift-banner:hover{filter:brightness(1.05)}
+.gb-ic{font-size:26px; animation:gbw 2.6s ease-in-out infinite}
+@keyframes gbw{0%,80%,100%{transform:rotate(0)}85%{transform:rotate(-12deg)}90%{transform:rotate(10deg)}95%{transform:rotate(-6deg)}}
+@media (prefers-reduced-motion:reduce){.gb-ic{animation:none}}
+.gb-t{flex:1; display:flex; flex-direction:column; gap:2px; font-size:14.5px}
+.gb-cta{font-weight:800; font-size:13px; color:var(--kola); white-space:nowrap}
+.gh .cd-tier{position:static; margin:0 0 14px; border:1px solid var(--line); border-radius:14px}
+.gh-steps{list-style:none; padding:0; margin:0 0 12px; display:grid; gap:10px; counter-reset:gh}
+.gh-steps li{display:flex; gap:10px; align-items:flex-start; font-size:14.5px; line-height:1.4; counter-increment:gh}
+.gh-n{flex:0 0 26px; height:26px; border-radius:50%; display:grid; place-items:center; font-weight:800; font-size:13px; background:var(--surface-2); border:1.5px solid var(--line)}
+.gh-n:empty::before{content:counter(gh)}
+.gh-steps li.done .gh-n{background:var(--kola); border-color:var(--kola); color:#fff}
+.gh-steps li.done>span:last-child{color:var(--muted)}
+.gh-tier{padding:10px 12px; border-radius:12px; border:1px dashed var(--line); margin-top:8px}
+.gh-tier.on{border:1.5px solid var(--kola); background:var(--kola-soft)}
 .gift-pick,.gift-next{margin-top:10px; padding:10px 12px; border-radius:12px; background:var(--surface-2)}
 .gift-next{border:1px dashed var(--line); background:transparent}
 .gp-row{display:flex; gap:8px; margin-top:8px; overflow-x:auto}
@@ -2600,6 +2616,38 @@ function upsellModal(p, n){ const up = upsellFor(p); if(!up) return; S._upShown 
 function cartDownBanner(){ const c = S.cartDown; if(!c) return ''; const from = S.products.find(x=>x.id===c.from), to = S.products.find(x=>x.id===c.to);
   if(!from || !udOk(to) || S.cart.some(l=>l.id===to.id)) return '';
   return `<div class="ud down" style="margin:0 0 14px"><span class="ud-tag">💡 Le prix vous freine ?</span><span class="ud-img">${pImg(to)}</span><div class="ud-txt"><b>${esc(to.name)}</b><div><b>${fmt(to.price)}</b> <span class="ud-minus">−${fmt(from.price-to.price)}</span> <span class="muted small">au lieu de ${esc(from.name)}</span></div></div><button class="btn primary sm" data-a="udAdd" data-id="${to.id}" data-from="${from.id}" data-k="down">Ajouter</button></div>`; }
+/* ===================== Popup « Comment obtenir le cadeau » sur les pages produit ===================== */
+function giftCalc(p){ const tiers = giftTiersOf(), sub = computeTotals(S.cart, S.appliedPromo, 'livraison').subtotal, inCart = S.cart.some(l=>l.id===p.id);
+  const add = inCart || p.stock<=0 ? 0 : p.price*Math.max(1, S.pqty||1), withP = sub + add, next = tiers.find(t=>withP<t.at), got = tiers.filter(t=>withP>=t.at).pop();
+  return {tiers, sub, inCart, add, withP, next, got}; }
+function giftBanner(p){ const c = giftCalc(p); if(!c.tiers.length) return ''; const first = c.tiers[0];
+  const title = c.next ? (c.got ? `Cadeau débloqué ! Le suivant dès ${fmt(c.next.at)}` : `Cadeau offert dès ${fmt(first.at)} d’achat`) : 'Votre cadeau est débloqué 🎉';
+  const sub = c.next ? `${c.add&&!c.inCart?'Avec cet article, il':'Il'} vous manque ${fmt(c.next.at-c.withP)}` : 'Il sera glissé dans votre colis';
+  return `<button class="gift-banner" data-a="giftHow" data-id="${p.id}"><span class="gb-ic" aria-hidden="true">🎁</span><span class="gb-t"><b>${title}</b><span class="muted small">${sub}</span></span><span class="gb-cta">Comment ?</span></button>`; }
+function giftHowModal(p){ const c = giftCalc(p); if(!c.tiers.length) return; const first = c.tiers[0];
+  try{ sessionStorage.setItem('ffm-gift-how','1'); }catch(e){}
+  const ok = t => t.items.filter(i=>i.ok), multi = t => ok(t).length>1;
+  const target = c.next || c.got, step = (done, html) => `<li class="${done?'done':''}"><span class="gh-n" aria-hidden="true">${done?'✓':''}</span><span>${html}</span></li>`;
+  $('#overlay').innerHTML = `<div class="scrim" data-a="closeAll"><div class="modal gh" role="dialog" aria-modal="true" aria-label="Comment obtenir le cadeau"><div class="m-h"><h2>🎁 Comment obtenir votre cadeau</h2><button class="x" data-a="closeAll" aria-label="Fermer">×</button></div>
+    <div class="m-b">${tierBar(c.withP)}
+      <ol class="gh-steps">
+        ${step(c.inCart, c.inCart ? `<b>${esc(p.name)}</b> est déjà dans votre panier` : p.stock>0 ? `Ajoutez <b>${esc(p.name)}</b> à votre panier (${fmt(c.add)})` : `Ajoutez des articles à votre panier`)}
+        ${step(c.withP>=first.at && !c.next, c.next ? `Atteignez <b>${fmt(c.next.at)}</b> d’achat : il vous manque <b style="color:var(--kola)">${fmt(c.next.at-c.withP)}</b>${S.cart.length||c.add?` (panier${c.add&&!c.inCart?' avec cet article':''} : ${fmt(c.withP)})`:''}` : `Montant atteint : <b>${fmt(c.withP)}</b> dans votre panier`)}
+        ${step(false, multi(target) ? `Ouvrez votre panier et <b>choisissez votre cadeau</b> parmi ${ok(target).length} au choix` : `Votre cadeau <b>${esc(ok(target)[0].name)}</b> s’ajoute tout seul au panier`)}
+        ${step(false, `Validez votre commande : le cadeau est <b>glissé dans votre colis, gratuitement</b>`)}
+      </ol>
+      ${c.tiers.map(t=>`<div class="gh-tier${c.withP>=t.at?' on':''}"><div class="small"><b>${c.withP>=t.at?'✅':'🎁'} Dès ${fmt(t.at)}</b> · ${multi(t)?'un cadeau au choix':'votre cadeau'}${c.tiers.length>1&&t===c.tiers[c.tiers.length-1]?' (le plus beau)':''}</div>
+        <div class="gp-row">${ok(t).map(i=>`<span class="gp"><span class="gp-img">${giftImg(i)}</span><span class="gp-n">${esc(i.name)}</span></span>`).join('')}</div></div>`).join('')}
+      <p class="muted small" style="margin:10px 0 0">Un seul cadeau par commande : celui du palier le plus haut atteint. Calculé sur le montant des articles, avant frais de livraison. Dans la limite des stocks.</p>
+    </div>
+    <div class="m-f">${!c.inCart && p.stock>0 ? `<button class="btn ghost" data-a="cart">Voir mon panier</button><button class="btn primary" data-a="ghAdd" data-id="${p.id}">Ajouter au panier</button>` : `<button class="btn ghost" data-a="closeAll">Continuer mes achats</button><button class="btn primary" data-a="cart">Voir mon panier</button>`}</div></div></div>`;
+}
+/* Ouverture automatique : une fois par visite, après quelques secondes sur une page produit, si rien d’autre n’est ouvert */
+function queueGiftHow(p){ if(S._ghPid===p.id) return; S._ghPid = p.id; clearTimeout(S._ghT);
+  try{ if(sessionStorage.getItem('ffm-gift-how')) return; }catch(e){ return; }
+  S._ghT = setTimeout(()=>{ const c = giftCalc(p);
+    if(S.view!=='product' || S.pid!==p.id || !c.tiers.length || !c.next || $('#overlay').innerHTML.trim() || document.querySelector('.ai-panel') || document.activeElement?.matches('input,textarea,select')) return;
+    giftHowModal(p); }, 6000); }
 function viewProduct(){
   const p = S.products.find(x=>x.id===S.pid && x.active!==false); if(!p){ S.view='shop'; return viewShop(); }
   const imgs = galleryFor(p), st = S.settings, save = p.comparePrice>p.price ? p.comparePrice-p.price : 0;
@@ -2609,6 +2657,7 @@ function viewProduct(){
   const paras = String(p.details||'').split(/\n\s*\n/).map(x=>x.trim()).filter(Boolean);
   const pays = enabledProcs().map(([k])=>PROCESSORS[k].name);
   const q = Math.max(1, S.pqty||1), out = p.stock<=0;
+  if(!isPartner(p)) queueGiftHow(p);
   const gal = imgs.length
     ? `<div class="gal-main" id="gal">${imgs.map((src,i)=>`<div><img src="${esc(src)}" alt="${esc(p.name)} — photo ${i+1}" ${i?'loading="lazy"':''}>${photoOverlay(p, true)}</div>`).join('')}</div>
        ${imgs.length>1?`<div class="gal-th" role="group" aria-label="Photos">${imgs.map((src,i)=>`<button data-a="galGo" data-i="${i}" aria-current="${i===0}" aria-label="Photo ${i+1}"><img src="${esc(src)}" alt=""></button>`).join('')}</div>`:''}`
@@ -2629,6 +2678,7 @@ function viewProduct(){
       ${isPartner(p)?partnerBox(p):out?'':`<div class="pdp-buy"><div class="qty big"><button data-a="pdpQty" data-d="-1" aria-label="Moins">−</button><span>${q}</span><button data-a="pdpQty" data-d="1" aria-label="Plus">+</button></div>
         <button class="btn primary btn-live" data-a="pdpAdd">Ajouter au panier</button><button class="btn ghost" data-a="pdpBuy">Acheter maintenant</button></div>
         ${shopWa()?`<button class="btn wa btn-live" data-a="waProduct" data-id="${p.id}" style="margin-top:10px;width:100%">${WA_ICON}Commander ce produit sur WhatsApp</button>`:''}`}
+      ${isPartner(p)?'':giftBanner(p)}
       <div ${isPartner(p)?'hidden':''}><div class="trust-box"><div><span>🚚</span><span><b>Livraison à ${esc(st.city)}</b> ${st.freeFrom?`Offerte dès ${fmt(st.freeFrom)} d’achat, sinon ${fmt(st.deliveryFee)}. `:''}Retrait en boutique possible.</span></div>
         <div><span>💳</span><span><b>Paiement sécurisé</b>${esc(pays.join(', ')||'À la livraison')}${payRow(false)}</span></div>
         ${p.warranty?`<div><span>🛡️</span><span><b>Garantie et retour</b>${esc(p.warranty)}</span></div>`:''}
@@ -4760,6 +4810,8 @@ document.addEventListener('click', async e=>{
     case 'clearSearch': S.q=''; S.cat='Tout'; schedule(); break;
     case 'scroll': $('#catalogue').scrollIntoView({behavior:matchMedia('(prefers-reduced-motion:reduce)').matches?'auto':'smooth'}); break;
     case 'cart': openCart(); break;
+    case 'ghAdd': { const p = S.products.find(x=>x.id===id); closeAll(); const b = document.querySelector('#main [data-a=pdpAdd], main [data-a=pdpAdd]'); if(!b || !p) break; const n0 = cartCount(); b.click(); setTimeout(()=>{ if(cartCount()>n0 && !$('#overlay').innerHTML.trim()) giftHowModal(p); }, 120); break; }
+    case 'giftHow': { const p = S.products.find(x=>x.id===id); if(p) giftHowModal(p); break; }
     case 'add': addToCart(id); break;
     case 'product': openBest(id); break;
     case 'addClose': addToCart(id); closeAll(); break;
