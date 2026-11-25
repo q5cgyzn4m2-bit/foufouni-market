@@ -565,7 +565,9 @@ tr.mv-tr td:first-child{box-shadow:inset 3px 0 0 var(--indigo)}
 .hero.has-flow .vitrine{background:color-mix(in srgb, var(--surface-2) 82%, transparent); -webkit-backdrop-filter:blur(8px); backdrop-filter:blur(8px)}
 .hero-flow{position:absolute; inset:-40px -20px; z-index:0; display:grid; grid-template-columns:repeat(5,minmax(0,1fr)); gap:12px; transform:rotate(-8deg) scale(1.15); opacity:.55; pointer-events:none;
   -webkit-mask-image:linear-gradient(90deg, rgba(0,0,0,.35) 0%, #000 45%, #000 100%); mask-image:linear-gradient(90deg, rgba(0,0,0,.35) 0%, #000 45%, #000 100%)}
-.hf-col{overflow:hidden; height:100%}
+.hero-flow:not(.on) .hf-col{opacity:0}
+.hf-col{overflow:hidden; height:100%; transition:opacity 1.2s ease}
+.hero.hf-paused .hf-track{animation-play-state:paused}
 .hf-track{display:flex; flex-direction:column; gap:12px; animation:hfDown var(--hf-d) linear infinite; animation-delay:var(--hf-o)}
 .hf-col.up .hf-track{animation-name:hfUp}
 .hf-track span{display:block; aspect-ratio:3/4; border-radius:16px; overflow:hidden; background:var(--surface-2); box-shadow:0 10px 30px rgba(0,0,0,.35)}
@@ -578,6 +580,8 @@ tr.mv-tr td:first-child{box-shadow:inset 3px 0 0 var(--indigo)}
   .hero-flow .hf-col:nth-child(n+4){display:none}
   .hero.has-flow .hero-txt{background:linear-gradient(180deg, color-mix(in srgb, var(--surface) 45%, transparent) 0%, color-mix(in srgb, var(--surface) 68%, transparent) 50%, color-mix(in srgb, var(--surface) 82%, transparent) 100%)}
   .hero.has-flow h1{text-shadow:0 2px 18px rgba(0,0,0,.55)}
+  .hero.has-flow .hero-txt,.hero.has-flow .vitrine{-webkit-backdrop-filter:none; backdrop-filter:none}
+  .hf-track span{box-shadow:none}
 }
 @media (max-width:760px){
   .tb{grid-template-columns:repeat(2,minmax(0,1fr)); margin:-18px 0 28px} .tb>div{padding:11px}
@@ -1163,6 +1167,7 @@ function render(){
   if((S.view==='product' || S.view==='landing') && S._vc !== S.view+S.pid){ S._vc = S.view+S.pid; const pp = S.products.find(x=>x.id===S.pid); if(pp) ttTrack('ViewContent', {contents:[ttItem(pp)], value:Math.round(pp.price)}); }
   if(S.view!=='product' && S.view!=='landing') S._vc = '';
   if(S.view==='landing') setTimeout(lpAfterRender, 0);
+  if(S.view==='shop') setTimeout(heroFlowStart, 0);
   if(S.spDeep && S.isAdmin && (S.socialPosts||[]).length){ const id = S.spDeep; S.spDeep = null; try{ history.replaceState({}, '', location.pathname); }catch(e){} S.view='admin'; S.tab='social'; setTimeout(()=>{ schedule(); setTimeout(()=>spOpen(id), 200); }, 0); }
   if(document.querySelector('video[data-hls]')) setTimeout(attachHls, 0);
   ['co-seoTitle','co-seoDesc'].forEach(id=>{ const el = $('#'+id); if(el && el.value) seoCounter(el, id==='co-seoTitle'?60:155, $('#'+id+'-c')); });
@@ -1324,11 +1329,25 @@ function homeReviews(){ const rv = S.reviews.filter(r=>r.status!=='hidden' && r.
       return `<figure class="hrv-c">${im?`<button class="hrv-im" data-a="rvZoom" data-v="${esc(r.photos[0])}" aria-label="Agrandir la photo du client"><img src="${esc(im)}" alt="Photo d’un client" loading="lazy"></button>`:''}<div>${starsHTML(r.rating)}</div><blockquote>« ${esc(cut(r.comment))} »</blockquote>
         <figcaption><b>${esc(shortName(r.name))}</b> <span class="rvp-ok">✓ Achat vérifié</span>${p?`<button class="linkbtn small" data-a="product" data-id="${p.id}" style="display:block;margin-top:2px">${esc(niceName(p.name))}</button>`:''}</figcaption></figure>`; }).join('')}</div>`; }
 /* Photos produits qui défilent en cascade derrière l'accroche */
-function heroFlow(){ if(S.settings.heroFlow===false) return ''; const ims = shopBase().filter(p=>p.image && p.stock>0 && !isPartner(p)).map(p=>p.image); if(ims.length<4) return '';
-  const cols = 5, list = []; while(list.length < cols*4) list.push(...ims); 
-  return `<div class="hero-flow" aria-hidden="true">${Array.from({length:cols}, (_,c)=>{ const col = list.slice(c*4, c*4+4).concat(list.slice((c*4+7)%ims.length, (c*4+7)%ims.length+2)).slice(0,5);
-    const html = col.map(u=>`<span><img src="${esc(u)}" alt="" loading="lazy" decoding="async"></span>`).join('');
-    return `<div class="hf-col${c%2?' up':''}" style="--hf-d:${34+c*7}s;--hf-o:${-c*9}s"><div class="hf-track">${html}${html}</div></div>`; }).join('')}</div>`; }
+function heroFlow(){ if(S.settings.heroFlow===false || S._hfOff) return ''; const ims = [...new Set(shopBase().filter(p=>p.image && p.stock>0 && !isPartner(p)).map(p=>p.image))].slice(0,8); if(ims.length<4) return '';
+  const on = !!S._hfOn, t = Date.now()/1000;
+  return `<div class="hero-flow${on?' on':''}" aria-hidden="true">${Array.from({length:5}, (_,c)=>{ const col = Array.from({length:4}, (_,k)=>ims[(c*3+k)%ims.length]), d = 34+c*7;
+    const html = col.map(u=>`<span><img ${on?'src':'data-src'}="${esc(u)}" alt="" decoding="async"></span>`).join('');
+    return `<div class="hf-col${c%2?' up':''}" style="--hf-d:${d}s;--hf-o:${-((t+c*9)%d).toFixed(2)}s"><div class="hf-track">${html}${html}</div></div>`; }).join('')}</div>`; }
+/* Cascade chargée après la page (texte et produits d'abord), coupée en mode économie de données, en pause hors écran */
+function heroFlowStart(){ const f = document.querySelector('.hero-flow'); if(!f) return;
+  const hero = f.closest('.hero');
+  if(!S._hfIO && 'IntersectionObserver' in window){ S._hfIO = new IntersectionObserver(es=>es.forEach(e=>e.target.classList.toggle('hf-paused', !e.isIntersecting))); }
+  if(S._hfIO && hero && !hero.dataset.hfObs){ hero.dataset.hfObs = '1'; S._hfIO.observe(hero); }
+  if(S._hfOn || S._hfStarting) return;
+  const nc = navigator.connection || {}; if(nc.saveData || /(^|-)2g$/.test(nc.effectiveType||'')){ S._hfOff = true; f.remove(); hero && hero.classList.remove('has-flow'); return; }
+  S._hfStarting = true;
+  const go = ()=>{ const cur = document.querySelector('.hero-flow'); if(!cur){ S._hfStarting = false; return; }
+    const imgs = [...cur.querySelectorAll('img[data-src]')]; let n = 0; const done = ()=>{ if(++n >= Math.min(4, imgs.length)){ cur.classList.add('on'); S._hfOn = true; } };
+    imgs.forEach(im=>{ im.addEventListener('load', done, {once:true}); im.addEventListener('error', done, {once:true}); im.src = im.dataset.src; im.removeAttribute('data-src'); });
+    setTimeout(()=>{ cur.classList.add('on'); S._hfOn = true; }, 4000); };
+  const idle = ()=> (window.requestIdleCallback ? requestIdleCallback(go, {timeout:2500}) : setTimeout(go, 1200));
+  if(document.readyState==='complete') setTimeout(idle, 600); else addEventListener('load', ()=>setTimeout(idle, 600), {once:true}); }
 function viewShop(){
   const st = S.settings;
   const live = S.products.filter(p=>p.active!==false);
