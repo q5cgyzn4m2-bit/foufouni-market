@@ -543,6 +543,29 @@ tr.mv-tr td:first-child{box-shadow:inset 3px 0 0 var(--indigo)}
 .line-item.gift{background:var(--kola-soft); border-radius:12px; padding:10px; margin-top:8px; border:1px dashed var(--kola)}
 .line-item.gift .li-img{background:var(--surface)}
 .cd-reco{margin:16px 0 4px}
+/* Accueil réorganisé */
+.tb{display:grid; grid-template-columns:repeat(4,minmax(0,1fr)); gap:10px; margin:-10px 0 34px}
+.tb>div{display:flex; flex-direction:column; gap:2px; padding:14px; border-radius:14px; border:1px solid var(--line); background:var(--surface)}
+.tb span{font-size:22px} .tb b{font-size:14px} .tb small{font-size:12px; color:var(--muted)}
+.ctl{display:flex; gap:12px; overflow-x:auto; padding:2px 2px 10px; margin-bottom:30px; scroll-snap-type:x proximity}
+.ctl-c{flex:0 0 118px; scroll-snap-align:start; display:flex; flex-direction:column; gap:4px; align-items:center; text-align:center; border:0; background:none; color:inherit; font:inherit; cursor:pointer; padding:0}
+.ctl-i{width:118px; height:118px; border-radius:22px; overflow:hidden; background:var(--surface-2); border:1px solid var(--line); display:grid; place-items:center; font-size:44px}
+.ctl-i img{width:100%; height:100%; object-fit:cover}
+.ctl-c b{font-size:13.5px; line-height:1.25} .ctl-c small{font-size:11.5px; color:var(--muted)}
+.hrv{display:grid; grid-template-columns:repeat(3,minmax(0,1fr)); gap:14px; margin-bottom:44px}
+.hrv-c{margin:0; padding:16px; border-radius:16px; border:1px solid var(--line); background:var(--surface); display:flex; flex-direction:column; gap:8px}
+.hrv-c blockquote{margin:0; font-size:14.5px; line-height:1.5}
+.hrv-im{border:0; padding:0; width:100%; aspect-ratio:4/3; border-radius:12px; overflow:hidden; cursor:zoom-in; background:var(--surface-2)}
+.hrv-im img{width:100%; height:100%; object-fit:cover}
+.hero-cta{display:flex; gap:10px; flex-wrap:wrap}
+@media (max-width:760px){
+  .tb{grid-template-columns:repeat(2,minmax(0,1fr)); margin:-18px 0 28px} .tb>div{padding:11px}
+  .sec-h{flex-direction:column; align-items:flex-start; gap:4px}
+  .hrv{display:flex; overflow-x:auto; scroll-snap-type:x mandatory} .hrv-c{flex:0 0 82%; scroll-snap-align:start}
+  .vitrine{display:none}
+  .hero-txt{padding:26px 20px 24px}
+  .top-in [data-srv="login"]{display:none}
+}
 .loy-use{display:flex; gap:8px; align-items:center; padding:8px 10px; border-radius:10px; background:var(--kola-soft); font-size:13.5px; cursor:pointer}
 .pro-l{font-size:13.5px; margin:6px 0 2px; color:#8f84e8} .pro-l s{color:var(--muted); font-size:12px}
 .loy-n{font:800 34px/1 var(--f-d)} .loy-n span{font:600 14px var(--f-b); color:var(--muted)}
@@ -1260,6 +1283,25 @@ function facetBar(){
   return `<div class="facets" role="group" aria-label="Filtres">${gradeGroup}${list.map(g=>`<div class="fg"><span>${esc(g.name)} :</span>${[...g.vals].map(v=>`<button data-a="facet" data-o="${esc(g.name)}" data-v="${esc(v)}" aria-pressed="${(S.facets[g.name]||[]).includes(v)}">${isColorOpt(g.name)?swatch(v):''}${esc(v)}</button>`).join('')}</div>`).join('')}
     <div class="fg"><button data-a="onlyStock" aria-pressed="${S.onlyStock}">Disponible uniquement</button>${any?'<button data-a="facetClear">✕ Effacer les filtres</button>':''}</div></div>`;
 }
+/* ===================== Accueil : bande de confiance, catégories, avis ===================== */
+function trustBand(){ const st = S.settings, rv = S.reviews.filter(r=>r.status!=='hidden' && r.rating), avg = rv.length ? rv.reduce((t,r)=>t+r.rating,0)/rv.length : 0, cod = enabledProcs().some(([k])=>k==='cod');
+  const it = [cod?['💵','Paiement à la livraison','Vous payez en recevant']:['📱','Paiement mobile','Orange Money, Wave, Moov'], ['🚚', Number(st.freeFrom)>0?'Livraison offerte dès '+fmt(st.freeFrom):'Livraison à '+(st.city||'Bamako'), etaText().replace(/^entre /,'Livré entre ')],
+    rv.length>=3 ? ['⭐', (Math.round(avg*10)/10).toString().replace('.',',')+'/5', rv.length+' avis clients vérifiés'] : ['🛡️','Produits vérifiés','Contrôlés avant envoi'], ['💬','Service WhatsApp','On vous répond vite']];
+  return `<section class="tb" aria-label="Pourquoi nous faire confiance">${it.map(([i,a,b])=>`<div><span aria-hidden="true">${i}</span><b>${esc(a)}</b><small>${esc(b)}</small></div>`).join('')}</section>`; }
+function catTiles(){ const live = shopBase(), cats = [...new Set(live.map(p=>p.category).filter(Boolean))]; if(cats.length<2) return '';
+  const n = c => live.filter(p=>p.category===c).length, img = c => live.find(p=>p.category===c && p.image && p.stock>0) || live.find(p=>p.category===c && p.image);
+  const sorted = cats.sort((a,b)=>n(b)-n(a));
+  return `<div class="sec-h"><h2>Nos rayons</h2><button class="btn ghost sm" data-a="catDrawer" style="border-radius:999px">Tout voir</button></div>
+    <div class="ctl" role="list">${sorted.map(c=>{ const p = img(c); return `<button class="ctl-c" role="listitem" data-a="catPick" data-v="${esc(c)}"><span class="ctl-i">${p?`<img src="${esc(p.image)}" alt="" loading="lazy">`:`<span aria-hidden="true">${catEmo(c)}</span>`}</span><b>${esc(c)}</b><small>${n(c)} article${n(c)>1?'s':''}</small></button>`; }).join('')}</div>`; }
+function homeReviews(){ const rv = S.reviews.filter(r=>r.status!=='hidden' && r.rating>=4 && r.comment && S.products.some(p=>p.id===r.productId && p.active!==false)); if(rv.length<2) return '';
+  const all = S.reviews.filter(r=>r.status!=='hidden' && r.rating), avg = all.reduce((t,r)=>t+r.rating,0)/all.length;
+  const top = rv.sort((a,b)=>(b.rating-a.rating) || ((b.photos||[]).length>0)-((a.photos||[]).length>0) || (b.createdAt||0)-(a.createdAt||0)).slice(0,6);
+  const ph = []; top.forEach(r=>(r.photos||[]).forEach(x=>ph.push(x))); loadReviewImgs(ph);
+  const cut = t => { t = String(t||''); return t.length>160 ? t.slice(0,157).replace(/\s+\S*$/,'')+'…' : t; };
+  return `<div class="sec-h"><h2>Ils nous font confiance</h2><span class="muted small">${starsHTML(avg)} ${(Math.round(avg*10)/10).toString().replace('.',',')}/5 · ${all.length} avis</span></div>
+    <div class="hrv">${top.map(r=>{ const p = S.products.find(x=>x.id===r.productId), im = (r.photos||[])[0] && reviewImgSrc(r.photos[0]);
+      return `<figure class="hrv-c">${im?`<button class="hrv-im" data-a="rvZoom" data-v="${esc(r.photos[0])}" aria-label="Agrandir la photo du client"><img src="${esc(im)}" alt="Photo d’un client" loading="lazy"></button>`:''}<div>${starsHTML(r.rating)}</div><blockquote>« ${esc(cut(r.comment))} »</blockquote>
+        <figcaption><b>${esc(shortName(r.name))}</b> <span class="rvp-ok">✓ Achat vérifié</span>${p?`<button class="linkbtn small" data-a="product" data-id="${p.id}" style="display:block;margin-top:2px">${esc(niceName(p.name))}</button>`:''}</figcaption></figure>`; }).join('')}</div>`; }
 function viewShop(){
   const st = S.settings;
   const live = S.products.filter(p=>p.active!==false);
@@ -1271,8 +1313,7 @@ function viewShop(){
   const feat = pool.slice().sort((a,b)=>((b.comparePrice>b.price?b.comparePrice-b.price:0)-(a.comparePrice>a.price?a.comparePrice-a.price:0)) || b.price-a.price)[0];
   const hero = !S.q ? `<section class="hero"><div class="hero-txt">
       <h1>${esc(st.tagline)}</h1><p>${esc(st.intro)}</p>
-      <button class="btn primary" data-a="scroll">Découvrir la collection</button>
-      <div class="trust"><span>Livraison à ${esc(st.city)}</span> <span>Offerte dès ${fmt(st.freeFrom)}</span> <span>Paiement mobile ou à la livraison</span></div>${payRow(true)}
+      <div class="hero-cta"><button class="btn primary" data-a="scroll">Voir tous les produits</button><button class="btn ghost" data-a="catDrawer">🗂️ Rayons</button></div>${payRow(true)}
     </div>${feat?`<aside class="vitrine" aria-label="Pièce du moment"><em>La pièce du moment</em>
       <button class="v-img" data-a="product" data-id="${feat.id}" aria-label="Voir ${esc(feat.name)}">${pImg(feat)}</button>
       <h3>${esc(feat.name)}</h3>
@@ -1289,20 +1330,22 @@ function viewShop(){
   const saleBlock = sales.length && !S.q && S.cat==='Tout' ? `<section class="sale" aria-label="Soldes"><div class="sale-txt"><h2>Les soldes</h2><span class="big">jusqu’à <span style="white-space:nowrap">−${maxOff}&nbsp;%</span></span>
       <p class="muted" style="margin:0">${sales.length} article${sales.length>1?'s':''} à prix réduit, dans la limite des stocks.</p>
       <button class="btn primary" data-a="cat" data-v="Soldes" style="border-radius:999px">Voir toutes les soldes</button></div>
-      <div class="sale-row">${sales.sort((a,b)=>(b.comparePrice-b.price)/b.comparePrice-(a.comparePrice-a.price)/a.comparePrice).slice(0,4).map(miniCard).join('')}</div></section>` : '';
+      ${(()=>{ const rest = sales.filter(p=>!carouselList().some(x=>x.id===p.id)); return rest.length ? `<div class="sale-row">${rest.sort((a,b)=>(b.comparePrice-b.price)/b.comparePrice-(a.comparePrice-a.price)/a.comparePrice).slice(0,4).map(miniCard).join('')}</div>` : ''; })()}</section>` : '';
   const bundleBlock = bundles.length && !S.q && (S.cat==='Tout'||S.cat==='Lots') ? `<div class="sec-h"><h2>Lots et achats groupés</h2><span class="muted small">Un seul ajout, tout le lot dans votre panier</span></div>
       <div class="bundles">${bundles.map(bundleCard).join('')}</div>` : '';
   const empty = S.products.length===0
     ? `<div class="empty"><h3>La boutique est vide</h3><p>${S.isAdmin?'Ajoutez votre premier produit pour ouvrir la vente.':'Les produits arrivent bientôt.'}</p>${S.isAdmin?'<button class="btn primary" data-a="newProduct">Ajouter un produit</button>':''}</div>`
     : `<div class="empty"><h3>Aucun produit trouvé</h3><p>Essayez un autre mot ou une autre catégorie.</p><button class="btn ghost" data-a="clearSearch">Afficher tout le catalogue</button></div>`;
   const instBar = !isStandalone() && !S.instHide && !S.isAdmin ? `<div class="inst-bar"><span style="font-size:26px">📲</span><div style="flex:1"><b>Installez l’application ${esc(S.settings.shopName)}</b><div class="muted small">Plus rapide, en plein écran, avec les alertes de commande. Gratuit.</div></div><button class="btn primary sm" data-a="install" style="border-radius:999px;white-space:nowrap">Comment faire ?</button><button class="btn ghost sm" data-a="instHide" aria-label="Masquer" style="flex:0">×</button></div>` : '';
-  const favs = S.cat==='Tout' && !S.q ? shopBase().filter(p=>p.stock>0 && hasLanding(p)).sort((a,b)=>soldCount(b)-soldCount(a) || (productRating(b.id).n-productRating(a.id).n)).slice(0,4) : [];
+  const shown = new Set(S.cat==='Tout' && !S.q ? carouselList().map(p=>p.id) : []);
+  const favs = S.cat==='Tout' && !S.q ? shopBase().filter(p=>p.stock>0 && hasLanding(p) && !shown.has(p.id)).sort((a,b)=>soldCount(b)-soldCount(a) || (productRating(b.id).n-productRating(a.id).n)).slice(0,4) : [];
   const favBlock = favs.length ? `<div class="sec-h"><h2>Nos coups de cœur</h2><span class="muted small">Découvrez-les en détail</span></div><div class="fav">${favs.map(p=>{ const rt = productRating(p.id), sd = soldCount(p);
     return `<button class="fav-c" data-a="openLanding" data-id="${p.id}"><span class="im">${p.image?`<img src="${esc(p.image)}" alt="" loading="lazy">`:esc(p.emoji||'📦')}</span><span><span class="cat">${esc(p.category||'')}</span><b>${esc(p.lpHook||p.name)}</b>${p.lpHook?`<span class="muted small">${esc(p.name)}</span>`:''}
       <span style="display:block;margin-top:6px"><span class="price" style="font-size:20px">${fmt(p.price)}</span>${p.comparePrice>p.price?` <span class="strike">${fmt(p.comparePrice)}</span>`:''}</span>
       ${rt.n?`<span class="small">${starsHTML(rt.avg)} <span class="muted">(${rt.n})</span></span>`:sd>=3?`<span class="sold">🔥 ${sd} vendus ce mois-ci</span>`:''}
       <span class="see-offer" style="margin-top:8px">${(p.lpVideo||p.lpVideoFile)?'▶ Voir la vidéo et l’offre ›':'✨ Découvrir l’offre ›'}</span></span></button>`; }).join('')}</div>` : '';
-  return `${S.cat==='Tout'&&!S.q?carouselBlock():''}${instBar}${ribbon}${hero}${favBlock}${S.cat==='Tout'&&!S.q?flagsBand():''}${saleBlock}${usedBlock}${S.cat==='Tout'?bundleBlock:''}
+  const home = S.cat==='Tout' && !S.q;
+  return `${ribbon}${hero}${home?trustBand():''}${home?catTiles():''}${home?carouselBlock():''}${saleBlock}${favBlock}${S.cat==='Tout'?bundleBlock:''}${usedBlock}${home?homeReviews():''}
     <div class="sec-h" id="catalogue"><h2>${S.q?`Résultats pour « ${esc(S.q)} »`:S.cat==='Tout'?'La collection':esc(S.cat)}</h2><span class="muted small">${S.cat==='Lots'?bundles.length+' lot'+(bundles.length>1?'s':''):list.length+' produit'+(list.length>1?'s':'')}</span></div>
     <div class="cats" role="group" aria-label="Catégories">${cats.map(c=>`<button aria-pressed="${S.cat===c}" data-a="cat" data-v="${esc(c)}">${esc(c)}</button>`).join('')}</div>
     ${S.cat==='Lots'?'':facetBar()}
@@ -1316,9 +1359,10 @@ function viewShop(){
         </div>
       </article>`).join('')}</div>`:empty}
     ${S.cat==='Tout'&&!S.q?blogBlock():''}
+    ${home?flagsBand():''}${instBar}
     <footer class="shop-foot"><div><span class="fb">${esc(st.shopName)}</span><p style="margin-top:10px">${esc(st.intro)}</p></div>
       <div><h4>Paiement sécurisé</h4><p>${esc(enabledProcs().map(([k])=>PROCESSORS[k].name).join(', ')||'En espèces à la réception')}.</p>${payRow(false)}</div>
-      <div><h4>Livraison</h4><p>À ${esc(st.city)}, offerte dès ${fmt(st.freeFrom)} d’achat, et partout en Afrique de l’Ouest. Retrait en boutique possible.</p><button class="btn ghost sm" data-a="install" style="margin-top:10px">📲 Installer l’application</button> <button class="btn ghost sm" data-a="guide" style="margin-top:10px">📖 Guide d’achat</button>${isServer()?' <button class="btn ghost sm" data-a="proOpen" style="margin-top:10px">💼 Espace Pro</button>':''} <a class="btn ghost sm" href="${esc(aboutPath())}" data-a="about" style="margin-top:10px">ℹ️ À propos</a> ${pubArticles().length?'<button class="btn ghost sm" data-a="blog" style="margin-top:10px">💡 Conseils</button>':''}</div>
+      <div><h4>Livraison</h4><p>À ${esc(st.city)}, offerte dès ${fmt(st.freeFrom)} d’achat, et partout en Afrique de l’Ouest. Retrait en boutique possible.</p><button class="btn ghost sm" data-a="install" style="margin-top:10px">📲 Installer l’application</button> <button class="btn ghost sm" data-a="guide" style="margin-top:10px">📖 Guide d’achat</button>${isServer()?' <button class="btn ghost sm" data-a="proOpen" style="margin-top:10px">💼 Espace Pro</button>':''} <a class="btn ghost sm" href="${esc(aboutPath())}" data-a="about" style="margin-top:10px">ℹ️ À propos</a>${isServer()&&!S.isAdmin?' <button class="btn ghost sm" data-srv="login" style="margin-top:10px">🔐 Espace équipe</button>':''} ${pubArticles().length?'<button class="btn ghost sm" data-a="blog" style="margin-top:10px">💡 Conseils</button>':''}</div>
       <div><h4>Nous contacter</h4><p>${st.phone?`📞 <a href="tel:${esc(st.phone.replace(/\s/g,''))}" style="color:var(--indigo)">${esc(st.phone)}</a>${st.phone2?` · <a href="tel:${esc(st.phone2.replace(/\s/g,''))}" style="color:var(--indigo)">${esc(st.phone2)}</a>`:''}<br>`:''}${st.whatsapp?`<a href="https://wa.me/${waNumber(st.whatsapp)}" target="_blank" rel="noopener" style="color:#25D366;font-weight:700;display:inline-flex;align-items:center">${WA_ICON}WhatsApp ${esc(st.whatsapp)}</a><br>`:''}${st.email?`✉️ <a href="mailto:${esc(st.email)}" style="color:var(--indigo)">${esc(st.email)}</a><br>`:''}${st.address?`📍 ${esc(st.address)}${st.city?', '+esc(st.city):''}<br>`:''}${st.hours?`🕘 ${esc(st.hours)}`:''}${!st.phone&&!st.whatsapp&&!st.email&&!st.address?'Notre équipe vous répond à la livraison et en boutique.':''}</p></div></footer>
     ${S.products.some(isPartner)?`<p class="aff-note" style="text-align:center;margin:0 0 6px">Certains produits sont proposés via des liens partenaires (marqués « Partenaire ») : nous pouvons recevoir une commission, sans surcoût pour vous.${S.products.some(p=>isPartner(p)&&p.partner.platform==='amazon')?' '+AMAZON_NOTE:''}</p>`:''}
     <p class="foot-note">© ${new Date().getFullYear()} ${esc(st.legalName||st.shopName)}${st.legalForm?' · '+esc(st.legalForm):''}${st.capital?' au capital de '+esc(st.capital):''}${st.rccm?' · RCCM '+esc(st.rccm):''}${st.nif?' · NIF '+esc(st.nif):''}${st.address?' · '+esc(st.address)+(st.city?', '+esc(st.city):''):''}${st.country?' · '+esc(st.country):''}</p>`;
@@ -3090,11 +3134,13 @@ const DAY = 864e5;
 const isNew = p => (p.newUntil||0) > Date.now();
 const isSale = p => Number(p.comparePrice)>Number(p.price) && Number(p.price)>0;
 const salePct = p => isSale(p) ? Math.round((1-p.price/p.comparePrice)*100) : 0;
+function carouselList(){ const st = S.settings; if(st.carouselOn===false) return []; const mode = st.carouselMode || 'both';
+  return shopBase().filter(p=>p.stock>0 && p.carousel!==false && (p.carousel===true || (mode!=='sale' && isNew(p)) || (mode!=='new' && isSale(p))))
+    .sort((a,b)=>(b.carousel===true)-(a.carousel===true) || isNew(b)-isNew(a) || salePct(b)-salePct(a)).slice(0,16); }
 function carouselBlock(){
   const st = S.settings; if(st.carouselOn===false) return '';
   const mode = st.carouselMode || 'both';
-  const list = shopBase().filter(p=>p.stock>0 && p.carousel!==false && (p.carousel===true || (mode!=='sale' && isNew(p)) || (mode!=='new' && isSale(p))))
-    .sort((a,b)=>(b.carousel===true)-(a.carousel===true) || isNew(b)-isNew(a) || salePct(b)-salePct(a)).slice(0,16);
+  const list = carouselList();
   if(list.length<2) return '';
   const card = p => `<button class="car-c" data-a="product" data-id="${p.id}" aria-label="${esc(p.name)}"><span class="im">${p.image?`<img src="${esc(p.image)}" alt="" loading="lazy">`:esc(p.emoji||'📦')}</span>
     ${isNew(p)?'<span class="car-bd new">NOUVEAU</span>':!isSale(p)?'<span class="car-bd new">⭐ À LA UNE</span>':''}${isSale(p)?`<span class="car-bd sale">-${salePct(p)} %</span>`:''}
