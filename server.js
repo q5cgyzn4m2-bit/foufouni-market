@@ -140,7 +140,7 @@ function publicSettings() {
   const s = settings();
   const procs = {}; for (const [k, v] of Object.entries(s.processors || {})) procs[k] = { enabled: !!v.enabled, ...(typeof v.showLogo === 'boolean' ? { showLogo: v.showLogo } : {}), ...(/^data:image\/(png|jpeg|webp);base64,/.test(v.logo || '') && v.logo.length < 250000 ? { logo: v.logo } : {}) }; // jamais d'identifiants côté public, seulement le logo
   return { shopName: s.shopName, tagline: s.tagline, intro: s.intro, currency: s.currency, deliveryFee: s.deliveryFee, freeFrom: s.freeFrom, city: s.city, phone: s.phone, processors: procs,
-    giftOn: s.giftOn !== false, giftFrom: Math.max(0, Number(s.giftFrom) || 0), giftName: String(s.giftName || 'Cadeau surprise').slice(0, 60), giftTiers: giftTiers(s), slots: SLOTS, riskOn: s.riskOn !== false, lpGuarantee: String(s.lpGuarantee || '').slice(0, 300), exitOn: s.exitOn !== false, addonOn: s.addonOn !== false, addonPct: Math.min(50, Math.max(0, Number(s.addonPct ?? 10))), deliveryDays: String(s.deliveryDays || '1-2').slice(0, 10),
+    giftOn: s.giftOn !== false, giftFrom: Math.max(0, Number(s.giftFrom) || 0), giftName: String(s.giftName || 'Cadeau surprise').slice(0, 60), giftTiers: giftTiers(s), slots: SLOTS, loyalty: (() => { const c = loyCfg(); return { on: c.on, per: c.per, val: c.val, min: c.min, refOn: c.refOn, refBonus: c.refBonus, refPts: c.refPts }; })(), riskOn: s.riskOn !== false, lpGuarantee: String(s.lpGuarantee || '').slice(0, 300), exitOn: s.exitOn !== false, addonOn: s.addonOn !== false, addonPct: Math.min(50, Math.max(0, Number(s.addonPct ?? 10))), deliveryDays: String(s.deliveryDays || '1-2').slice(0, 10),
     carouselOn: s.carouselOn !== false, carouselMode: ['both', 'new', 'sale'].includes(s.carouselMode) ? s.carouselMode : 'both', carouselSpeed: ['lent', 'normal', 'rapide'].includes(s.carouselSpeed) ? s.carouselSpeed : 'normal',
     showTrust: s.showTrust !== false, deliveryPromise: String(s.deliveryPromise || '').slice(0, 40), returnPolicy: String(s.returnPolicy || '').slice(0, 40),
     manualPay: manualPay(), shipCountries: Array.isArray(s.shipCountries) ? s.shipCountries : ['ML'], carriers: cleanCarriers(s.carriers).filter(c => c.active).map(({ phone, ...c }) => c), localCities: String(s.localCities || '').slice(0, 400),
@@ -335,7 +335,12 @@ function shipOffers(s, country, city) {
   }
   return out.sort((a, b) => a.price - b.price);
 }
-function computeOrder(items, promoCode, delivery, ref, dest) {
+/* Espace Pro : code personnel, prix pro (par produit) ou remise pro en %, paiement à terme */
+const proByCode = c => { c = String(c || '').trim().toUpperCase(); return c.length >= 6 ? allDocs('pros').find(x => x.active !== false && x.code && safeEq(String(x.code).toUpperCase(), c)) : null; };
+const proUnit = (pro, p, base) => { if (!pro) return base; let u = base; const pp = Math.round(Number(p.proPrice) || 0), pct = Math.min(60, Math.max(0, Number(pro.pct) || 0));
+  if (pp > 0 && pp < u) u = pp; if (pct) u = Math.min(u, Math.round(base * (1 - pct / 100))); return u; };
+function computeOrder(items, promoCode, delivery, ref, dest, pro) {
+  if (pro) promoCode = '';
   if (!Array.isArray(items) || !items.length || items.length > 50) throw httpErr(400, 'Panier invalide.');
   const prodQty = new Map(), bundleQty = new Map();
   for (const it of items) {
@@ -353,8 +358,8 @@ function computeOrder(items, promoCode, delivery, ref, dest) {
     if (hasVar(p)) {
       const vr = v && p.variants.find(x => x.key === v);
       if (!vr) throw httpErr(400, `Choisissez la variante de ${p.name}.`);
-      lines.push({ id, name: p.name + ' — ' + v, price: Math.round(Number(vr.price) > 0 ? Number(vr.price) : Number(p.price) || 0), qty, variant: v });
-    } else lines.push({ id, name: p.name, price: unitPrice(p, qty), qty });
+      { const vp = Math.round(Number(vr.price) > 0 ? Number(vr.price) : Number(p.price) || 0); lines.push({ id, name: p.name + ' — ' + v, price: pro ? Math.min(vp, Math.round(vp * (1 - Math.min(60, Math.max(0, Number(pro.pct) || 0)) / 100))) : vp, qty, variant: v }); }
+    } else lines.push({ id, name: p.name, price: proUnit(pro, p, unitPrice(p, qty)), qty });
   }
   for (const [bid, qty] of bundleQty) {
     const b = getDoc('bundles', bid);
@@ -1335,6 +1340,34 @@ function giftTiers(s = settings()) {
 }
 const giftOf = (sub, pick) => { const t = giftTiers().filter(x => sub >= x.at).pop(); if (!t) return null;
   const ok = t.items.filter(i => i.ok), item = ok.find(i => i.key === String(pick || '')) || ok[0]; return item ? { at: t.at, item } : null; };
+app.get('/api/pro/me', h((req, res) => {
+  if (limited('pro:' + req.ip, 30, 600e3)) throw httpErr(429, 'Trop d’essais : réessayez dans quelques minutes.');
+  const pro = proByCode(req.query.c); if (!pro) throw httpErr(404, 'Code pro inconnu ou désactivé.');
+  const prices = {}; for (const p of allDocs('products')) if (p.active !== false && !isPartnerS(p) && !hasVar(p)) { const u = proUnit(pro, p, Math.round(Number(p.price) || 0)); if (u < (Number(p.price) || 0)) prices[p.id] = u; }
+  res.json({ pro: { name: pro.name || '', company: pro.company || '', pct: Math.min(60, Math.max(0, Number(pro.pct) || 0)), terms: !!pro.terms, termDays: Math.max(7, Math.min(90, Number(pro.termDays) || 30)) }, prices });
+}));
+/* Points fidélité et parrainage */
+const loyCfg = () => { const s = settings(); return { on: s.loyaltyOn !== false, per: Math.max(100, Number(s.ptsPer) || 1000), val: Math.max(1, Number(s.ptValue) || 10), min: Math.max(1, Number(s.minRedeem) || 100), refOn: s.refOn !== false, refBonus: Math.max(0, Number(s.refBonus ?? 2000)), refPts: Math.max(0, Number(s.refPts ?? 200)) }; };
+const refCodeOf = k => 'P' + hmacHex(env.SESSION_SECRET, 'parrain:' + k).slice(0, 6).toUpperCase();
+function loyaltyOf(k) {
+  const c = loyCfg(), os = allDocs('orders'); let earned = 0, used = 0, refs = 0;
+  for (const o of os) {
+    const mine = phoneKey(o.customer?.phone) === k;
+    if (mine && o.status === 'livree') earned += Math.floor(Math.max(0, (o.subtotal || 0) - (o.discount || 0) - (o.pointsDiscount || 0) - (o.refDiscount || 0)) / c.per);
+    if (mine && o.status !== 'annulee') used += Number(o.pointsUsed) || 0;
+    if (o.referral && o.referral.by === k && o.status === 'livree') { earned += c.refPts; refs++; }
+  }
+  return { earned, used, balance: Math.max(0, earned - used), refs };
+}
+const isNewCustomer = k => !allDocs('orders').some(o => o.status !== 'annulee' && phoneKey(o.customer?.phone) === k);
+const parrainOf = code => { code = String(code || '').trim().toUpperCase(); if (!/^P[0-9A-F]{6}$/.test(code)) return ''; const ks = new Set(allDocs('orders').map(o => phoneKey(o.customer?.phone)).filter(x => x.length === 8)); for (const k of ks) if (refCodeOf(k) === code) return k; return ''; };
+const proofKey = proof => { for (const x of (Array.isArray(proof) ? proof : []).slice(0, 20)) { const o = validId(String(x && x.id || '')) && getDoc('orders', String(x.id)); if (o && x.t && safeEq(o.token, String(x.t))) return phoneKey(o.customer?.phone); } return ''; };
+app.post('/api/loyalty', h((req, res) => {
+  if (limited('loy:' + req.ip, 60, 600e3)) throw httpErr(429, 'Trop de requêtes.');
+  const c = loyCfg(), k = proofKey(req.body?.orders); if (!k || k.length < 8) return res.json({ on: c.on, refOn: c.refOn, cfg: c });
+  const l = loyaltyOf(k);
+  res.json({ on: c.on, refOn: c.refOn, cfg: c, balance: l.balance, value: l.balance * c.val, earned: l.earned, refs: l.refs, code: refCodeOf(k), phone: '•• •• ' + k.slice(4, 6) + ' ' + k.slice(6) });
+}));
 /* Fiabilité des clients (paiement à la livraison) et créneaux de livraison */
 const phoneKey = ph => String(ph || '').replace(/\D/g, '').slice(-8);
 const refusedCount = ph => { const k = phoneKey(ph); return k.length < 8 ? 0 : allDocs('orders').filter(o => o.refused && phoneKey(o.customer?.phone) === k).length; };
@@ -1343,7 +1376,8 @@ app.post('/api/orders', h(async (req, res) => {
   if (limited('order:' + req.ip, 15, 600e3)) throw httpErr(429, 'Trop de commandes en peu de temps. Réessayez plus tard.');
   const b = req.body || {};
   const method = String(b.method || '');
-  if (!providers().includes(method)) throw httpErr(400, 'Ce moyen de paiement n’est pas disponible.');
+  const pro = b.proCode ? proByCode(b.proCode) : null;
+  if (!(providers().includes(method) || (method === 'terme' && pro && pro.terms))) throw httpErr(400, 'Ce moyen de paiement n’est pas disponible.');
   const delivery = b.delivery === 'retrait' ? 'retrait' : 'livraison';
   const c = b.customer || {};
   const customer = { name: String(c.name || '').trim().slice(0, 80), phone: String(c.phone || '').trim().slice(0, 30),
@@ -1355,8 +1389,14 @@ app.post('/api/orders', h(async (req, res) => {
   if (delivery === 'livraison' && !customer.address) throw httpErr(400, 'Adresse de livraison requise.');
   { const s0 = settings(); if (method === 'cod' && s0.riskOn !== false && refusedCount(customer.phone) >= Math.max(1, Number(s0.riskMax) || 2))
     throw httpErr(400, 'Pour ce numéro, un paiement d’avance est demandé : choisissez Orange Money, Wave ou Moov Money. Écrivez-nous sur WhatsApp en cas de question.'); }
-  const t = computeOrder(b.items, b.promoCode, delivery, b.ref, { country: customer.country, city: customer.city, carrier: b.carrier });
-  if (method !== 'cod' && t.total < 100) throw httpErr(400, 'Montant trop faible pour un paiement mobile.');
+  const t = computeOrder(b.items, b.promoCode, delivery, b.ref, { country: customer.country, city: customer.city, carrier: b.carrier }, pro);
+  /* points fidélité (preuve : une commande de ce numéro enregistrée sur l'appareil) et parrainage (première commande) */
+  const lc = loyCfg(), ck = phoneKey(customer.phone); let pointsUsed = 0, pointsDiscount = 0, referral = null, refDiscount = 0;
+  if (lc.on && b.usePoints && ck.length === 8 && proofKey(b.loyaltyProof) === ck) { const bal = loyaltyOf(ck).balance, room = Math.floor(Math.max(0, t.total - t.shipping) / lc.val);
+    if (bal >= lc.min) { pointsUsed = Math.min(bal, room); pointsDiscount = pointsUsed * lc.val; } }
+  if (lc.refOn && !pro && b.parrain && ck.length === 8 && isNewCustomer(ck)) { const by = parrainOf(b.parrain); if (by && by !== ck) { refDiscount = Math.min(lc.refBonus, Math.max(0, t.total - t.shipping - pointsDiscount)); referral = { by, code: String(b.parrain).toUpperCase(), bonus: refDiscount }; } }
+  if (pointsDiscount || refDiscount) t.total = Math.max(0, t.total - pointsDiscount - refDiscount);
+  if (!['cod', 'terme'].includes(method) && t.total < 100) throw httpErr(400, 'Montant trop faible pour un paiement mobile.');
 
   const gift = giftOf(t.subtotal, b.giftPick);
   if (gift && gift.item.pid) t.lines.push({ id: gift.item.pid, name: '🎁 ' + gift.item.name + ' (offert)', price: 0, qty: 1, gift: true });
@@ -1368,13 +1408,15 @@ app.post('/api/orders', h(async (req, res) => {
     ...(b.lpAb && typeof b.lpAb === 'object' ? (() => { const m = {}; for (const [k, v] of Object.entries(b.lpAb).slice(0, 20)) if (validId(k) && ['A', 'B'].includes(v) && t.lines.some(l => l.id === k)) m[k] = v; return Object.keys(m).length ? { lpAb: m } : {}; })() : {}),
     source: String(b.source || '').toLowerCase().replace(/[^a-z0-9_-]/g, '').slice(0, 20), campaign: String(b.campaign || '').replace(/[^A-Za-z0-9_-]/g, '').slice(0, 30),
     ...(delivery === 'livraison' && SLOTS[b.slot] ? { slot: String(b.slot) } : {}),
-    customer, delivery, payment: { method, status: method === 'cod' ? 'à encaisser' : manual ? 'à vérifier' : 'en attente', ref: manual ? String(b.payRef || '').trim().slice(0, 60) : '', manual: !!manual, to: manual || '' },
+    ...(pro ? { pro: { id: pro.id, name: pro.name || '', company: pro.company || '' } } : {}), ...(pointsUsed ? { pointsUsed, pointsDiscount } : {}), ...(referral ? { referral, refDiscount } : {}),
+    customer, delivery, payment: { method, ...(method === 'terme' ? { dueAt: Date.now() + Math.max(7, Math.min(90, Number(pro.termDays) || 30)) * 864e5 } : {}), status: method === 'terme' ? 'à payer sous ' + Math.max(7, Math.min(90, Number(pro.termDays) || 30)) + ' jours' : method === 'cod' ? 'à encaisser' : manual ? 'à vérifier' : 'en attente', ref: manual ? String(b.payRef || '').trim().slice(0, 60) : '', manual: !!manual, to: manual || '' },
     status: 'en_attente', channel: 'en ligne', stockApplied: false, createdAt: Date.now(), createdBy: 'web', token: randomToken()
   };
   putDoc('orders', id, order);
   sendConversions(id, order, req).catch(e => console.warn('API de conversion :', e.message));
   const cartId = String(b.cartId || '');
   if (/^[a-z0-9]{8,40}$/.test(cartId) && getDoc('carts', cartId)) patchDoc('carts', cartId, { converted: true, orderId: id });
+  if (method === 'terme') notify({ title: `Commande pro à terme : ${money(order.total)}`, tags: ['briefcase'], priority: 4, click: BASE_URL, message: `${order.number} · ${pro.company || pro.name} · ${order.payment.status}\n${customer.name} ${customer.phone}` });
   if (method === 'cod') notify({ title: `Nouvelle commande : ${money(order.total)}`, tags: ['shopping_bags'], priority: 4, click: waLink(customer.phone, `Bonjour ${customer.name}, merci pour votre commande ${order.number} chez ${settings().shopName}.`) || BASE_URL,
     message: `${order.number} · paiement à la livraison\n${customer.name} ${customer.phone}\n${delivery === 'livraison' ? 'Livraison : ' + customer.address + ', ' + customer.city + (t.carrier ? ` · ${t.carrier.name} (${money(t.carrier.price)})` : t.shipQuote ? ' · transport sur devis' : '') : 'Retrait en boutique'}\n${order.items.map(i => `${i.qty} × ${i.name}`).join(', ')}${order.affiliate ? `\nVia l’ambassadeur ${order.affiliate.code} (commission ${money(order.affiliate.commission)})` : ''}` });
 
@@ -1598,7 +1640,7 @@ app.get('/api/admin/state', requireStaff, (req, res) => {
     costs: ['Gérant', 'Gestionnaire de stock'].includes(req.user.role) ? allDocs('costs') : [], stockMoves: allDocs('stock-moves').sort((a, b) => b.createdAt - a.createdAt).slice(0, 1000),
     ai: !!env.ANTHROPIC_API_KEY, socialPosts: allDocs('social-posts').sort((a, b) => (a.at || 0) - (b.at || 0)), social: socialStatus(),
     drivers: allDocs('drivers').sort((a, b) => a.name.localeCompare(b.name)),
-    lpStats: allDocs('lp-stats'), ...(req.user.role === 'Gérant' ? { adSpend: allDocs('ad-spend') } : {}), articles: allDocs('articles'), affClicks: allDocs('aff-clicks'),
+    lpStats: allDocs('lp-stats'), pros: allDocs('pros'), ...(req.user.role === 'Gérant' ? { adSpend: allDocs('ad-spend') } : {}), articles: allDocs('articles'), affClicks: allDocs('aff-clicks'),
     purchases: allDocs('purchases').sort((a, b) => b.createdAt - a.createdAt).slice(0, 500),
     campaigns: allDocs('campaigns').sort((a, b) => b.createdAt - a.createdAt).slice(0, 200), contactFlags: allDocs('contact-flags'),
     visits: allDocs('visits').map(v => ({ id: v.id, count: v.count || 0, count30: Object.entries(v.days || {}).filter(([k]) => k >= addDays(today(), -30)).reduce((t, [, n]) => t + n, 0) })),
@@ -1613,7 +1655,7 @@ app.get('/api/admin/state', requireStaff, (req, res) => {
     settings: s, users: store.users.list(), providers: providers(), configured: CONFIGURED, me: req.user
   });
 });
-const ADMIN_COLS = new Set(['articles', 'aff-clicks', 'products', 'product-images', 'costs', 'stock-moves', 'lp-stats', 'campaigns', 'contact-flags', 'drivers', 'delivery-photos', 'purchases', 'reviews', 'review-images', 'bundles', 'promos', 'orders', 'settings', 'affiliates', 'aff-payouts', 'aff-lookup', 'clients', 'suppliers', 'fin-moves', 'fin-ledger', 'fin-config', 'social-posts', 'ad-spend']);
+const ADMIN_COLS = new Set(['articles', 'aff-clicks', 'products', 'product-images', 'costs', 'stock-moves', 'lp-stats', 'campaigns', 'contact-flags', 'drivers', 'delivery-photos', 'purchases', 'reviews', 'review-images', 'bundles', 'promos', 'orders', 'settings', 'affiliates', 'aff-payouts', 'aff-lookup', 'clients', 'suppliers', 'fin-moves', 'fin-ledger', 'fin-config', 'social-posts', 'ad-spend', 'pros']);
 function adminTarget(req) {
   const { col, id } = req.params;
   if (!ADMIN_COLS.has(col) || !validId(id)) throw httpErr(400, 'Requête invalide.');

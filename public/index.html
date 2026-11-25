@@ -543,6 +543,9 @@ tr.mv-tr td:first-child{box-shadow:inset 3px 0 0 var(--indigo)}
 .line-item.gift{background:var(--kola-soft); border-radius:12px; padding:10px; margin-top:8px; border:1px dashed var(--kola)}
 .line-item.gift .li-img{background:var(--surface)}
 .cd-reco{margin:16px 0 4px}
+.loy-use{display:flex; gap:8px; align-items:center; padding:8px 10px; border-radius:10px; background:var(--kola-soft); font-size:13.5px; cursor:pointer}
+.pro-l{font-size:13.5px; margin:6px 0 2px; color:#8f84e8} .pro-l s{color:var(--muted); font-size:12px}
+.loy-n{font:800 34px/1 var(--f-d)} .loy-n span{font:600 14px var(--f-b); color:var(--muted)}
 .pub-sub td{font-size:13px; color:var(--muted)} .pub-sub td:first-child{padding-left:22px}
 .ab-r{margin-top:8px; padding:10px 12px; border-radius:12px; background:var(--surface-2); font-size:13px; display:grid; gap:3px}
 .slots{display:flex; flex-wrap:wrap; gap:6px}
@@ -853,6 +856,7 @@ const PROCESSORS = {
   cod:{name:'Paiement à la livraison', kind:'cod', color:'#2C6A4F', short:'€', field:''}
 };
 PROCESSORS.cod.short = '💵';
+PROCESSORS.terme = {name:'Paiement à terme (compte pro)', kind:'terme', color:'#5B4BB7', short:'💼', field:''};
 const STATUS = {
   en_attente:{label:'En attente de paiement', cls:'warn'}, payee:{label:'Payée', cls:'info'},
   preparation:{label:'En préparation', cls:'info'}, expediee:{label:'Expédiée', cls:'info'},
@@ -864,7 +868,7 @@ const ROLES = ['Gérant','Vendeur','Caissier','Livreur','Gestionnaire de stock']
 /* ============ état ============ */
 const S = {
   ready:false, live:false, isAdmin:false, uid:null, myName:'',
-  products:[], bundles:[], articles:[], adSpend:[], affClicks:[], clients:[], suppliers:[], reviews:[], drivers:[], purchases:[], lpStats:[], dphoto:{}, campaigns:[], contactFlags:{}, audCarts:null, audSeg:'abandon_new', audSel:{}, costs:{}, stockMoves:[], inv:{}, topDays:30, topSort:'revenue', stFilter:'all', stCat:'', affiliates:[], affPayouts:[], moves:[], ledger:[], finConfig:{}, posTab:'vente', trAcc:'all', trType:'all', pq:'', promos:[], orders:[], settings:structuredClone(DEFAULT_SETTINGS), team:{members:[]},
+  products:[], bundles:[], articles:[], adSpend:[], pros:[], affClicks:[], clients:[], suppliers:[], reviews:[], drivers:[], purchases:[], lpStats:[], dphoto:{}, campaigns:[], contactFlags:{}, audCarts:null, audSeg:'abandon_new', audSel:{}, costs:{}, stockMoves:[], inv:{}, topDays:30, topSort:'revenue', stFilter:'all', stCat:'', affiliates:[], affPayouts:[], moves:[], ledger:[], finConfig:{}, posTab:'vente', trAcc:'all', trType:'all', pq:'', promos:[], orders:[], settings:structuredClone(DEFAULT_SETTINGS), team:{members:[]},
   cart:[], pos:[], posPromo:null, appliedPromo:null,
   view:'shop', tab:'dash', cat:'Tout', q:'', aq:'', orderFilter:'all', selPromos:new Set(), names:{}
 };
@@ -1261,16 +1265,51 @@ function viewShop(){
     ${S.cat==='Tout'&&!S.q?blogBlock():''}
     <footer class="shop-foot"><div><span class="fb">${esc(st.shopName)}</span><p style="margin-top:10px">${esc(st.intro)}</p></div>
       <div><h4>Paiement sécurisé</h4><p>${esc(enabledProcs().map(([k])=>PROCESSORS[k].name).join(', ')||'En espèces à la réception')}.</p>${payRow(false)}</div>
-      <div><h4>Livraison</h4><p>À ${esc(st.city)}, offerte dès ${fmt(st.freeFrom)} d’achat, et partout en Afrique de l’Ouest. Retrait en boutique possible.</p><button class="btn ghost sm" data-a="install" style="margin-top:10px">📲 Installer l’application</button> <button class="btn ghost sm" data-a="guide" style="margin-top:10px">📖 Guide d’achat</button> <a class="btn ghost sm" href="${esc(aboutPath())}" data-a="about" style="margin-top:10px">ℹ️ À propos</a> ${pubArticles().length?'<button class="btn ghost sm" data-a="blog" style="margin-top:10px">💡 Conseils</button>':''}</div>
+      <div><h4>Livraison</h4><p>À ${esc(st.city)}, offerte dès ${fmt(st.freeFrom)} d’achat, et partout en Afrique de l’Ouest. Retrait en boutique possible.</p><button class="btn ghost sm" data-a="install" style="margin-top:10px">📲 Installer l’application</button> <button class="btn ghost sm" data-a="guide" style="margin-top:10px">📖 Guide d’achat</button>${isServer()?' <button class="btn ghost sm" data-a="proOpen" style="margin-top:10px">💼 Espace Pro</button>':''} <a class="btn ghost sm" href="${esc(aboutPath())}" data-a="about" style="margin-top:10px">ℹ️ À propos</a> ${pubArticles().length?'<button class="btn ghost sm" data-a="blog" style="margin-top:10px">💡 Conseils</button>':''}</div>
       <div><h4>Nous contacter</h4><p>${st.phone?`📞 <a href="tel:${esc(st.phone.replace(/\s/g,''))}" style="color:var(--indigo)">${esc(st.phone)}</a>${st.phone2?` · <a href="tel:${esc(st.phone2.replace(/\s/g,''))}" style="color:var(--indigo)">${esc(st.phone2)}</a>`:''}<br>`:''}${st.whatsapp?`<a href="https://wa.me/${waNumber(st.whatsapp)}" target="_blank" rel="noopener" style="color:#25D366;font-weight:700;display:inline-flex;align-items:center">${WA_ICON}WhatsApp ${esc(st.whatsapp)}</a><br>`:''}${st.email?`✉️ <a href="mailto:${esc(st.email)}" style="color:var(--indigo)">${esc(st.email)}</a><br>`:''}${st.address?`📍 ${esc(st.address)}${st.city?', '+esc(st.city):''}<br>`:''}${st.hours?`🕘 ${esc(st.hours)}`:''}${!st.phone&&!st.whatsapp&&!st.email&&!st.address?'Notre équipe vous répond à la livraison et en boutique.':''}</p></div></footer>
     ${S.products.some(isPartner)?`<p class="aff-note" style="text-align:center;margin:0 0 6px">Certains produits sont proposés via des liens partenaires (marqués « Partenaire ») : nous pouvons recevoir une commission, sans surcoût pour vous.${S.products.some(p=>isPartner(p)&&p.partner.platform==='amazon')?' '+AMAZON_NOTE:''}</p>`:''}
     <p class="foot-note">© ${new Date().getFullYear()} ${esc(st.legalName||st.shopName)}${st.legalForm?' · '+esc(st.legalForm):''}${st.capital?' au capital de '+esc(st.capital):''}${st.rccm?' · RCCM '+esc(st.rccm):''}${st.nif?' · NIF '+esc(st.nif):''}${st.address?' · '+esc(st.address)+(st.city?', '+esc(st.city):''):''}${st.country?' · '+esc(st.country):''}</p>`;
 }
+/* ===================== Espace Pro, fidélité, parrainage, devis ===================== */
+function parrainCode(){ try{ const r = JSON.parse(localStorage.getItem('ffm-parrain')||'null'); if(r && Date.now()-r.at < 60*864e5) return r.c; }catch(e){} return ''; }
+function loyaltyBox(t){ const L = S.settings.loyalty, l = S.loyalty; if(!L || !L.on || !l || !(l.balance>=L.min)) return '';
+  return `<label class="loy-use"><input type="checkbox" data-a="coPoints" ${CO.usePoints?'checked':''}> Utiliser mes <b>${l.balance} points</b> (jusqu’à −${fmt(l.balance*L.val)})</label>`; }
+function proLine(p){ if(!S.pro || isPartner(p)) return ''; const u = hasVar(p) ? null : unitPrice(p,1); if(u!==null && u>=p.price) return `<div class="pro-l">💼 Compte pro ${esc(S.pro.company||S.pro.name)}</div>`;
+  return `<div class="pro-l">💼 Votre prix pro${u!==null?` : <b>${fmt(u)}</b> <s>${fmt(p.price)}</s>`:` : −${S.pro.pct} % sur toutes les options`}</div>`; }
+function proModal(){ const st = S.settings;
+  $('#overlay').innerHTML = `<div class="scrim" data-a="closeAll"><div class="modal" role="dialog" aria-modal="true" aria-label="Espace Pro"><div class="m-h"><h2>💼 Espace Pro</h2><button class="x" data-a="closeAll" aria-label="Fermer">×</button></div>
+    <div class="m-b">${S.pro?`<p style="margin-top:0">Connecté : <b>${esc(S.pro.company||S.pro.name)}</b>${S.pro.company&&S.pro.name?' · '+esc(S.pro.name):''}</p>
+      <ul class="small" style="padding-left:18px;margin:0 0 12px">${S.pro.pct?`<li>Remise pro de <b>${S.pro.pct} %</b> sur le catalogue</li>`:''}<li><b>${Object.keys(S.pro.prices||{}).length}</b> produits à prix pro, appliqués automatiquement au panier</li>${S.pro.terms?`<li>Paiement à <b>${S.pro.termDays} jours</b> disponible à la commande</li>`:''}<li>Devis PDF en un clic depuis votre panier</li><li>« Commander à nouveau » dans Mes commandes</li></ul>
+      <div class="fin-actions" style="margin:0"><button class="btn primary" data-a="quote">🧾 Devis de mon panier</button><button class="btn ghost" data-a="go" data-v="orders">🔁 Mes commandes</button><button class="btn ghost" data-a="proOut">Se déconnecter</button></div>`
+    :`<p style="margin-top:0">Artisan, plombier, électricien, entreprise ou revendeur ? Avec votre <b>code pro</b>, vous voyez vos prix pro, faites vos devis en PDF et pouvez payer à terme.</p>
+      <div class="field"><label for="pro-code">Votre code pro</label><input class="input" id="pro-code" autocomplete="off" maxlength="20" placeholder="ex. PRO7K2M9" style="text-transform:uppercase"></div><div class="xp-err" id="pro-err"></div>
+      <div class="fin-actions" style="margin:6px 0 0"><button class="btn primary" data-a="proIn">Se connecter</button>${shopWa()?`<a class="btn wa" target="_blank" rel="noopener" href="https://wa.me/${shopWa()}?text=${encodeURIComponent('Bonjour, je suis un professionnel et je souhaite ouvrir un compte pro chez '+st.shopName+'. Mon activité : ')}">${WA_ICON}Demander un code</a>`:''}</div>`}</div></div></div>`;
+  setTimeout(()=>$('#pro-code')?.focus(), 60); }
+function printQuote(){ const st = S.settings, t = computeTotals(S.cart, S.appliedPromo, 'livraison'); if(!t.lines.length){ toast('Votre panier est vide.'); return; }
+  const n = 'DV-'+new Date().toISOString().slice(2,10).replace(/-/g,'')+'-'+Math.random().toString(36).slice(2,6).toUpperCase(), until = new Date(Date.now()+15*864e5).toLocaleDateString('fr-FR');
+  const who = S.pro ? (S.pro.company||S.pro.name) : '';
+  const html = `<!DOCTYPE html><html lang="fr"><head><meta charset="utf-8"><title>Devis ${n}</title><style>body{font:14px/1.45 system-ui,Arial,sans-serif;color:#111;margin:32px;max-width:780px}h1{font-size:26px;margin:0}table{width:100%;border-collapse:collapse;margin:18px 0}th,td{padding:8px;border-bottom:1px solid #ddd;text-align:left}td.r,th.r{text-align:right}.tot td{font-weight:700;font-size:16px;border-top:2px solid #111}.muted{color:#666;font-size:12px}.hd{display:flex;justify-content:space-between;gap:20px;align-items:flex-start}@media print{button{display:none}body{margin:12mm}}</style></head><body>
+    <div class="hd"><div>${st.logo?`<img src="${esc(st.logo)}" alt="" style="height:56px">`:''}<h2 style="margin:4px 0">${esc(st.legalName||st.shopName)}</h2><div class="muted">${esc([st.address, st.city].filter(Boolean).join(', '))}${st.phone?'<br>Tél. '+esc(st.phone):''}${st.rccm?'<br>RCCM '+esc(st.rccm):''}${st.nif?' · NIF '+esc(st.nif):''}</div></div>
+    <div style="text-align:right"><h1>DEVIS</h1><div><b>${n}</b></div><div class="muted">Établi le ${new Date().toLocaleDateString('fr-FR')}<br>Valable jusqu’au ${until}</div>${who?`<p style="margin:10px 0 0"><b>Client :</b> ${esc(who)}${S.pro&&S.pro.company&&S.pro.name?'<br>'+esc(S.pro.name):''}</p>`:''}</div></div>
+    <table><thead><tr><th>Désignation</th><th class="r">Qté</th><th class="r">Prix unitaire</th><th class="r">Montant</th></tr></thead><tbody>${t.lines.map(l=>`<tr><td>${esc(l.name)}</td><td class="r">${l.qty}</td><td class="r">${fmt(l.unit)}</td><td class="r">${fmt(l.unit*l.qty)}</td></tr>`).join('')}</tbody>
+    <tfoot><tr><td colspan="3" class="r">Sous-total</td><td class="r">${fmt(t.subtotal)}</td></tr>${t.discount?`<tr><td colspan="3" class="r">Remise</td><td class="r">−${fmt(t.discount)}</td></tr>`:''}<tr><td colspan="3" class="r">Livraison à ${esc(st.city||'Bamako')}</td><td class="r">${t.shipping?fmt(t.shipping):'Offerte'}</td></tr><tr class="tot"><td colspan="3" class="r">Total TTC</td><td class="r">${fmt(t.total)}</td></tr></tfoot></table>
+    <p class="muted">Prix en FCFA, sous réserve de disponibilité du stock. ${S.pro&&S.pro.terms?`Conditions : paiement à ${S.pro.termDays} jours.`:'Paiement à la livraison, Orange Money, Wave ou Moov Money.'} Pour commander, répondez à ce devis sur WhatsApp${st.whatsapp?' au '+esc(st.whatsapp):''} ou commandez sur ${esc(location.host)}.</p>
+    <button onclick="print()" style="padding:10px 18px;font-size:15px">Imprimer / Enregistrer en PDF</button></body></html>`;
+  const w = window.open('', '_blank'); if(!w){ toast('Autorisez les fenêtres pour ce site afin d’afficher le devis.'); return; } w.document.write(html); w.document.close(); setTimeout(()=>{ try{ w.print(); }catch(e){} }, 400); }
+function reorder(o){ let n = 0, miss = 0; (o.items||[]).forEach(i=>{ if(i.gift || i.addon || !i.id || String(i.id).startsWith('b:')) return; const p = S.products.find(x=>x.id===i.id);
+    if(!p || p.stock<=0 || isPartner(p)){ miss++; return; } if(i.variant){ if(!varOf(p, i.variant)){ miss++; return; } addLine({id:p.id, v:i.variant}, i.qty); } else addLine({id:p.id}, Math.min(i.qty, p.stock)); n++; });
+  if(n){ openCart(); toast(`${n} article${n>1?'s':''} ajouté${n>1?'s':''} au panier${miss?` · ${miss} indisponible${miss>1?'s':''}`:''}`); } else toast('Ces articles ne sont plus disponibles.'); }
+function loyaltyPanel(){ const L = S.settings.loyalty, l = S.loyalty; if(!L || !(L.on || L.refOn) || !l || !l.code) return '';
+  const link = location.origin+'/?parrain='+l.code, msg = `J’achète chez ${S.settings.shopName} : paiement à la livraison et livraison rapide. Avec mon lien, tu as ${fmt(L.refBonus).replace(/[  ]/g,' ')} de réduction sur ta première commande 👉 ${link}`;
+  return `<div class="two" style="margin-bottom:16px">${L.on?`<div class="panel loy"><h3>⭐ Mes points fidélité</h3><div class="loy-n">${l.balance} <span>points</span></div><p class="small" style="margin:4px 0 0">= <b>${fmt(l.balance*L.val)}</b> de réduction · 1 point pour ${fmt(L.per)} d’achat livré. ${l.balance>=L.min?'Utilisez-les à la prochaine commande (étape Paiement).':`Utilisables dès ${L.min} points.`}</p></div>`:''}
+    ${L.refOn?`<div class="panel loy"><h3>🤝 Parrainez vos proches</h3><p class="small" style="margin:0 0 8px">Ils ont <b>${fmt(L.refBonus)}</b> de réduction sur leur 1re commande, vous gagnez <b>${L.refPts} points</b> (${fmt(L.refPts*L.val)}) quand elle est livrée.${l.refs?` Déjà ${l.refs} filleul${l.refs>1?'s':''} !`:''}</p>
+      <div class="fin-actions" style="margin:0"><a class="btn wa sm" target="_blank" rel="noopener" href="https://wa.me/?text=${encodeURIComponent(msg)}">${WA_ICON}Partager sur WhatsApp</a><button class="btn ghost sm" data-a="copyMaps" data-v="${esc(link)}">Copier mon lien</button></div><p class="muted small" style="margin:6px 0 0">Votre code : <b>${esc(l.code)}</b></p></div>`:''}</div>`; }
 function viewMyOrders(){
   const mine = S.orders.filter(o=>o.createdBy===S.uid || !S.live);
-  return `<div class="sec-h"><h2>Mes commandes</h2></div>
+  return `<div class="sec-h" style="flex-wrap:wrap;gap:8px"><h2>Mes commandes</h2>${isServer()?`<button class="btn ghost sm" data-a="proOpen" style="white-space:normal;max-width:100%">💼 ${S.pro?'Espace Pro · '+esc(S.pro.company||S.pro.name):'Espace Pro'}</button>`:''}</div>
+    ${loyaltyPanel()}
     ${mine.length?`<div class="panel tbl-wrap"><table><thead><tr><th>Commande</th><th>Date</th><th>Total</th><th>Statut</th><th></th></tr></thead><tbody>
-    ${mine.map(o=>`<tr class="click" data-a="receipt" data-id="${o.id}"><td><b>${esc(o.number)}</b></td><td>${dateFr(o.createdAt)}</td><td>${fmt(o.total)}</td><td><span class="pill ${STATUS[o.status]?.cls}">${STATUS[o.status]?.label}</span></td><td>${REVIEW_ST.includes(o.status)?`<button class="btn sm primary" data-a="reviewOrder" data-id="${o.id}" style="border-radius:999px;white-space:nowrap">★ Donner mon avis</button>`:''}</td></tr>`).join('')}
+    ${mine.map(o=>`<tr class="click" data-a="receipt" data-id="${o.id}"><td><b>${esc(o.number)}</b></td><td>${dateFr(o.createdAt)}</td><td>${fmt(o.total)}</td><td><span class="pill ${STATUS[o.status]?.cls}">${STATUS[o.status]?.label}</span></td><td>${REVIEW_ST.includes(o.status)?`<button class="btn sm primary" data-a="reviewOrder" data-id="${o.id}" style="border-radius:999px;white-space:nowrap">★ Donner mon avis</button>`:''}${o.status!=='annulee'&&(o.items||[]).some(i=>i.id&&!i.gift&&!String(i.id).startsWith('b:'))?` <button class="btn sm ghost" data-a="reorder" data-id="${o.id}" style="white-space:nowrap">🔁 Commander à nouveau</button>`:''}</td></tr>`).join('')}
     </tbody></table></div>`:`<div class="empty"><h3>Aucune commande pour l’instant</h3><p>Vos achats apparaîtront ici avec leur suivi.</p><button class="btn primary" data-a="go" data-v="shop">Parcourir la boutique</button></div>`}`;
 }
 
@@ -2273,7 +2312,7 @@ function viewLanding(){
     ${abHook(p)?`<div class="muted small" style="margin:-6px 0 10px;font-weight:700">${esc(p.name)}</div>`:''}
     <p class="lp-sub">${esc(p.lpSub||p.description||'')}</p>
     ${rt.n?`<div class="rate-line">${starsHTML(rt.avg)}<b>${(Math.round(rt.avg*10)/10).toString().replace('.',',')}</b><button data-a="rvGo">${rt.n} avis vérifié${rt.n>1?'s':''}</button></div>`:''}
-    <div class="pdp-price"><span class="price">${hasVar(p)&&!sv&&minPrice(p)<p.price?'<span class="muted small" style="font-family:var(--f-b)">Dès </span>':''}${isPartner(p)?(p.price?'<span style="font-size:.6em">env. </span>'+fmt(p.price):'<span style="font-size:.55em">Prix sur '+esc(partnerName(p))+'</span>'):fmt(price)}</span>${save?`<span class="strike">${fmt(p.comparePrice)}</span>`:''}</div>
+    ${proLine(p)}<div class="pdp-price"><span class="price">${hasVar(p)&&!sv&&minPrice(p)<p.price?'<span class="muted small" style="font-family:var(--f-b)">Dès </span>':''}${isPartner(p)?(p.price?'<span style="font-size:.6em">env. </span>'+fmt(p.price):'<span style="font-size:.55em">Prix sur '+esc(partnerName(p))+'</span>'):fmt(price)}</span>${save?`<span class="strike">${fmt(p.comparePrice)}</span>`:''}</div>
     ${save?`<div class="save">Vous économisez ${fmt(save)} (−${Math.round(save/p.comparePrice*100)} %)</div>`:''}
     ${hasVar(p)?optionPicker(p):''}
     ${p.stock>0&&p.stock<=(p.lowStock||5)?`<p class="small" style="color:var(--danger);font-weight:700;margin:12px 0 0">Plus que ${p.stock} en stock</p>`:''}
@@ -2860,7 +2899,7 @@ function viewProduct(){
       ${(()=>{ const rt=productRating(p.id); return rt.n?`<div class="rate-line">${starsHTML(rt.avg)}<b>${(Math.round(rt.avg*10)/10).toString().replace('.',',')}</b><button data-a="rvGo">${rt.n} avis vérifié${rt.n>1?'s':''}</button></div>`:''; })()}
       ${p.description?`<p class="muted" style="margin:0 0 10px;font-size:16px">${esc(p.description)}</p>`:''}
       ${isUsed(p)?`<div class="trust-box" style="margin:4px 0 14px;border-color:color-mix(in srgb,var(--indigo) 45%,var(--line))"><div><span>♻️</span><span><b>Occasion · ${esc(condLabel(p))}</b>${esc(CONDITIONS[condKey(p)].d)}${p.conditionNote?`<br><span style="color:var(--ink)">${esc(p.conditionNote)}</span>`:''}</span></div></div>`:''}
-      <div class="pdp-price"><span class="price">${isPartner(p)?(p.price?'<span class="muted small" style="font-family:var(--f-b)">Environ </span>'+fmt(p.price):'<span class="muted" style="font-family:var(--f-b);font-size:18px">Prix affiché sur '+esc(partnerName(p))+'</span>'):hasVar(p)&&selVariant(p)?fmt(vPrice(p,selVariant(p).key)):hasVar(p)&&minPrice(p)<p.price?'<span class="muted small" style="font-family:var(--f-b)">Dès </span>'+fmt(minPrice(p)):fmt(p.price)}</span>${save?`<span class="strike">${fmt(p.comparePrice)}</span>`:''}</div>
+      ${proLine(p)}<div class="pdp-price"><span class="price">${isPartner(p)?(p.price?'<span class="muted small" style="font-family:var(--f-b)">Environ </span>'+fmt(p.price):'<span class="muted" style="font-family:var(--f-b);font-size:18px">Prix affiché sur '+esc(partnerName(p))+'</span>'):hasVar(p)&&selVariant(p)?fmt(vPrice(p,selVariant(p).key)):hasVar(p)&&minPrice(p)<p.price?'<span class="muted small" style="font-family:var(--f-b)">Dès </span>'+fmt(minPrice(p)):fmt(p.price)}</span>${save?`<span class="strike">${fmt(p.comparePrice)}</span>`:''}</div>
       ${save?`<div class="save">Vous économisez ${fmt(save)}</div>`:''}
       ${p.bulkMin>1&&p.bulkPrice>0?`<p class="bulk" style="font-size:14px;margin:10px 0 0">Achat groupé : ${fmt(p.bulkPrice)} l’unité dès ${p.bulkMin} unités</p>`:''}
       ${hasVar(p)?optionPicker(p):''}
@@ -2924,12 +2963,12 @@ document.addEventListener('touchstart', e=>{ const c = e.target.closest && e.tar
 document.addEventListener('touchend', e=>{ const c = e.target.closest && e.target.closest('.car'); if(c) setTimeout(()=>c.classList.remove('paused'), 1500); }, {passive:true});
 const onSale = p => p.comparePrice > p.price;
 const packsOf = p => hasVar(p) || isPartner(p) ? [] : (Array.isArray(p.packs)?p.packs:[]).map(k=>({qty:Math.round(+k.qty||0), price:Math.round(+k.price||0), label:String(k.label||'').slice(0,30)})).filter(k=>k.qty>=2 && k.qty<=50 && k.price>0 && k.price<p.price).sort((a,b)=>a.qty-b.qty).slice(0,3);
-const unitPrice = (p,qty) => { let u = p.price; if(p.bulkMin>1 && p.bulkPrice>0 && qty>=p.bulkMin) u = Math.min(u, p.bulkPrice); packsOf(p).forEach(k=>{ if(qty>=k.qty) u = Math.min(u, k.price); }); return u; };
+const unitPrice = (p,qty) => { let u = p.price; const pp = S.pro && S.pro.prices ? S.pro.prices[p.id] : 0; if(pp>0) u = Math.min(u, pp); if(p.bulkMin>1 && p.bulkPrice>0 && qty>=p.bulkMin) u = Math.min(u, p.bulkPrice); packsOf(p).forEach(k=>{ if(qty>=k.qty) u = Math.min(u, k.price); }); return u; };
 const lineKey = l => l.b ? 'b:'+l.b : l.id + (l.v ? '|'+l.v : '');
 const hasVar = p => !!(p && Array.isArray(p.variants) && p.variants.length);
 const varOf = (p, k) => hasVar(p) ? p.variants.find(v=>v.key===k) || null : null;
 const vStock = (p, k) => k && hasVar(p) ? ((varOf(p,k)||{}).stock||0) : p.stock;
-const vPrice = (p, k) => { const v = varOf(p, k); return v && Number(v.price)>0 ? Number(v.price) : p.price; };
+const vPrice = (p, k) => { const v = varOf(p, k), b = v && Number(v.price)>0 ? Number(v.price) : p.price; return S.pro && S.pro.pct ? Math.min(b, Math.round(b*(1-S.pro.pct/100))) : b; };
 const minPrice = p => hasVar(p) ? Math.min(...p.variants.map(v=>Number(v.price)>0?Number(v.price):p.price)) : p.price;
 const COLORS = {noir:'#111',blanc:'#fff',rouge:'#d62828',bleu:'#1d4ed8','bleu marine':'#1e2a5a',marine:'#1e2a5a',vert:'#2f855a',jaune:'#facc15',orange:'#f97316',rose:'#ec4899',violet:'#7c3aed',gris:'#9ca3af',marron:'#7c4a1e',beige:'#d6c3a1',doré:'#c9a45c',dore:'#c9a45c',or:'#c9a45c',argent:'#c0c0c0',kaki:'#78764a',bordeaux:'#6d1a2b',turquoise:'#14b8a6',crème:'#f4ecd8',creme:'#f4ecd8'};
 const swatch = v => { const c = COLORS[String(v).trim().toLowerCase()]; return c ? `<span class="sw" style="background:${c}"></span>` : ''; };
@@ -3077,7 +3116,10 @@ function computeTotals(cart, promo, delivery, dest){
     else if(promo.type==='fixed') discount = Math.min(promo.value, subtotal);
     else if(promo.type==='shipping'){ discount = shipping; }
   }
-  return {lines, subtotal, shipping, discount, total:Math.max(0, subtotal+shipping-discount), carrier, remote, quote, offers};
+  let total = Math.max(0, subtotal+shipping-discount), ptsDisc = 0, pts = 0, refDisc = 0; const L = S.settings.loyalty;
+  if(dest===CO && CO && L){ if(CO.usePoints && S.loyalty && S.loyalty.balance>=L.min){ pts = Math.min(S.loyalty.balance, Math.floor(Math.max(0,total-shipping)/L.val)); ptsDisc = pts*L.val; }
+    if(L.refOn && !S.pro && parrainCode() && !S.orders.some(o=>o.status!=='annulee')) refDisc = Math.min(L.refBonus, Math.max(0, total-shipping-ptsDisc)); total = Math.max(0, total-ptsDisc-refDisc); }
+  return {lines, subtotal, shipping, discount, total, carrier, remote, quote, offers, pts, ptsDisc, refDisc};
 }
 /* ===================== Tiroir panier : paliers, délai de livraison, suggestions ===================== */
 /* Paliers de cadeaux (jusqu'à 3) avec jusqu'à 3 cadeaux au choix ; un cadeau peut être un produit (photo, stock déduit) ou un texte */
@@ -3096,6 +3138,7 @@ function giftFor(sub){ const t = giftTiersOf().filter(x=>sub>=x.at).pop(); if(!t
 function giftPickKey(){ const g = giftFor(computeTotals(S.cart, S.appliedPromo, 'livraison').subtotal); return g ? g.item.key : ''; }
 const giftLine = sub => { const g = giftFor(sub); return g && g.item.pid ? [{id:g.item.pid, name:'🎁 '+g.item.name+' (offert)', price:0, qty:1, gift:true}] : []; };
 const giftImg = i => i.image ? `<img src="${esc(i.image)}" alt="" loading="lazy">` : `<span aria-hidden="true">${esc(i.emoji||'🎁')}</span>`;
+const priceTag = l => { const p = l.p; if(!p) return 'Prix réduit'; const pp = S.pro && S.pro.prices ? S.pro.prices[p.id] : 0; if(pp && l.unit===pp) return '💼 Prix pro appliqué'; if(packsOf(p).some(k=>l.qty>=k.qty && l.unit===k.price)) return 'Prix par lot appliqué'; return 'Prix de gros appliqué'; };
 function cartTiers(){ const st = S.settings, t = [];
   if(Number(st.freeFrom)>0) t.push({at:Number(st.freeFrom), ic:'🚚', lb:['Livraison offerte']});
   giftTiersOf().forEach(g=>{ const same = t.find(x=>x.at===g.at); if(same){ same.ic='🎁'; same.lb.push(tierName(g)); } else t.push({at:g.at, ic:'🎁', lb:[tierName(g)]}); });
@@ -3140,7 +3183,7 @@ function cartBody(){
   const g = giftFor(t.subtotal), gift = g ? g.item.name : '';
   return `${tierBar(t.subtotal)}${cartDownBanner()}${t.lines.map(l=>`<div class="line-item"><div class="li-img">${pImg(l.img)}</div>
       <div><b class="small">${esc(l.name)}</b><div class="muted small">${fmt(l.unit)}${l.unit<l.regular?` <span class="strike">${fmt(l.regular)}</span>`:''}</div>
-      ${l.bulk?`<div class="bulk">Prix de gros appliqué</div>`:''}${l.kind==='bundle'?`<div class="muted small">${l.comps.map(c=>`${c.qty} × ${esc(c.p.name)}`).join(' · ')}</div>`:''}
+      ${l.bulk?`<div class="bulk">${priceTag(l)}</div>`:''}${l.kind==='bundle'?`<div class="muted small">${l.comps.map(c=>`${c.qty} × ${esc(c.p.name)}`).join(' · ')}</div>`:''}
       <div class="qty" style="margin-top:6px"><button data-a="qty" data-id="${esc(l.key)}" data-d="-1" aria-label="Retirer un">−</button><span>${l.qty}</span><button data-a="qty" data-id="${esc(l.key)}" data-d="1" aria-label="Ajouter un">+</button></div></div>
       <b>${fmt(l.unit*l.qty)}</b></div>`).join('')}
     ${giftBlock(t.subtotal)}
@@ -3158,7 +3201,7 @@ function promoBox(target){
   if(ap) return `<div class="row" style="align-items:center"><span class="pill ok">Code ${esc(ap.code)} appliqué</span><button class="btn sm ghost" data-a="removePromo" data-t="${target}" style="flex:0">Retirer</button></div>`;
   return `<label class="sr" for="promo-${target}">Code promo</label><div class="promo-in"><input class="input" id="promo-${target}" placeholder="Code promo" autocomplete="off"><button class="btn ghost" data-a="applyPromo" data-t="${target}">Appliquer</button></div><div class="small" id="promo-msg-${target}" style="margin-top:6px;color:var(--danger)"></div>`;
 }
-function cartFoot(){ return `${S.cart.length?`<div class="small muted" style="text-align:center">Payez avec</div><div style="display:flex;justify-content:center">${payRow(false)}</div>`:''}<button class="btn primary block ${S.cart.length?'btn-live':''}" data-a="checkout" ${S.cart.length?'':'disabled'}>Passer la commande</button>${S.cart.length&&shopWa()?`<button class="btn wa block btn-live" data-a="waOrder" style="margin-top:8px">${WA_ICON}Commander sur WhatsApp</button><div class="muted small" style="text-align:center">Votre panier part sur WhatsApp : nous confirmons le prix, le paiement et la livraison.</div>`:''}`; }
+function cartFoot(){ return (S.cart.length?`<button class="btn ghost sm" data-a="quote" style="align-self:center;margin-bottom:6px">🧾 Télécharger un devis (PDF)</button>`:'') + `${S.cart.length?`<div class="small muted" style="text-align:center">Payez avec</div><div style="display:flex;justify-content:center">${payRow(false)}</div>`:''}<button class="btn primary block ${S.cart.length?'btn-live':''}" data-a="checkout" ${S.cart.length?'':'disabled'}>Passer la commande</button>${S.cart.length&&shopWa()?`<button class="btn wa block btn-live" data-a="waOrder" style="margin-top:8px">${WA_ICON}Commander sur WhatsApp</button><div class="muted small" style="text-align:center">Votre panier part sur WhatsApp : nous confirmons le prix, le paiement et la livraison.</div>`:''}`; }
 function cartHead(){ const n = cartCount(); return `Panier${n?` <span class="muted" style="font:600 14px var(--f-b)">(${n} article${n>1?'s':''})</span>`:''}`; }
 function refreshCart(){ const b = $('#drawer-body'); if(!b) return; const y = b.scrollTop, r = b.querySelector('.cd-row'), x = r ? r.scrollLeft : 0; b.innerHTML = cartBody(); b.scrollTop = y; const r2 = b.querySelector('.cd-row'); if(r2) r2.scrollLeft = x; $('#drawer-foot').innerHTML = cartFoot(); $('#drawer-title').innerHTML = cartHead(); }
 function openCart(){ if($('.drawer #drawer-body')) return refreshCart();
@@ -3233,7 +3276,7 @@ function sendWaOrder(lines, extra){
   if(window.markWaCart && lines===S.cart) window.markWaCart();
   window.open(url, '_blank');
 }
-function enabledProcs(){ return Object.entries(S.settings.processors).filter(([k,v])=>v.enabled && PROCESSORS[k]); }
+function enabledProcs(){ const l = Object.entries(S.settings.processors).filter(([k,v])=>v.enabled && PROCESSORS[k] && k!=='terme'); return S.pro && S.pro.terms && S.view!=='guide' ? [...l, ['terme', {enabled:true}]] : l; }
 function drawCheckout(){
   const t = computeTotals(S.cart, S.appliedPromo, CO.delivery, CO);
   if(t.remote && CO.carrier && !t.carrier) CO.carrier = '';
@@ -3269,8 +3312,8 @@ function drawCheckout(){
   if(CO.step===3){
     const procs = enabledProcs();
     body = `<h3 style="margin-bottom:14px">Paiement</h3>
-    ${procs.length?(()=>{ const order = ['orange','wave','moov','card','paypal','cod'], ps = procs.slice().sort((a,b)=>order.indexOf(a[0])-order.indexOf(b[0])), man = S.settings.manualPay||{}, firstMomo = (ps.find(([k])=>PROCESSORS[k].kind==='momo')||[])[0];
-      const sub = k => man[k] ? 'Transfert vers notre numéro, puis référence' : PROCESSORS[k].kind==='momo' ? 'Validation sur votre téléphone' : PROCESSORS[k].kind==='card' ? 'Paiement sécurisé' : 'Vous payez à la réception';
+    ${procs.length?(()=>{ const order = ['orange','wave','moov','card','paypal','cod','terme'], ps = procs.slice().sort((a,b)=>order.indexOf(a[0])-order.indexOf(b[0])), man = S.settings.manualPay||{}, firstMomo = (ps.find(([k])=>PROCESSORS[k].kind==='momo')||[])[0];
+      const sub = k => man[k] ? 'Transfert vers notre numéro, puis référence' : PROCESSORS[k].kind==='momo' ? 'Validation sur votre téléphone' : PROCESSORS[k].kind==='card' ? 'Paiement sécurisé' : PROCESSORS[k].kind==='terme' ? `Vous payez sous ${S.pro&&S.pro.termDays||30} jours` : 'Vous payez à la réception';
       const sel = CO.method && PROCESSORS[CO.method] ? CO.method : '', pc = sel ? PROCESSORS[sel].color : '';
       return `<p style="margin:-6px 0 12px;font-weight:700">${sel?'✓ '+esc(PROCESSORS[sel].name)+' sélectionné':'👇 Choisissez comment vous voulez payer'}</p>
       <div class="pay-grid ${sel?'':'pay-pick'}" id="pay-grid">${ps.map(([k])=>`<button class="pay-card" data-a="coMethod" data-v="${k}" aria-pressed="${CO.method===k}" style="--pc:${PROCESSORS[k].color}">${(S.settings.processors[k]||{}).logo?`<span class="lg" style="background:#fff;padding:6px;overflow:hidden;display:flex;align-items:center;justify-content:center;box-sizing:border-box"><img src="${esc(S.settings.processors[k].logo)}" alt="" style="max-width:100%;max-height:100%;width:auto;height:auto;object-fit:contain;display:block"></span>`:`<span class="lg">${PROCESSORS[k].short}</span>`}<b>${esc(PROCESSORS[k].name)}</b><span class="sub">${sub(k)}</span>${k===firstMomo?'<span class="badge">⚡ Rapide</span>':''}<span class="tick" aria-hidden="true">✓</span></button>`).join('')}</div>
@@ -3281,11 +3324,12 @@ function drawCheckout(){
             : `<li>Depuis votre application ou le menu ${esc(PROCESSORS[sel].name)}, envoyez <b>${fmt(t.total)}</b> au numéro <b style="font-size:16px;white-space:nowrap">${esc(man[sel])}</b> <button class="btn ghost sm" data-a="copyPayNum" data-v="${esc(man[sel])}" style="padding:2px 10px">Copier</button></li>`}
           <li>Notez la <b>référence (ID) de la transaction</b> reçue par SMS.</li><li>Collez-la ci-dessous : nous validons votre commande dès réception.</li></ol>
           <div class="field" style="margin:0"><label for="co-payref">Référence de la transaction</label><input class="input" id="co-payref" value="${esc(CO.payRef||'')}" placeholder="ex. CI241105.1234.A56789" autocomplete="off"></div>`
-        : `<b>${esc(PROCESSORS[sel].name)}</b><p class="small" style="margin:6px 0 0">En touchant « Payer », vous confirmez le paiement de <b>${fmt(t.total)}</b> sur votre téléphone en quelques secondes.</p>`}</div>` : sel==='cod' ? `<div class="pay-howto" style="--pc:${pc}"><b>Paiement à la livraison</b><p class="small" style="margin:6px 0 0">Préparez <b>${fmt(t.total)}</b> en espèces, ou payez par mobile money au livreur.</p></div>` : ''}`; })()
+        : `<b>${esc(PROCESSORS[sel].name)}</b><p class="small" style="margin:6px 0 0">En touchant « Payer », vous confirmez le paiement de <b>${fmt(t.total)}</b> sur votre téléphone en quelques secondes.</p>`}</div>` : sel==='terme' ? `<div class="pay-howto" style="--pc:${pc}"><b>💼 Paiement à terme</b><p class="small" style="margin:6px 0 0">Compte pro <b>${esc(S.pro.company||S.pro.name)}</b> : vous réglez <b>${fmt(t.total)}</b> sous <b>${S.pro.termDays||30} jours</b> après la commande, par Orange Money, Wave, virement ou espèces.</p></div>` : sel==='cod' ? `<div class="pay-howto" style="--pc:${pc}"><b>Paiement à la livraison</b><p class="small" style="margin:6px 0 0">Préparez <b>${fmt(t.total)}</b> en espèces, ou payez par mobile money au livreur.</p></div>` : ''}`; })()
     :'<div class="empty">Aucun moyen de paiement n’est activé. Le gérant doit en activer un dans Gestion › Paiements.</div>'}
     ${S.settings.testMode?'<div class="test-note"><b>Mode test.</b> Aucun débit réel n’est effectué : le paiement est simulé.</div>':''}
     <div class="totals" style="margin-top:18px"><div><span>Sous-total</span><span>${fmt(t.subtotal)}</span></div>
     ${t.discount?`<div style="color:var(--kola)"><span>Remise</span><span>−${fmt(t.discount)}</span></div>`:''}
+    ${loyaltyBox(t)}${t.ptsDisc?`<div style="color:var(--kola)"><span>⭐ ${t.pts} points fidélité</span><span>−${fmt(t.ptsDisc)}</span></div>`:''}${t.refDisc?`<div style="color:var(--kola)"><span>🤝 Parrainage (1re commande)</span><span>−${fmt(t.refDisc)}</span></div>`:''}
     <div><span>${t.carrier?'Transport · '+esc(t.carrier.name):'Livraison'}</span><span>${t.quote?'Sur devis':t.shipping?fmt(t.shipping):'Offerte'}</span></div>${giftFor(t.subtotal)?`<div style="color:var(--kola)"><span>🎁 ${esc(giftFor(t.subtotal).item.name)}</span><span>Offert</span></div>`:''}<div class="grand"><span>À payer</span><span>${fmt(t.total)}</span></div></div>
     ${t.quote?`<p class="muted small" style="margin:8px 0 0">Le transport vers ${esc(CO.city)} n’est pas inclus : nous vous confirmons son prix sur WhatsApp avant l’expédition.</p>`:''}`;
   }
@@ -3379,7 +3423,7 @@ function receiptHTML(o){
     <div style="margin-top:8px"><b>${esc(o.number)}</b></div><div class="muted small">${dateFr(o.createdAt)} · ${esc(o.channel==='caisse'?'Vente en caisse':'Commande en ligne')}</div>${o.slot?`<div class="small">🕒 Livraison : ${esc(slotLabel(o.slot))}</div>`:''}</div>
     ${o.items.map(i=>`<div class="rr"><span>${i.qty} × ${esc(i.name)}</span><span>${fmt(i.price*i.qty)}</span></div>`).join('')}
     <div style="border-top:2px dashed var(--line); margin:10px 0"></div>
-    <div class="rr"><span>Sous-total</span><span>${fmt(o.subtotal)}</span></div>
+    <div class="rr"><span>Sous-total</span><span>${fmt(o.subtotal)}</span></div>${o.pro?`<div class="rr"><span>💼 Compte pro</span><span>${esc(o.pro.company||o.pro.name)}</span></div>`:''}${o.pointsDiscount?`<div class="rr"><span>⭐ ${o.pointsUsed} points fidélité</span><span>−${fmt(o.pointsDiscount)}</span></div>`:''}${o.refDiscount?`<div class="rr"><span>🤝 Parrainage</span><span>−${fmt(o.refDiscount)}</span></div>`:''}${o.payment&&o.payment.dueAt?`<div class="rr"><span>Échéance</span><span>${new Date(o.payment.dueAt).toLocaleDateString('fr-FR')}</span></div>`:''}
     ${o.discount?`<div class="rr"><span>Remise ${esc(o.promoCode)}</span><span>−${fmt(o.discount)}</span></div>`:''}
     ${o.carrier?`<div class="rr"><span>Transport · ${esc(o.carrier.name)}${o.carrier.days?' ('+esc(o.carrier.days)+')':''}</span><span>${fmt(o.shipping)}</span></div>`:o.shipping?`<div class="rr"><span>Livraison</span><span>${fmt(o.shipping)}</span></div>`:''}${o.shipQuote?`<div class="rr"><span>Transport</span><span>Sur devis</span></div>`:''}
     ${o.gift?`<div class="rr" style="color:var(--kola)"><span>🎁 ${esc(o.gift)}</span><span>Offert</span></div>`:''}
@@ -4211,7 +4255,7 @@ function paneTransport(){
   ${Object.keys(CITIES).map(k=>`<datalist id="tr-cities-${k}">${CITIES[k].map(v=>`<option value="${esc(v)}">`).join('')}</datalist>`).join('')}
   <div class="row" style="gap:8px;flex-wrap:wrap"><button class="btn ghost" data-a="trAddCar">+ Ajouter une compagnie</button>${CARRIER_SUGG.some(([n])=>!list.some(c=>normCity(c.name)===normCity(n)))?'<button class="btn ghost" data-a="trSugg">📋 Ajouter des compagnies connues (à vérifier)</button>':''}<button class="btn primary" data-a="trSave">Enregistrer</button></div>`;
 }
-const TABS = [['dash','Tableau de bord'],['products','Produits'],['stock','Stock & inventaire'],['bundles','Lots'],['orders','Commandes'],['promos','Codes promo'],['affiliates','Ambassadeurs'],['reviews','Avis clients'],['blog','Conseils (blog)'],['studio','Studio réseaux'],['audience','Clients & retargeting'],['pub','Rentabilité pub'],['alerts','Alertes clients'],['carts','Assistant & paniers'],['company','Société'],['social','Calendrier réseaux'],['transport','Transport'],['payments','Paiements'],['team','Équipe']];
+const TABS = [['dash','Tableau de bord'],['products','Produits'],['stock','Stock & inventaire'],['bundles','Lots'],['orders','Commandes'],['promos','Codes promo'],['affiliates','Ambassadeurs'],['reviews','Avis clients'],['blog','Conseils (blog)'],['studio','Studio réseaux'],['audience','Clients & retargeting'],['pros','Clients pro'],['pub','Rentabilité pub'],['alerts','Alertes clients'],['carts','Assistant & paniers'],['company','Société'],['social','Calendrier réseaux'],['transport','Transport'],['payments','Paiements'],['team','Équipe']];
 /* --- Gestion › Conseils --- */
 function blogIdeas(){
   const city = S.settings.city||'Bamako', live = S.products.filter(p=>p.active!==false), cats = [...new Set(live.map(p=>p.category).filter(Boolean))];
@@ -4298,7 +4342,7 @@ function articleForm(a0){
 }
 function viewAdmin(){
   const pending = S.orders.filter(o=>o.status==='en_attente'||(o.status==='payee'&&!o.stockApplied)).length;
-  const panes = {dash:paneDash, products:paneProducts, stock:paneStock, bundles:paneBundles, orders:paneOrders, promos:panePromos, affiliates:paneAffiliates, reviews:paneReviews, blog:paneBlog, studio:paneStudio, audience:paneAudience, pub:panePub, company:paneCompany, social:paneSocial, transport:paneTransport, alerts:()=>window.paneAlerts?window.paneAlerts():'', carts:()=>window.paneCarts?window.paneCarts():'', payments:panePayments, team:paneTeam};
+  const panes = {dash:paneDash, products:paneProducts, stock:paneStock, bundles:paneBundles, orders:paneOrders, promos:panePromos, affiliates:paneAffiliates, reviews:paneReviews, blog:paneBlog, studio:paneStudio, audience:paneAudience, pub:panePub, pros:panePros, company:paneCompany, social:paneSocial, transport:paneTransport, alerts:()=>window.paneAlerts?window.paneAlerts():'', carts:()=>window.paneCarts?window.paneCarts():'', payments:panePayments, team:paneTeam};
   return `<div class="admin"><nav class="side" aria-label="Gestion">${TABS.filter(([k])=>(!['alerts','carts'].includes(k)||isServer()) && (k!=='pub'||isGerant())).map(([k,l])=>`<button data-a="tab" data-v="${k}" ${S.tab===k?'aria-current="page"':''}>${l}${k==='orders'&&pending?`<span class="pill warn">${pending}</span>`:''}</button>`).join('')}</nav>
     <section>${panes[S.tab]()}</section></div>`;
 }
@@ -4311,6 +4355,18 @@ function abResults(p){ if(!p.id || !p.lpHookB) return '<p class="muted small" st
     ${win==='B'?'<button type="button" class="btn primary sm" style="margin-top:6px" data-a="abKeepB">Garder B comme accroche principale</button>':''}</div>`; }
 /* 3. Rentabilité des publicités : dépenses saisies, commandes et marge par source et campagne */
 const AD_NETS = {facebook:'Facebook', instagram:'Instagram', tiktok:'TikTok', google:'Google', pinterest:'Pinterest', whatsapp:'WhatsApp', autre:'Autre', direct:'Direct (sans lien suivi)'};
+function panePros(){ const list = (S.pros||[]).slice().sort((a,b)=>(b.createdAt||0)-(a.createdAt||0)), e = S.proEdit || null;
+  const stats = id => { const os = S.orders.filter(o=>o.pro && o.pro.id===id && o.status!=='annulee'); return {n:os.length, ca:os.reduce((t,o)=>t+(o.total||0),0), due:os.filter(o=>o.payment&&o.payment.method==='terme' && !['payee'].includes(o.status) && !/encaiss|pay/i.test(o.payment.status.replace(/à payer/,''))).reduce((t,o)=>t+(o.total||0),0)}; };
+  const link = x => location.origin+'/?pro='+encodeURIComponent(x.code);
+  return `<div class="toolbar"><h2 style="font-size:24px;flex:1">Clients pro</h2><button class="btn primary" data-a="proNew">＋ Nouveau client pro</button></div>
+    <p class="muted" style="margin-top:-6px">Artisans, entreprises, revendeurs : chaque client pro reçoit un code. Connecté, il voit ses prix pro (prix pro des fiches produits, ou remise en %), télécharge ses devis et peut payer à terme si vous l’autorisez.</p>
+    ${e?`<div class="panel"><h3>${e.id?'Modifier':'Nouveau'} client pro</h3><div class="row"><div class="field"><label for="pr-name">Nom du contact *</label><input class="input" id="pr-name" value="${esc(e.name||'')}"></div><div class="field"><label for="pr-co">Entreprise / métier</label><input class="input" id="pr-co" value="${esc(e.company||'')}" placeholder="ex. Plomberie Diarra & Fils"></div><div class="field"><label for="pr-ph">Téléphone *</label><input class="input" id="pr-ph" type="tel" value="${esc(e.phone||'')}"></div></div>
+      <div class="row" style="align-items:flex-end"><div class="field"><label for="pr-pct">Remise pro sur tout le catalogue (%)</label><input class="input" id="pr-pct" inputmode="numeric" value="${esc(e.pct??10)}"></div><label class="check-row" style="display:flex;gap:8px;align-items:center"><input type="checkbox" id="pr-terms" ${e.terms?'checked':''}> Paiement à terme autorisé</label><div class="field"><label for="pr-days">Délai (jours)</label><input class="input" id="pr-days" inputmode="numeric" value="${esc(e.termDays||30)}"></div><label class="check-row" style="display:flex;gap:8px;align-items:center"><input type="checkbox" id="pr-act" ${e.active!==false?'checked':''}> Actif</label></div>
+      <p class="muted small" style="margin:0 0 8px">Code : <b>${esc(e.code)}</b>. Pour un prix pro précis sur un article, remplissez « Prix pro » dans sa fiche produit : le prix le plus bas entre ce prix et la remise s’applique.</p>
+      <div class="fin-actions" style="margin:0"><button class="btn primary" data-a="proSave">Enregistrer</button><button class="btn ghost" data-a="proCancel">Annuler</button></div><div class="xp-err" id="pr-err"></div></div>`:''}
+    <div class="panel tbl-wrap">${list.length?`<table><thead><tr><th>Client</th><th>Code</th><th>Conditions</th><th style="text-align:right">Commandes</th><th style="text-align:right">Achats</th><th style="text-align:right">À encaisser (terme)</th><th></th></tr></thead><tbody>${list.map(x=>{ const st = stats(x.id);
+      return `<tr><td><b>${esc(x.company||x.name)}</b><div class="muted small">${esc(x.name)} · ${esc(x.phone||'')}</div>${x.active===false?'<span class="pill bad">Désactivé</span>':''}</td><td><code>${esc(x.code)}</code></td><td class="small">${x.pct?`−${x.pct} %`:'Prix pro'}${x.terms?` · à ${x.termDays||30} j`:''}</td><td style="text-align:right">${st.n}</td><td style="text-align:right">${fmt(st.ca)}</td><td style="text-align:right">${st.due?`<b class="k-out">${fmt(st.due)}</b>`:'—'}</td>
+        <td style="text-align:right;white-space:nowrap">${x.phone?`<a class="btn wa sm" target="_blank" rel="noopener" href="https://wa.me/${waNumber(x.phone)}?text=${encodeURIComponent(`Bonjour ${firstName(x.name)||''} 😊 Votre compte pro ${S.settings.shopName} est ouvert ! Vos prix pro sont activés en touchant ce lien 👉 ${link(x)}\nVotre code pro : ${x.code}`)}">${WA_ICON}Envoyer</a>`:''} <button class="btn ghost sm" data-a="proEdit" data-id="${x.id}">Modifier</button></td></tr>`; }).join('')}</tbody></table>`:'<div class="empty"><h3>Aucun client pro</h3><p>Créez un compte pour vos artisans et entreprises clientes.</p></div>'}</div>`; }
 function panePub(){
   if(!isGerant()) return '<div class="empty"><h3>Réservé au gérant</h3><p>Cette page utilise les prix d’achat.</p></div>';
   const days = S.pubDays||30, since = Date.now()-days*864e5, sinceD = new Date(since).toISOString().slice(0,10);
@@ -4487,6 +4543,7 @@ function productForm(p){
         <div class="field"><label for="pf-low">Alerte stock bas à</label><input class="input" id="pf-low" inputmode="numeric" value="${esc(p.lowStock??5)}"></div></div>
         <div class="row"><div class="field"><label for="pf-bmin">Prix de gros dès (unités)</label><input class="input" id="pf-bmin" inputmode="numeric" value="${esc(p.bulkMin||'')}" placeholder="ex. 10"></div>
         <div class="field"><label for="pf-bprice">Prix de gros à l’unité</label><input class="input" id="pf-bprice" inputmode="numeric" value="${esc(p.bulkPrice||'')}"></div></div>
+        <div class="field"><label for="pf-pro">💼 Prix pro (clients pro uniquement, facultatif)</label><input class="input" id="pf-pro" inputmode="numeric" value="${esc(p.proPrice||'')}" placeholder="Vide = remise pro du client"></div>
         <div class="panel" style="padding:12px 14px;margin:0 0 14px"><b>✨ Badge « Nouveau » et carrousel de l’accueil</b>
           <div class="row" style="align-items:center;gap:10px;margin-top:10px"><span class="switch" style="flex:0 0 42px"><input type="checkbox" id="pf-new" ${isNewP||isNew(p)?'checked':''}><span></span></span><span style="flex:1">Badge « Nouveau »${isNew(p)?` <span class="muted small">(jusqu’au ${new Date(p.newUntil).toLocaleDateString('fr-FR')})</span>`:''}</span>
             <select class="input" id="pf-newdays" style="flex:0 1 170px"><option value="keep">${isNew(p)?'Garder la date':'—'}</option>${[[7,'7 jours'],[15,'15 jours'],[30,'30 jours'],[60,'60 jours'],[90,'90 jours'],[3650,'Sans limite']].map(([d,l])=>`<option value="${d}" ${!isNew(p)&&d===30?'selected':''}>${l}</option>`).join('')}</select></div>
@@ -4664,7 +4721,7 @@ function productForm(p){
         packs:[0,1,2].map(i=>({qty:parseInt(v('#pk-q-'+i))||0, price:Number(v('#pk-p-'+i).replace(/\s/g,''))||0, label:v('#pk-l-'+i).slice(0,30)})).filter(k=>k.qty>=2 && k.price>0)}:{}),
       highlights:$('#pf-hl').value.trim(), details:$('#pf-details').value.trim(), specs:$('#pf-specs').value.trim(), warranty:v('#pf-war'), active:$('#pf-active').checked,
       upsell:($('#pf-up')||{}).value||'auto', downsell:($('#pf-down')||{}).value||'auto',
-      bulkMin:Math.max(0,parseInt(v('#pf-bmin'))||0), bulkPrice:Number(v('#pf-bprice').replace(/\s/g,''))||0,
+      bulkMin:Math.max(0,parseInt(v('#pf-bmin'))||0), bulkPrice:Number(v('#pf-bprice').replace(/\s/g,''))||0, proPrice:($('#pf-pro')?Number(v('#pf-pro').replace(/\s/g,''))||0:(p.proPrice||0)),
       newUntil:(()=>{ if(!$('#pf-new').checked) return 0; const d = $('#pf-newdays').value; if(d==='keep') return isNew(p) ? p.newUntil : Date.now()+30*DAY; return Date.now()+Number(d)*DAY; })(),
       carousel:({on:true, off:false})[$('#pf-car').value],
       affPct:v('#pf-aff')===''?'':Math.min(100,Math.max(0,Number(v('#pf-aff').replace(',','.'))||0)),
@@ -5092,6 +5149,19 @@ document.addEventListener('click', async e=>{
       if(!(amt>0)){ err.textContent = 'Indiquez le montant dépensé.'; break; } const id = newId('ad'), d = {date, net:$('#ad-net').value, campaign:cmpNorm($('#ad-cmp').value), amount:amt, createdAt:Date.now()};
       put('ad-spend', id, d).then(()=>{ S.adSpend = [...(S.adSpend||[]).filter(x=>x.id!==id), {id, ...d}]; toast('Dépense ajoutée'); schedule(); }).catch(dbErr); break; }
     case 'adDel': { const id = el.dataset.id; if(!confirm('Supprimer cette dépense ?')) break; del('ad-spend', id).then(()=>{ S.adSpend = (S.adSpend||[]).filter(x=>x.id!==id); schedule(); }).catch(dbErr); break; }
+    case 'proOpen': proModal(); break;
+    case 'proNew': S.proEdit = {code:'PRO'+Math.random().toString(36).slice(2,7).toUpperCase().replace(/[^A-Z0-9]/g,'X'), pct:10, termDays:30, active:true}; schedule(); break;
+    case 'proEdit': S.proEdit = {...(S.pros||[]).find(x=>x.id===id)}; schedule(); break;
+    case 'proCancel': S.proEdit = null; schedule(); break;
+    case 'proSave': { const e = S.proEdit, err = $('#pr-err'), v = q=>($(q).value||'').trim(); if(!e) break; const d = {...e, name:v('#pr-name'), company:v('#pr-co'), phone:v('#pr-ph'), pct:Math.min(60, Math.max(0, parseInt(v('#pr-pct'))||0)), terms:$('#pr-terms').checked, termDays:Math.min(90, Math.max(7, parseInt(v('#pr-days'))||30)), active:$('#pr-act').checked, createdAt:e.createdAt||Date.now()};
+      if(!d.name || d.phone.replace(/\D/g,'').length<8){ err.textContent = 'Nom et téléphone requis.'; break; } const pid = e.id || newId('pro'); delete d.id;
+      put('pros', pid, d).then(()=>{ S.pros = [...(S.pros||[]).filter(x=>x.id!==pid), {id:pid, ...d}]; S.proEdit = null; toast('Client pro enregistré'); schedule(); }).catch(dbErr); break; }
+    case 'proIn': { const c = ($('#pro-code').value||'').trim(), err = $('#pro-err'); if(c.length<6){ err.textContent = 'Saisissez votre code pro.'; break; } el.disabled = true;
+      proLogin(c).then(pr=>{ closeAll(); toast('Bienvenue '+(pr.company||pr.name)+' : vos prix pro sont activés'); }).catch(e=>{ err.textContent = e.message||'Code inconnu.'; el.disabled = false; }); break; }
+    case 'proOut': proLogout(); closeAll(); toast('Espace Pro déconnecté'); break;
+    case 'quote': printQuote(); break;
+    case 'reorder': { const o = S.orders.find(x=>x.id===id); if(o) reorder(o); break; }
+    case 'coPoints': CO.usePoints = el.checked; drawCheckout(); break;
     case 'coSlot': CO.slot = el.dataset.v; drawCheckout(); break;
     case 'xpSlot': { S.xpSlot = el.dataset.v; document.querySelectorAll('[data-a=xpSlot]').forEach(b=>{ const on = b.dataset.v===S.xpSlot; b.classList.toggle('on', on); b.setAttribute('aria-pressed', on); }); break; }
     case 'gConfirm': { const o = S.guideOrder; if(!o) break; if(el.dataset.v==='cancel' && !confirm('Annuler votre commande ?')) break; el.disabled = true;
@@ -5371,6 +5441,8 @@ function captureSrc(){
     if(src){ localStorage.setItem('ffm-src', JSON.stringify({src, at:Date.now()})); window.__ffmNewSrc = src; }
     const pc = (q.get('promo')||'').trim().toUpperCase().replace(/[^A-Z0-9_-]/g,'').slice(0,30); if(pc) localStorage.setItem('ffm-promo', pc);
     const cat = q.get('cat'); if(cat) window.__ffmCat = cat;
+    const pr = (q.get('parrain')||'').trim().toUpperCase(); if(/^P[0-9A-F]{6}$/.test(pr)) localStorage.setItem('ffm-parrain', JSON.stringify({c:pr, at:Date.now()}));
+    const pc2 = (q.get('pro')||'').trim().toUpperCase().replace(/[^A-Z0-9]/g,'').slice(0,20); if(pc2.length>=6) localStorage.setItem('ffm-pro', JSON.stringify({code:pc2}));
     const cm = cmpNorm(q.get('cmp')||q.get('utm_campaign')||''); if(cm) localStorage.setItem('ffm-cmp', JSON.stringify({c:cm, at:Date.now()})); }catch(e){}
 }
 function lpSeen(){ try{ return JSON.parse(sessionStorage.getItem('ffm-lp')||'[]'); }catch(e){ return []; } }

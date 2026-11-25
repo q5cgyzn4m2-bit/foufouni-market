@@ -18,7 +18,7 @@
     try {
       if (me) {
         const s = await api('GET', '/api/admin/state');
-        S.products = s.products; S.bundles = s.bundles || []; S.promos = s.promos; S.affiliates = s.affiliates || []; S.affPayouts = s.affPayouts || []; S.visits = s.visits || []; S.reviews = s.reviews || []; S.campaigns = s.campaigns || []; S.adSpend = s.adSpend || []; S.drivers = s.drivers || []; S.purchases = s.purchases || []; S.affClicks = s.affClicks || []; S.articles = s.articles || []; S.lpStats = s.lpStats || []; S.socialPosts = s.socialPosts || []; S.social = s.social || { meta: { connected: false } }; S.contactFlags = Object.fromEntries((s.contactFlags || []).map(f => [f.id, f])); S.costs = Object.fromEntries((s.costs || []).map(c => [c.id, Number(c.cost) || 0])); S.stockMoves = s.stockMoves || [];
+        S.products = s.products; S.bundles = s.bundles || []; S.promos = s.promos; S.affiliates = s.affiliates || []; S.affPayouts = s.affPayouts || []; S.visits = s.visits || []; S.reviews = s.reviews || []; S.campaigns = s.campaigns || []; S.adSpend = s.adSpend || []; S.pros = s.pros || []; S.drivers = s.drivers || []; S.purchases = s.purchases || []; S.affClicks = s.affClicks || []; S.articles = s.articles || []; S.lpStats = s.lpStats || []; S.socialPosts = s.socialPosts || []; S.social = s.social || { meta: { connected: false } }; S.contactFlags = Object.fromEntries((s.contactFlags || []).map(f => [f.id, f])); S.costs = Object.fromEntries((s.costs || []).map(c => [c.id, Number(c.cost) || 0])); S.stockMoves = s.stockMoves || [];
         S.clients = (s.clients||[]).sort((a,b)=>a.name.localeCompare(b.name)); S.suppliers = (s.suppliers||[]).sort((a,b)=>a.name.localeCompare(b.name));
         S.moves = s.moves || []; S.ledger = s.ledger || []; S.finConfig = s.finConfig || {}; S.orders = s.orders; S.users = s.users;
         S.settings = mergeSettings(s.settings); providers = s.providers; configured = s.configured || {}; notif = s.notifications || {};
@@ -350,7 +350,7 @@
       const r = await api('POST', '/api/orders', {
         items: S.cart.map(l => l.b ? { bundle: l.b, qty: l.qty } : (l.v ? { id: l.id, qty: l.qty, v: l.v } : { id: l.id, qty: l.qty })), promoCode: S.appliedPromo ? S.appliedPromo.code : '',
         customer: { name: CO.name, phone: CO.phone, address: CO.address, city: CO.city, note: CO.note, country: CO.country || 'ML', ...(CO.geo ? { geo: CO.geo } : {}) }, payRef: CO.payRef || '',
-        delivery: CO.delivery, carrier: CO.carrier || '', slot: CO.slot || '', lpAb: typeof abMap === 'function' ? abMap() : {}, giftPick: typeof giftPickKey === 'function' ? giftPickKey() : '', method: CO.method, cartId, ref: refCode(), source: srcCode(), campaign: cmpCode(), lpPids: lpSeen().filter(id => S.cart.some(l => l.id === id))
+        delivery: CO.delivery, carrier: CO.carrier || '', slot: CO.slot || '', proCode: S.pro ? S.pro.code : '', usePoints: !!CO.usePoints, loyaltyProof: CO.usePoints ? myOrders().slice(0, 20) : [], parrain: typeof parrainCode === 'function' ? parrainCode() : '', lpAb: typeof abMap === 'function' ? abMap() : {}, giftPick: typeof giftPickKey === 'function' ? giftPickKey() : '', method: CO.method, cartId, ref: refCode(), source: srcCode(), campaign: cmpCode(), lpPids: lpSeen().filter(id => S.cart.some(l => l.id === id))
       });
       addMine(r.id, r.token); syncAlerts();
       { const tt = computeTotals(S.cart, S.appliedPromo, CO.delivery, CO); ttTrack('PlaceAnOrder', { transaction_id: (r.order && r.order.number) || r.id, value: Math.round(tt.total), contents: tt.lines.filter(l => l.kind === 'product').map(l => ttItem(l.p, l.qty, l.unit)) }); ttIdentify(CO.phone); }
@@ -368,7 +368,7 @@
   window.expressOrder = async function (o) {
     const items = [o.v ? { id: o.p.id, qty: o.qty, v: o.v } : { id: o.p.id, qty: o.qty }];
     const r = await api('POST', '/api/orders', {
-      items, promoCode: '', method: 'cod', delivery: 'livraison', carrier: '', slot: o.slot || '', lpAb: typeof abMap === 'function' ? abMap() : {}, giftPick: o.giftPick || '',
+      items, promoCode: '', method: 'cod', delivery: 'livraison', carrier: '', slot: o.slot || '', proCode: S.pro ? S.pro.code : '', parrain: typeof parrainCode === 'function' ? parrainCode() : '', lpAb: typeof abMap === 'function' ? abMap() : {}, giftPick: o.giftPick || '',
       customer: { name: o.name, phone: o.phone, address: o.address, city: S.settings.city || 'Bamako', note: '', country: 'ML' },
       cartId, ref: refCode(), source: srcCode(), campaign: cmpCode(), lpPids: [o.p.id]
     });
@@ -381,6 +381,14 @@
     const r = await api('POST', `/api/orders/${encodeURIComponent(o.id)}/confirm`, { t, answer });
     const i = S.orders.findIndex(x => x.id === o.id); if (i >= 0) S.orders[i] = r.order; S.guideOrder = { ...r.order, token: t }; schedule(); return r.order;
   };
+  window.proLogin = async function (code) {
+    const r = await api('GET', '/api/pro/me?c=' + encodeURIComponent(String(code || '').trim().toUpperCase()));
+    S.pro = { ...r.pro, code: String(code).trim().toUpperCase(), prices: r.prices || {}, at: Date.now() };
+    try { localStorage.setItem('ffm-pro', JSON.stringify({ code: S.pro.code })); } catch (e) {} schedule(); return S.pro;
+  };
+  window.proLogout = function () { S.pro = null; try { localStorage.removeItem('ffm-pro'); } catch (e) {} schedule(); };
+  window.loyaltyInfo = async function () { try { S.loyalty = await api('POST', '/api/loyalty', { orders: myOrders().slice(0, 20) }); } catch (e) { S.loyalty = null; } schedule(); return S.loyalty; };
+  if (!me) { try { const pc = JSON.parse(localStorage.getItem('ffm-pro') || 'null'); if (pc && pc.code) window.proLogin(pc.code).catch(() => { S.pro = null; }); } catch (e) {} if (myOrders().length) window.loyaltyInfo(); }
   window.leadCapture = async function (p, name, phone) {
     contact = { name, phone };
     const lid = 'ld' + Date.now().toString(36) + Math.random().toString(36).slice(2, 10);
