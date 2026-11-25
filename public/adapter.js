@@ -245,7 +245,7 @@
       <button class="btn primary" data-srv="aiSave">Enregistrer</button></div>
     <div class="kpis" style="grid-template-columns:repeat(3,1fr)"><div class="kpi"><span>Paniers abandonnés (7 j)</span><b>${carts.length}</b></div><div class="kpi"><span>Valeur à récupérer</span><b>${fmt(val)}</b></div><div class="kpi"><span>Avec numéro de téléphone</span><b>${withPhone}</b></div></div>
     <div class="panel tbl-wrap"><h3>Paniers à relancer</h3>${carts.length ? `<table><thead><tr><th>Quand</th><th>Contenu</th><th>Valeur</th><th>Client</th><th></th></tr></thead><tbody>${carts.map(c => `<tr><td class="small" style="white-space:nowrap">${dateFr(c.updatedAt)}</td><td class="small">${c.lines.map(l => `${l.qty} × ${esc(l.name)}`).join('<br>')}</td><td><b>${fmt(c.value)}</b></td>
-      <td class="small">${c.contact && (c.contact.name || c.contact.phone) ? `${esc(c.contact.name || '')}<br>${esc(c.contact.phone || '')}` : '<span class="muted">Anonyme</span>'}${c.pushed ? '<br><span class="pill info">Relancé par notification</span>' : ''}${c.relaunchedAt ? `<br><span class="pill ok">WhatsApp ${dateFr(c.relaunchedAt)}</span>` : ''}</td>
+      <td class="small">${c.contact && (c.contact.name || c.contact.phone) ? `${esc(c.contact.name || '')}<br>${esc(c.contact.phone || '')}` : '<span class="muted">Anonyme</span>'}${c.lead ? '<br><span class="pill warn">📱 Numéro laissé sur la page de vente</span>' : ''}${c.pushed ? '<br><span class="pill info">Relancé par notification</span>' : ''}${c.relaunchedAt ? `<br><span class="pill ok">WhatsApp ${dateFr(c.relaunchedAt)}</span>` : ''}</td>
       <td>${c.contact && c.contact.phone ? `<button class="btn primary sm" data-srv="relance" data-id="${c.id}" style="white-space:nowrap">💬 Relancer</button>` : ''}</td></tr>`).join('')}</tbody></table>` : '<p class="muted">Aucun panier abandonné pour le moment.</p>'}
       <p class="muted small" style="margin:10px 0 0">« Relancer » prépare un message WhatsApp personnalisé${cartsData.ai ? ', rédigé par l’assistante' : ''}, que vous relisez avant l’envoi. Le numéro est connu quand le client a commencé à remplir le formulaire de commande.</p></div>`;
   };
@@ -357,6 +357,30 @@
         location.href = r.redirect;
       } else { load(); showReceipt(r.order, true); }
     } catch (e) { err.textContent = e.message; btn.disabled = false; btn.textContent = 'Réessayer'; }
+  };
+
+  /* ---------- page de vente : commande express (paiement à la livraison), contact laissé, offre après commande ---------- */
+  window.expressOrder = async function (o) {
+    const items = [o.v ? { id: o.p.id, qty: o.qty, v: o.v } : { id: o.p.id, qty: o.qty }];
+    const r = await api('POST', '/api/orders', {
+      items, promoCode: '', method: 'cod', delivery: 'livraison', carrier: '', giftPick: o.giftPick || '',
+      customer: { name: o.name, phone: o.phone, address: o.address, city: S.settings.city || 'Bamako', note: 'Commande express (page de vente)', country: 'ML' },
+      cartId, ref: refCode(), source: srcCode(), campaign: cmpCode(), lpPids: [o.p.id]
+    });
+    addMine(r.id, r.token); syncAlerts();
+    ttTrack('PlaceAnOrder', { transaction_id: (r.order && r.order.number) || r.id, value: Math.round(r.order ? r.order.total : 0), contents: [ttItem(o.p, o.qty, o.unit)] }); ttIdentify(o.phone);
+    load(); return r.order;
+  };
+  window.leadCapture = async function (p, name, phone) {
+    contact = { name, phone };
+    const lid = 'ld' + Date.now().toString(36) + Math.random().toString(36).slice(2, 10);
+    const items = S.cart.length ? S.cart.map(l => l.b ? { bundle: l.b, qty: l.qty } : (l.v ? { id: l.id, qty: l.qty, v: l.v } : { id: l.id, qty: l.qty })) : [{ id: p.id, qty: Math.max(1, S.pqty || 1) }];
+    await api('POST', '/api/carts', { id: lid, items, contact, lead: 'sortie' });
+  };
+  window.orderAddon = async function (orderId, pid) {
+    const m = myOrders().find(x => x.id === orderId); if (!m) throw new Error('Commande introuvable sur cet appareil.');
+    const r = await api('POST', `/api/orders/${encodeURIComponent(orderId)}/addon`, { t: m.t, pid, giftPick: typeof giftPickKey === 'function' ? giftPickKey() : '' });
+    load(); return r.order;
   };
 
   /* Retour depuis Wave ou Orange Money : on attend la confirmation du serveur */

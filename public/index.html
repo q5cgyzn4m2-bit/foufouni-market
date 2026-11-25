@@ -543,6 +543,69 @@ tr.mv-tr td:first-child{box-shadow:inset 3px 0 0 var(--indigo)}
 .line-item.gift{background:var(--kola-soft); border-radius:12px; padding:10px; margin-top:8px; border:1px dashed var(--kola)}
 .line-item.gift .li-img{background:var(--surface)}
 .cd-reco{margin:16px 0 4px}
+/* Page de vente : offres, commande express, garantie, preuves, comparatif, audio, offre après commande */
+.pk{display:grid; gap:8px; margin:16px 0 4px}
+.pk-o{position:relative; display:flex; align-items:center; gap:12px; width:100%; padding:13px 14px; border-radius:14px; border:2px solid var(--line); background:var(--surface); color:inherit; font:inherit; text-align:left; cursor:pointer}
+.pk-o.on{border-color:var(--saffron); background:var(--saffron-soft)}
+.pk-o:disabled{opacity:.45; cursor:not-allowed}
+.pk-r{flex:0 0 20px; height:20px; border-radius:50%; border:2px solid var(--line)}
+.pk-o.on .pk-r{border:6px solid var(--saffron)}
+.pk-t{flex:1; display:flex; flex-direction:column; gap:2px; min-width:0}
+.pk-p{font-size:12px; font-weight:700; color:var(--kola)}
+.pk-v{display:flex; flex-direction:column; align-items:flex-end; font-size:16px}
+.pk-v s{font-size:12px; color:var(--muted)}
+.pk-b{position:absolute; top:-10px; right:12px; background:var(--saffron); color:#1b1204; font-size:11px; font-weight:800; padding:2px 9px; border-radius:99px}
+.xp{margin:14px 0 0; padding:16px; border-radius:16px; border:2px solid var(--saffron); background:var(--surface); display:grid; gap:9px; scroll-margin:90px}
+.xp-h{display:flex; justify-content:space-between; align-items:center; gap:8px; flex-wrap:wrap; font-size:17px}
+.xp-h span{font-size:12.5px; font-weight:800; color:var(--kola); background:var(--kola-soft); padding:4px 10px; border-radius:99px}
+.xp-sum{display:grid; grid-template-columns:1fr auto; gap:4px 12px; font-size:13.5px; padding:10px 12px; border-radius:12px; background:var(--surface-2)}
+.xp-sum>*:nth-child(even){text-align:right}
+.xp-tot{font-size:15px; padding-top:6px; border-top:1px dashed var(--line); margin-top:2px}
+.xp .input{font-size:16px}
+.xp-go{font-size:17px; padding:16px}
+.xp-err{color:var(--danger); font-size:13.5px; font-weight:700; min-height:0}
+.xp-err:empty{display:none}
+.xp-f{font-size:12px; color:var(--muted); line-height:1.5; text-align:center}
+.linkbtn{border:0; background:none; padding:0; color:var(--saffron); font:inherit; font-weight:700; text-decoration:underline; cursor:pointer}
+.xp-or{display:flex; align-items:center; gap:10px; color:var(--muted); font-size:13px; margin:14px 0 -4px}
+.xp-or::before,.xp-or::after{content:''; flex:1; height:1px; background:var(--line)}
+.gar{display:flex; gap:12px; align-items:flex-start; margin:14px 0 0; padding:14px; border-radius:14px; background:var(--kola-soft); border:1.5px solid var(--kola)}
+.gar-i{font-size:28px; line-height:1}
+.gar>span:last-child{display:flex; flex-direction:column; gap:3px; font-size:14.5px; line-height:1.45}
+.gar b{font-size:16px}
+.lv{display:grid; gap:8px; margin:12px 0 0; font-size:14px}
+.lv-eta{margin:0}
+.au-c{display:flex; gap:14px; align-items:flex-start; max-width:620px; margin:0 auto; padding:16px; border-radius:16px; border:1px solid var(--line); background:var(--surface)}
+.au-c b{display:block; font-size:16px}
+.au-i{font-size:34px; line-height:1}
+.pf-row{display:flex; gap:12px; overflow-x:auto; padding:6px 2px 10px; scroll-snap-type:x mandatory; margin-top:18px}
+.pf-c{flex:0 0 min(62%,240px); scroll-snap-align:start; padding:0; border:1px solid var(--line); border-radius:16px; overflow:hidden; background:var(--surface); cursor:zoom-in}
+.pf-c img{width:100%; display:block; max-height:420px; object-fit:cover; object-position:top}
+.cp-w{max-width:720px; margin:22px auto 0; overflow-x:auto}
+.cp{width:100%; table-layout:fixed; border-collapse:separate; border-spacing:0; font-size:14px}
+.cp th,.cp td{white-space:normal; overflow-wrap:break-word; word-break:break-word; hyphens:auto}
+.cp col.c1{width:32%}
+@media (max-width:560px){.cp{font-size:13px} .cp th,.cp td{padding:9px 7px} .cp thead th{font-size:10.5px; letter-spacing:0}}
+.cp th,.cp td{padding:11px 10px; border-bottom:1px solid var(--line); text-align:left; vertical-align:top}
+.cp thead th{font-size:13px; text-transform:uppercase; letter-spacing:.04em; color:var(--muted)}
+.cp thead th.cp-us{color:var(--kola)}
+.cp td.cp-us{background:var(--kola-soft); font-weight:700}
+.cp td.cp-no{color:var(--muted)}
+.cp tbody th{font-weight:700}
+.ao{margin:0 0 14px; padding:14px; border-radius:16px; border:2px dashed var(--saffron); background:var(--saffron-soft); display:grid; gap:10px}
+.ao-h{font-weight:800; font-size:15px}
+.ao-b{display:flex; gap:12px; align-items:center}
+.ao-b>span:last-child{display:flex; flex-direction:column; gap:2px}
+.ao-img{flex:0 0 64px; width:64px; height:64px; border-radius:12px; overflow:hidden; background:var(--surface-2); display:grid; place-items:center; font-size:30px}
+.ao-img img{width:100%; height:100%; object-fit:cover}
+.ao-p s{color:var(--muted); font-size:12px}
+.ex-p{display:flex; gap:12px; align-items:center}
+.ex-p>span:last-child{display:flex; flex-direction:column}
+.pf-adm{display:flex; gap:8px; flex-wrap:wrap}
+.pf-t{position:relative; width:64px; height:96px; border-radius:8px; overflow:hidden; border:1px solid var(--line)}
+.pf-t img{width:100%; height:100%; object-fit:cover; object-position:top}
+.pf-t button{position:absolute; top:2px; right:2px; width:22px; height:22px; border-radius:50%; border:0; background:rgba(0,0,0,.7); color:#fff; cursor:pointer; line-height:1}
+.pk-row .field{margin-bottom:6px}
 .rvp{overflow:hidden; margin:14px 0 0; padding:12px 14px; border:1px solid var(--line); border-radius:14px; background:var(--surface)}
 .rvp-h{display:flex; align-items:center; gap:10px}
 .rvp-h>span:nth-child(2){flex:1; display:flex; flex-direction:column; gap:1px; font-size:17px}
@@ -2093,6 +2156,73 @@ async function attachHls(){
     try{ hlsLib = hlsLib || await new Promise((ok, ko)=>{ const sc = document.createElement('script'); sc.src = 'https://cdn.jsdelivr.net/npm/hls.js@1.5.20/dist/hls.min.js'; sc.onload = ()=>ok(window.Hls); sc.onerror = ko; document.head.appendChild(sc); });
       if(hlsLib && hlsLib.isSupported()){ const h = new hlsLib(); h.loadSource(src); h.attachMedia(v); } else v.src = src; }
     catch(e){ v.src = src; } } }
+/* ===================== Page de vente : les 9 leviers de conversion ===================== */
+const codOn = () => enabledProcs().some(([k])=>k==='cod');
+const xpOk = p => isServer() && codOn() && !isPartner(p) && p.stock>0 && p.lpExpress!==false;
+/* 2. Offres par quantité */
+function packCards(p){ const ks = packsOf(p); if(!ks.length || p.stock<=0) return '';
+  const opts = [{qty:1, label:''}, ...ks], q = Math.max(1, S.pqty||1), cur = [...opts].reverse().find(o=>q>=o.qty) || opts[0], first = giftTiersOf()[0];
+  return `<div class="pk" role="radiogroup" aria-label="Choisissez votre offre">${opts.map(o=>{ const u = unitPrice(p,o.qty), tot = u*o.qty, save = p.price*o.qty-tot, dis = o.qty>p.stock, on = o===cur;
+    const perks = [save>0?`Économisez ${fmt(save)}`:'', Number(S.settings.freeFrom)>0 && tot>=Number(S.settings.freeFrom)?'🚚 Livraison offerte':'', first && tot>=first.at?'🎁 + '+esc(tierName(first)):''].filter(Boolean);
+    return `<button class="pk-o${on?' on':''}" role="radio" aria-checked="${on}" data-a="packPick" data-q="${o.qty}" ${dis?'disabled':''}>${o.label?`<span class="pk-b">${esc(o.label)}</span>`:''}
+      <span class="pk-r" aria-hidden="true"></span><span class="pk-t"><b>${o.qty} pièce${o.qty>1?'s':''}</b><span class="muted small">${o.qty>1?fmt(u)+' l’unité':'Prix normal'}${dis?' · stock insuffisant':''}</span>${perks.length?`<span class="pk-p">${perks.join(' · ')}</span>`:''}</span>
+      <span class="pk-v"><b>${fmt(tot)}</b>${save>0?`<s>${fmt(p.price*o.qty)}</s>`:''}</span></button>`; }).join('')}</div>`; }
+/* 1. Commande express : nom, téléphone, quartier, paiement à la livraison */
+function xpData(p){ const sv = hasVar(p) ? selVariant(p) : null, q = Math.max(1, S.pqty||1), line = sv ? {id:p.id, qty:q, v:sv.key} : {id:p.id, qty:q};
+  const t = computeTotals([line], null, 'livraison'), g = giftFor(t.subtotal); return {sv, q, line, t, g, unit: t.lines[0] ? t.lines[0].unit : p.price}; }
+function expressForm(p){ if(!xpOk(p)) return ''; const d = xpData(p), st = S.settings; let m = {}; try{ m = JSON.parse(localStorage.getItem('ffm-xp')||'{}')||{}; }catch(e){}
+  return `<div class="xp" id="xp"><div class="xp-h"><b>⚡ Commande express</b><span>💵 Paiement à la livraison</span></div>
+    <div class="xp-sum" id="xp-sum">${xpSum(p, d)}</div>
+    <input class="input" id="xp-name" name="name" autocomplete="name" maxlength="80" placeholder="Votre nom" value="${esc(m.name||'')}">
+    <input class="input" id="xp-phone" name="tel" type="tel" inputmode="tel" autocomplete="tel" maxlength="30" placeholder="Téléphone / WhatsApp (ex. 76 00 00 00)" value="${esc(m.phone||'')}">
+    <input class="input" id="xp-addr" name="address" autocomplete="street-address" maxlength="200" placeholder="Quartier et repère (ex. ACI 2000, près de la pharmacie)" value="${esc(m.addr||'')}">
+    <button class="btn primary btn-live block xp-go" data-a="xpSend">✅ Je commande, je paie à la livraison</button>
+    <div class="xp-err" id="xp-err" role="alert"></div>
+    <div class="xp-f">🔒 Aucun paiement maintenant · Nous vous appelons pour confirmer · Livraison à ${esc(st.city||'Bamako')}. Hors de ${esc(st.city||'Bamako')} ? <button class="linkbtn" data-a="pdpBuy">Commandez ici</button></div></div>`; }
+function xpSum(p, d){ const t = d.t; return `<span>${d.q} × ${esc(p.name)}${d.sv?' ('+esc(d.sv.key)+')':''}</span><b>${fmt(t.subtotal)}</b><span class="muted">Livraison</span><span>${t.shipping?fmt(t.shipping):'<b style="color:var(--kola)">Offerte</b>'}</span>${d.g?`<span style="color:var(--kola)">🎁 ${esc(d.g.item.name)}</span><b style="color:var(--kola)">Offert</b>`:''}<span class="xp-tot">À payer à la livraison</span><b class="xp-tot">${fmt(t.total)}</b>`; }
+/* 4. Garantie */
+function guaranteeBox(p){ if(isPartner(p)) return ''; const st = S.settings;
+  const g = String(p.lpGuarantee || st.lpGuarantee || (codOn() ? 'Vérifiez votre produit devant le livreur avant de payer. S’il ne vous convient pas, vous ne payez rien.' : '')).trim(); if(!g) return '';
+  return `<div class="gar"><span class="gar-i" aria-hidden="true">🛡️</span><span><b>Achat sans risque</b><span>${esc(g)}</span>${st.returnPolicy?`<span class="muted small">↩️ ${esc(st.returnPolicy)}</span>`:''}${p.warranty?`<span class="muted small">🧰 ${esc(p.warranty)}</span>`:''}</span></div>`; }
+/* 7. Preuves réelles : ventes des 30 derniers jours, délai de livraison */
+function liveProofs(p){ if(isPartner(p)) return ''; const n = soldCount(p);
+  return `<div class="lv">${n>=3?`<div>🔥 <b>${n} commandes</b> ces 30 derniers jours</div>`:''}${etaLine().replace('class="cd-eta"','class="cd-eta lv-eta"')}</div>`; }
+/* 5. Audio (ex. présentation en bambara) */
+function audioBlock(p){ if(!p.lpAudio) return '';
+  return `<section class="lp-sec au"><div class="au-c"><span class="au-i" aria-hidden="true">🎧</span><div style="flex:1;min-width:0"><b>${esc(p.lpAudioTitle||'Écoutez la présentation en bambara')}</b><span class="muted small">Touchez ▶ pour écouter · 30 secondes</span>
+    <audio controls preload="none" src="${esc(p.lpAudio)}" style="width:100%;margin-top:8px"></audio></div></div></section>`; }
+/* 3. Preuves WhatsApp de vrais clients */
+function proofsBlock(p){ const ps = (p.lpProofs||[]).filter(Boolean); if(!ps.length) return '';
+  return `<section class="lp-sec"><h2>Ce que nos clients nous écrivent</h2><p class="lp-lead">Messages WhatsApp reçus de clients, publiés avec leur accord.</p><div class="pf-row">${ps.map(u=>`<button class="pf-c" data-a="pfZoom" data-v="${esc(u)}" aria-label="Agrandir le message"><img src="${esc(u)}" alt="Message WhatsApp d’un client" loading="lazy"></button>`).join('')}</div></section>`; }
+/* 6. Tableau « Chez nous / Ailleurs » */
+const COMPARE_DEF = ['Paiement à la livraison ; Oui, vous payez en recevant ; Souvent à l’avance', 'Produit vérifié avant envoi ; Oui ; Pas toujours', 'Garantie et échange ; Oui ; Rarement', 'Livraison à domicile ; Oui, chez vous ; À aller chercher', 'Service après-vente ; Sur WhatsApp ; Difficile à joindre'];
+function compareBlock(p){ if(isPartner(p) || p.lpCompareOff) return ''; const rows = (lines(p.lpCompare).length ? lines(p.lpCompare) : COMPARE_DEF).map(l=>l.split(/\s*[;|]\s*/)).filter(r=>r.length>=2).slice(0,8); if(!rows.length) return '';
+  const cell = (v, us) => { const no = /^(non|✗|x|-)$/i.test(v||'') || /^(souvent|pas|rarement|difficile|à aller|à l’avance)/i.test(v||''); return `<td class="${us?'cp-us':no?'cp-no':''}">${us?'✅ ':no?'❌ ':''}${esc(v||'')}</td>`; };
+  return `<section class="lp-sec"><h2>Pourquoi acheter chez ${esc(S.settings.shopName)} ?</h2><div class="cp-w"><table class="cp"><colgroup><col class="c1"><col><col></colgroup><thead><tr><th></th><th class="cp-us">${esc(S.settings.shopName)}</th><th>Ailleurs</th></tr></thead><tbody>${rows.map(r=>`<tr><th>${esc(r[0])}</th>${cell(r[1],true)}${cell(r[2]||'',false)}</tr>`).join('')}</tbody></table></div></section>`; }
+/* 9. Offre juste après la commande (même colis, prix réduit, 30 minutes) */
+function addonPick(o){ if(!isServer() || S.settings.addonOn===false || !o || (o.payment||{}).method!=='cod' || o.status!=='en_attente' || (o.items||[]).some(i=>i.addon) || Date.now()-(o.createdAt||0)>30*60e3) return null;
+  const ids = new Set((o.items||[]).map(i=>i.id)), base = (o.items||[]).map(i=>S.products.find(x=>x.id===i.id)).filter(Boolean), cats = new Set(base.map(x=>x.category)), cap = Math.max(5000, (o.subtotal||0)*0.4);
+  const pool = S.products.filter(x=>!ids.has(x.id) && udOk(x) && !hasVar(x) && x.price<=cap);
+  return pool.sort((a,b)=>(cats.has(b.category)-cats.has(a.category)) || a.price-b.price)[0] || null; }
+function addonBlock(o){ const x = addonPick(o); if(!x) return ''; const pct = Math.min(50, Math.max(0, Number(S.settings.addonPct??10))), pr = Math.round(unitPrice(x,1)*(1-pct/100));
+  return `<div class="ao"><div class="ao-h">🎁 Offre réservée : ajoutez-le à votre colis${pct?` à −${pct} %`:''}</div><div class="ao-b"><span class="ao-img">${pImg(x)}</span><span style="flex:1;min-width:0"><b>${esc(x.name)}</b><span class="ao-p"><b>${fmt(pr)}</b>${pr<x.price?` <s>${fmt(x.price)}</s>`:''}</span><span class="muted small">Même livraison, rien à payer maintenant · valable 30 min</span></span></div>
+    <button class="btn primary block" data-a="addonAdd" data-id="${x.id}" data-o="${esc(o.id)}">+ Ajouter à ma commande</button></div>`; }
+/* 8. Fenêtre de sortie : laisser son numéro WhatsApp */
+function exitModal(p){ try{ sessionStorage.setItem('ffm-exit','1'); }catch(e){}
+  $('#overlay').innerHTML = `<div class="scrim" data-a="closeAll"><div class="modal ex" role="dialog" aria-modal="true" aria-label="Recevoir les informations sur WhatsApp"><div class="m-h"><h2>Attendez ! 👋</h2><button class="x" data-a="closeAll" aria-label="Fermer">×</button></div>
+    <div class="m-b"><div class="ex-p"><span class="ao-img">${pImg(p)}</span><span><b>${esc(p.name)}</b><span class="muted small">${fmt(p.price)}</span></span></div>
+      <p style="margin:12px 0">Pas encore décidé ? Laissez votre numéro : nous vous envoyons <b>les photos, la vidéo et le prix sur WhatsApp</b>, sans engagement.</p>
+      <input class="input" id="ex-name" autocomplete="name" maxlength="80" placeholder="Votre prénom" style="margin-bottom:8px">
+      <input class="input" id="ex-phone" type="tel" inputmode="tel" autocomplete="tel" maxlength="30" placeholder="Numéro WhatsApp (ex. 76 00 00 00)">
+      <div class="xp-err" id="ex-err" role="alert"></div></div>
+    <div class="m-f"><button class="btn ghost" data-a="exitOrder">Commander maintenant</button><button class="btn wa" data-a="exitSend">${WA_ICON}Recevoir sur WhatsApp</button></div></div></div>`;
+  setTimeout(()=>$('#ex-name')?.focus(), 60); }
+function exitArm(){ if(window._exitArmed) return; window._exitArmed = true; let t0 = Date.now(), hist = [];
+  const can = () => { if(S.view!=='landing' || S.settings.exitOn===false || !isServer()) return null; try{ if(sessionStorage.getItem('ffm-exit') || sessionStorage.getItem('ffm-ordered')) return null; }catch(e){ return null; }
+    const p = S.products.find(x=>x.id===S.pid); if(!p || isPartner(p) || p.stock<=0) return null;
+    if($('#overlay').innerHTML.trim() || document.querySelector('.ai-panel') || document.activeElement?.matches('input,textarea,select') || Date.now()-S._lpT0 < 10000) return null; return p; };
+  document.addEventListener('mouseout', e=>{ if(e.relatedTarget || e.clientY>8) return; const p = can(); if(p) exitModal(p); });
+  addEventListener('scroll', ()=>{ const now = Date.now(); hist.push([now, scrollY]); hist = hist.filter(h=>now-h[0]<700); if(hist.length<2 || hist[0][1]-scrollY < 700) return; const p = can(); if(p){ hist = []; exitModal(p); } }, {passive:true}); }
 function viewLanding(){
   const p = S.products.find(x=>x.id===S.pid && x.active!==false); if(!p){ S.view='shop'; return viewShop(); }
   const st = S.settings, imgs = galleryFor(p), caps = p.angleCaps||[], save = p.comparePrice>p.price ? p.comparePrice-p.price : 0, rt = productRating(p.id);
@@ -2117,15 +2247,20 @@ function viewLanding(){
     ${save?`<div class="save">Vous économisez ${fmt(save)} (−${Math.round(save/p.comparePrice*100)} %)</div>`:''}
     ${hasVar(p)?optionPicker(p):''}
     ${p.stock>0&&p.stock<=(p.lowStock||5)?`<p class="small" style="color:var(--danger);font-weight:700;margin:12px 0 0">Plus que ${p.stock} en stock</p>`:''}
+    ${packCards(p)}${expressForm(p)}${xpOk(p)?'<div class="xp-or"><span>ou</span></div>':''}
     ${cta(false)}${parseVideo(p.lpVideo)||parseVideo(p.lpVideoFile)?'<button class="btn ghost sm" data-a="lpVideoGo" style="margin-top:10px">▶ Voir la vidéo</button>':''}${countdown}
+    ${guaranteeBox(p)}${liveProofs(p)}${reviewPeek(p)}${isPartner(p)?'':giftBanner(p)}
     <div class="trust-box" ${isPartner(p)?'hidden':''}><div><span>🚚</span><span><b>Livraison à ${esc(st.city)}</b> ${st.freeFrom?`Offerte dès ${fmt(st.freeFrom)}`:fmt(st.deliveryFee)} · retrait en boutique possible</span></div><div><span>💳</span><span><b>Paiement sécurisé</b>${esc(enabledProcs().map(([k])=>PROCESSORS[k].name).join(', ')||'À la livraison')}${payRow(false)}</span></div>${p.warranty?`<div><span>🛡️</span><span><b>Garantie</b>${esc(p.warranty)}</span></div>`:''}</div>
    </div></section>
+  ${audioBlock(p)}
   ${videoBlock(p)}
   ${p.lpProblem||p.lpSolution?`<section class="lp-sec"><h2>Pourquoi vous allez l’adorer</h2><div class="ps" style="margin-top:22px">${p.lpProblem?`<div><b style="color:var(--muted)">Le problème</b><p>${esc(p.lpProblem)}</p></div>`:''}${p.lpSolution?`<div><b style="color:var(--indigo)">Notre solution</b><p>${esc(p.lpSolution)}</p></div>`:''}</div></section>`:''}
+  ${proofsBlock(p)}
   ${imgs.length>1||caps.some(c=>c&&c.t)?`<section class="lp-sec"><h2>Sous tous les angles</h2><p class="lp-lead">Touchez une photo pour l’agrandir et zoomer sur les détails.</p>
     ${imgs.map((src,i)=>{ const c = caps[i]||{}; return `<div class="lp-angle"><div class="lp-ai" data-a="lpZoom" data-v="${i}"><span class="n">${i+1}/${imgs.length}</span><img src="${esc(src)}" alt="${esc(c.t||p.name)}" loading="lazy"></div><div><h3>${esc(c.t||['Vue d’ensemble','Le détail qui compte','Côté finitions','Vu de près','Dans les mains','Le dernier regard'][i%6])}</h3><p>${esc(c.d||'')}</p></div></div>`; }).join('')}</section>`:''}
   ${spin.length>=4?`<section class="lp-sec"><h2>Vue à 360°</h2><p class="lp-lead">Faites glisser votre doigt sur l’image pour faire tourner le produit.</p><div class="spin" id="spin" data-n="${spin.length}"><img src="${esc(spin[0])}" alt="${esc(p.name)} — vue 360°"><input type="range" min="0" max="${spin.length-1}" value="0" aria-label="Faire tourner le produit"><span class="hint">↔ Glissez pour tourner</span></div></section>`:''}
   ${hl.length?`<section class="lp-sec"><h2>Les points forts</h2><div class="hl" style="margin-top:22px">${hl.map(x=>`<div><i>✓</i><span>${esc(x)}</span></div>`).join('')}</div></section>`:''}
+  ${compareBlock(p)}
   ${uses.length?`<section class="lp-sec"><h2>Idéal pour…</h2><div class="uses" style="margin-top:22px">${uses.map(([t,d])=>`<div><b>${esc(t)}</b><span class="muted">${esc(d)}</span></div>`).join('')}</div></section>`:''}
   ${paras.length||specs.length?`<section class="lp-sec"><h2>En détail</h2><div style="max-width:760px;margin:22px auto 0">${paras.map(x=>`<p class="pdp-desc">${esc(x).replace(/\n/g,'<br>')}</p>`).join('')}${specs.length?`<div class="panel tbl-wrap specs" style="margin-top:18px"><table><tbody>${specs.map(([k,v])=>`<tr><td>${esc(k)}</td><td>${esc(v)}</td></tr>`).join('')}</tbody></table></div>`:''}</div></section>`:''}
   ${reviewsSection(p).replace('class="pdp-sec"','class="pdp-sec lp-sec"')}
@@ -2136,13 +2271,14 @@ function viewLanding(){
     <div><i>💬</i><b>À votre écoute</b><div class="muted small">${shopWa()?`<a href="https://wa.me/${shopWa()}" target="_blank" rel="noopener" style="color:#25D366;font-weight:700;display:inline-flex;align-items:center">${WA_ICON}${esc(st.whatsapp||st.phone)}</a>`:'Par téléphone et WhatsApp'}</div></div></div></section>
   <section class="lp-sec faq"><h2>Questions fréquentes</h2><div style="max-width:760px;margin:18px auto 0">${lpFaq(p).map(([q,a])=>`<details><summary>${esc(q)}</summary><p>${esc(a)}</p></details>`).join('')}</div></section>
   <section class="lp-final"><div class="lp-kicker">${esc(st.shopName)}</div><h2 style="font-size:clamp(30px,3.6vw,46px);margin:8px 0">${esc(p.lpHook||p.name)}</h2>
-    <div class="pdp-price" style="justify-content:center"><span class="price">${isPartner(p)?(p.price?'<span style="font-size:.6em">env. </span>'+fmt(p.price):'<span style="font-size:.55em">Prix sur '+esc(partnerName(p))+'</span>'):fmt(price)}</span>${save?`<span class="strike">${fmt(p.comparePrice)}</span>`:''}</div>${countdown}${cta(true)}
+    <div class="pdp-price" style="justify-content:center"><span class="price">${isPartner(p)?(p.price?'<span style="font-size:.6em">env. </span>'+fmt(p.price):'<span style="font-size:.55em">Prix sur '+esc(partnerName(p))+'</span>'):fmt(price)}</span>${save?`<span class="strike">${fmt(p.comparePrice)}</span>`:''}</div>${countdown}${xpOk(p)?`<button class="btn primary btn-live" data-a="xpGo" style="font-size:17px;padding:17px 26px;margin:0 auto 10px;display:flex">⚡ Commande express : paiement à la livraison</button>`:''}${cta(true)}
     <p class="muted small" style="margin:14px 0 0">${isPartner(p)?'':hasVar(p)&&!sv?'Choisissez d’abord vos options en haut de la page.':'Livraison à '+esc(st.city)+' · paiement mobile money ou à la livraison'}</p></section>
-  ${isPartner(p)?`<div class="buybar"><span class="muted small">${esc(partnerName(p))}</span>${partnerBtn(p,'primary')}</div>`:out?'':`<div class="buybar"><span class="price">${isPartner(p)?(p.price?'<span style="font-size:.6em">env. </span>'+fmt(p.price):'<span style="font-size:.55em">Prix sur '+esc(partnerName(p))+'</span>'):fmt(price)}</span><span style="display:flex;gap:8px">${shopWa()?`<button class="btn wa" data-a="waProduct" data-id="${p.id}" aria-label="Commander sur WhatsApp" style="padding:12px 14px">${WA_ICON.replace('margin-right:6px','margin:0')}</button>`:''}<button class="btn primary btn-live" data-a="pdpBuy">Commander</button></span></div>`}
+  ${isPartner(p)?`<div class="buybar"><span class="muted small">${esc(partnerName(p))}</span>${partnerBtn(p,'primary')}</div>`:out?'':`<div class="buybar"><span class="price">${isPartner(p)?(p.price?'<span style="font-size:.6em">env. </span>'+fmt(p.price):'<span style="font-size:.55em">Prix sur '+esc(partnerName(p))+'</span>'):fmt(price)}</span><span style="display:flex;gap:8px">${shopWa()?`<button class="btn wa" data-a="waProduct" data-id="${p.id}" aria-label="Commander sur WhatsApp" style="padding:12px 14px">${WA_ICON.replace('margin-right:6px','margin:0')}</button>`:''}<button class="btn primary btn-live" data-a="${xpOk(p)?'xpGo':'pdpBuy'}">Commander</button></span></div>`}
   </div>`;
 }
 let lpTimer = null;
 function lpAfterRender(){
+  if(S._lpPid!==S.pid){ S._lpPid = S.pid; S._lpT0 = Date.now(); } exitArm();
   const sp = $('#spin');
   if(sp && !sp.dataset.ready){ sp.dataset.ready = '1'; const p = S.products.find(x=>x.id===S.pid); const frames = (p&&p.spin||[]).map(extraSrc).filter(Boolean); const img = sp.querySelector('img'), rg = sp.querySelector('input');
     frames.forEach(f=>{ const im = new Image(); im.src = f; });
@@ -2642,7 +2778,7 @@ function cartDownBanner(){ const c = S.cartDown; if(!c) return ''; const from = 
   return `<div class="ud down" style="margin:0 0 14px"><span class="ud-tag">💡 Le prix vous freine ?</span><span class="ud-img">${pImg(to)}</span><div class="ud-txt"><b>${esc(to.name)}</b><div><b>${fmt(to.price)}</b> <span class="ud-minus">−${fmt(from.price-to.price)}</span> <span class="muted small">au lieu de ${esc(from.name)}</span></div></div><button class="btn primary sm" data-a="udAdd" data-id="${to.id}" data-from="${from.id}" data-k="down">Ajouter</button></div>`; }
 /* ===================== Popup « Comment obtenir le cadeau » sur les pages produit ===================== */
 function giftCalc(p){ const tiers = giftTiersOf(), sub = computeTotals(S.cart, S.appliedPromo, 'livraison').subtotal, inCart = S.cart.some(l=>l.id===p.id);
-  const add = inCart || p.stock<=0 ? 0 : p.price*Math.max(1, S.pqty||1), withP = sub + add, next = tiers.find(t=>withP<t.at), got = tiers.filter(t=>withP>=t.at).pop();
+  const add = inCart || p.stock<=0 ? 0 : unitPrice(p, Math.max(1, S.pqty||1))*Math.max(1, S.pqty||1), withP = sub + add, next = tiers.find(t=>withP<t.at), got = tiers.filter(t=>withP>=t.at).pop();
   return {tiers, sub, inCart, add, withP, next, got}; }
 function giftBanner(p){ const c = giftCalc(p); if(!c.tiers.length) return ''; const first = c.tiers[0];
   const title = c.next ? (c.got ? `Cadeau débloqué ! Le suivant dès ${fmt(c.next.at)}` : `Cadeau offert dès ${fmt(first.at)} d’achat`) : 'Votre cadeau est débloqué 🎉';
@@ -2757,7 +2893,8 @@ function carouselBlock(){
 document.addEventListener('touchstart', e=>{ const c = e.target.closest && e.target.closest('.car'); if(c) c.classList.add('paused'); }, {passive:true});
 document.addEventListener('touchend', e=>{ const c = e.target.closest && e.target.closest('.car'); if(c) setTimeout(()=>c.classList.remove('paused'), 1500); }, {passive:true});
 const onSale = p => p.comparePrice > p.price;
-const unitPrice = (p,qty) => (p.bulkMin>1 && p.bulkPrice>0 && qty>=p.bulkMin) ? p.bulkPrice : p.price;
+const packsOf = p => hasVar(p) || isPartner(p) ? [] : (Array.isArray(p.packs)?p.packs:[]).map(k=>({qty:Math.round(+k.qty||0), price:Math.round(+k.price||0), label:String(k.label||'').slice(0,30)})).filter(k=>k.qty>=2 && k.qty<=50 && k.price>0 && k.price<p.price).sort((a,b)=>a.qty-b.qty).slice(0,3);
+const unitPrice = (p,qty) => { let u = p.price; if(p.bulkMin>1 && p.bulkPrice>0 && qty>=p.bulkMin) u = Math.min(u, p.bulkPrice); packsOf(p).forEach(k=>{ if(qty>=k.qty) u = Math.min(u, k.price); }); return u; };
 const lineKey = l => l.b ? 'b:'+l.b : l.id + (l.v ? '|'+l.v : '');
 const hasVar = p => !!(p && Array.isArray(p.variants) && p.variants.length);
 const varOf = (p, k) => hasVar(p) ? p.variants.find(v=>v.key===k) || null : null;
@@ -3022,6 +3159,9 @@ try{ if(localStorage.getItem('ffm-inst-hide')) S.instHide = true; }catch(e){}
 document.addEventListener('input', e=>{ const t = e.target; if(t && /^mt-(app|sec|tok)$/.test(t.id)){ S._mt = {...(S._mt||{}), [t.id]: t.value.trim()}; } }, true);
 document.addEventListener('toggle', e=>{ if(e.target && e.target.id==='cat-panel') S.catOpen = e.target.open; if(e.target && e.target.id==='conv-panel'){ S.convOpen = e.target.open; try{ localStorage.setItem('ffm-conv-open', S.convOpen?'1':''); }catch(err){} } }, true);
 document.addEventListener('change', e=>{ if(e.target && e.target.id==='co-city' && CO){ const before = CO.city; readCO(); if(CO.city!==before || !(QUARTIERS[CO.city]||[]).length) setTimeout(()=>{ if($('#co-city') || CO.step===2) drawCheckout(); }, 0); } });
+async function expressOrder(o){ throw new Error('La commande express fonctionne sur le site en ligne.'); }
+async function leadCapture(){ }
+async function orderAddon(){ throw new Error('Disponible sur le site en ligne.'); }
 function openCheckout(){
   { const t0 = computeTotals(S.cart, S.appliedPromo, 'livraison'); ttTrack('InitiateCheckout', {value:Math.round(t0.subtotal), contents:t0.lines.filter(l=>l.kind==='product').map(l=>ttItem(l.p, l.qty, l.unit))}); }
   CO = {step:1, delivery:'livraison', name:S.myName && S.myName!=='Mode démo'?S.myName:'', phone:'', address:'', city:S.settings.city, note:'', method:null};
@@ -3224,7 +3364,7 @@ function showReceipt(o, fresh){
   $('#overlay').innerHTML = `<div class="scrim" data-a="closeAll"><div class="modal" role="dialog" aria-modal="true" aria-label="Reçu">
     <div class="m-h"><h2>${fresh?'Commande confirmée':'Reçu'}</h2><button class="x" data-a="closeAll" aria-label="Fermer">×</button></div>
     <div class="m-b">${fresh?`<p style="margin-top:0">Merci ! Votre commande <b>${esc(o.number)}</b> est enregistrée. ${o.status==='en_attente'?'Vous paierez à la réception.':'Le paiement est validé.'}</p>`:''}
-    <div class="panel">${receiptHTML(o)}</div>${proofBlock(o)}
+    ${fresh?addonBlock(o):''}<div class="panel">${receiptHTML(o)}</div>${proofBlock(o)}
     <button class="lp-banner" data-a="guideFor" data-id="${esc(o.id)}" style="margin-top:12px"><span style="font-size:24px">📖</span><span style="flex:1"><b>Et maintenant ? Suivez le guide</b><span class="muted small">Les prochaines étapes jusqu’à la livraison, et comment donner votre avis</span></span><span style="font-weight:800;color:var(--indigo)">›</span></button></div>
     <div class="m-f"><button class="btn ghost" data-a="printReceipt" data-id="${o.id}">Imprimer</button>${dl?`<button class="btn ghost" data-a="dlReceipt" data-id="${o.id}">Télécharger</button>`:''}<button class="btn primary" data-a="closeAll">Terminé</button></div></div></div>`;
   window._lastReceipt = o;
@@ -4306,6 +4446,16 @@ function productForm(p){
           <div class="field"><label>Légende de chaque angle (photos)</label><div id="pf-caps"></div></div>
           <div class="field" style="margin:0"><label>Vue à 360° (facultatif)</label><p class="muted small" style="margin:0 0 6px">Prenez 12 à 24 photos en tournant autour du produit (posé au même endroit, même distance), puis ajoutez-les dans l’ordre.</p>
             <div id="pf-spin" class="small muted"></div><div class="row" style="gap:8px;margin-top:6px"><label class="btn ghost sm" style="flex:0;white-space:nowrap">📸 Ajouter les photos 360°<input type="file" accept="image/*" multiple id="pf-spinf" class="sr"></label><button type="button" class="btn ghost sm" id="pf-spinx" style="flex:0;white-space:nowrap">Retirer la vue 360°</button></div></div>
+          <h4 style="margin:18px 0 6px">⚡ Leviers de vente</h4>
+          <label class="check-row" style="display:flex;gap:8px;align-items:center;margin-bottom:10px"><input type="checkbox" id="lp-xp" ${p.lpExpress!==false?'checked':''}> Formulaire de commande express (nom, téléphone, quartier · paiement à la livraison)</label>
+          <div class="field"><label>Offres par quantité (cartes à choisir, prix appliqué automatiquement)</label><p class="muted small" style="margin:0 0 6px">Ex. « 2 pièces à 17 000 l’unité » avec le badge « Le plus populaire ». Le prix à l’unité doit être inférieur au prix normal. Sans effet sur les produits à options.</p>
+            ${[0,1,2].map(i=>{ const k = (p.packs||[])[i]||{}; return `<div class="row pk-row"><div class="field"><label for="pk-q-${i}">Quantité</label><input class="input" id="pk-q-${i}" inputmode="numeric" value="${esc(k.qty||'')}" placeholder="${[2,3,5][i]}"></div><div class="field"><label for="pk-p-${i}">Prix à l’unité (FCFA)</label><input class="input" id="pk-p-${i}" inputmode="numeric" value="${esc(k.price||'')}" placeholder="ex. 17000"></div><div class="field"><label for="pk-l-${i}">Badge (facultatif)</label><input class="input" id="pk-l-${i}" maxlength="30" value="${esc(k.label||'')}" placeholder="${['Le plus populaire','Meilleure affaire',''][i]}"></div></div>`; }).join('')}<div class="small muted" id="pk-prev"></div></div>
+          <div class="field"><label for="lp-gar">Garantie affichée (facultatif)</label><input class="input" id="lp-gar" maxlength="300" value="${esc(p.lpGuarantee||'')}" placeholder="Vide = texte de la boutique : « Vérifiez votre produit devant le livreur avant de payer… »"></div>
+          <div class="field"><label>Messages WhatsApp de clients (captures d’écran, avec leur accord)</label><div id="lp-pf" class="pf-adm"></div>${isServer()?`<label class="btn ghost sm" style="margin-top:6px">📷 Ajouter des captures<input type="file" accept="image/*" multiple id="lp-pff" class="sr"></label> <span class="small muted" id="lp-pfmsg"></span>`:''}</div>
+          <div class="field"><label>Message audio (ex. présentation en bambara)</label>${isServer()?`<div class="row" style="gap:8px;align-items:center"><label class="btn ghost sm" style="flex:0;white-space:nowrap">🎙️ Envoyer un audio (MP3, M4A · 12 Mo)<input type="file" accept="audio/*,.m4a,.mp3" id="lp-auf" class="sr"></label><span class="small muted" id="lp-aumsg"></span></div>`:''}<input type="hidden" id="lp-au" value="${esc(p.lpAudio||'')}"><div id="lp-aubox" class="small" style="margin-top:6px"></div>
+            <input class="input" id="lp-aut" maxlength="80" value="${esc(p.lpAudioTitle||'')}" placeholder="Titre : ex. Écoutez la présentation en bambara" style="margin-top:6px"></div>
+          <div class="field"><label for="lp-cmp">Tableau « ${esc(S.settings.shopName)} / Ailleurs » (une ligne par critère : « Critère ; chez nous ; ailleurs »)</label><textarea class="input" id="lp-cmp" style="min-height:80px" placeholder="${esc(COMPARE_DEF.join('\n'))}">${esc(p.lpCompare||'')}</textarea>
+            <label class="check-row" style="display:flex;gap:8px;align-items:center;margin-top:6px"><input type="checkbox" id="lp-cmpoff" ${p.lpCompareOff?'checked':''}> Ne pas afficher ce tableau</label><p class="muted small" style="margin:4px 0 0">Laissé vide, le tableau standard s’affiche (paiement à la livraison, produit vérifié, garantie, livraison, service après-vente).</p></div>
           ${p.id?`<button type="button" class="btn ghost sm" data-a="openLanding" data-id="${p.id}" style="margin-top:12px">Voir la page de vente</button>`:''}</div>
         <div class="field"><label for="pf-war">Garantie / retour (facultatif)</label><input class="input" id="pf-war" value="${esc(p.warranty||'')}" placeholder="ex. Garantie 6 mois, échange sous 7 jours"></div>
         ${(()=>{ const others = S.products.filter(x=>x.id!==p.id && x.name && !isPartner(x)).sort((a,b)=>a.category.localeCompare(b.category)||a.price-b.price);
@@ -4357,6 +4507,21 @@ function productForm(p){
     if($('#lp-vfile-del')) $('#lp-vfile-del').onclick = ev=>{ ev.preventDefault(); const cur = $('#lp-vfile-url').value; if(cur && cur!==p.lpVideoFile && window.deleteVideo) window.deleteVideo(cur.split('/media/')[1]); $('#lp-vfile-url').value = ''; drawVfile(); }; };
   if($('#lp-vfile-url') && /\/media\/v/.test($('#lp-vid').value)) $('#lp-vid').value = '';
   drawVfile();
+  { const proofs = [...(p.lpProofs||[])], draw = ()=>{ const b = $('#lp-pf'); if(!b) return; b.innerHTML = proofs.length ? proofs.map((u,i)=>`<span class="pf-t"><img src="${esc(u)}" alt=""><button type="button" data-pfx="${i}" aria-label="Retirer">×</button></span>`).join('') : '<span class="muted small">Aucune capture pour l’instant.</span>';
+      b.querySelectorAll('[data-pfx]').forEach(x=>x.onclick = e=>{ e.preventDefault(); proofs.splice(+x.dataset.pfx,1); draw(); }); };
+    window.__pfList = proofs; draw();
+    if($('#lp-pff')) $('#lp-pff').onchange = async e=>{ const fs = [...e.target.files].slice(0, 10-proofs.length), msg = $('#lp-pfmsg'); e.target.value = '';
+      for(const f of fs){ try{ msg.textContent = 'Envoi…'; const im = await spReadImg(f), r = await spUpload(im.blob); proofs.push(r.url.replace(location.origin,'')); draw(); msg.textContent = '✓ Ajoutée : enregistrez le produit.'; }catch(err){ msg.textContent = err.message || 'Envoi impossible.'; } } };
+    const drawAu = ()=>{ const b = $('#lp-aubox'); if(!b) return; const u = $('#lp-au').value; b.innerHTML = u ? `<audio controls preload="none" src="${esc(u)}" style="width:100%;max-width:360px;vertical-align:middle"></audio> <button type="button" class="btn ghost sm" id="lp-aux">Retirer</button>` : '';
+      if($('#lp-aux')) $('#lp-aux').onclick = ev=>{ ev.preventDefault(); $('#lp-au').value = ''; drawAu(); }; };
+    drawAu();
+    if($('#lp-auf')) $('#lp-auf').onchange = async e=>{ const f = e.target.files[0], msg = $('#lp-aumsg'); e.target.value = ''; if(!f) return;
+      if(f.size>12*1024*1024){ msg.textContent = 'Audio trop lourd (12 Mo max.).'; return; }
+      const ty = f.type || ({mp3:'audio/mpeg', m4a:'audio/mp4', aac:'audio/aac', ogg:'audio/ogg', wav:'audio/wav'})[(f.name.split('.').pop()||'').toLowerCase()] || 'application/octet-stream';
+      msg.textContent = 'Envoi…'; try{ const r = await fetch('/api/admin/audio', {method:'POST', credentials:'same-origin', headers:{'Content-Type':ty}, body:f}); const j = await r.json().catch(()=>({})); if(!r.ok) throw new Error(j.error || 'Envoi impossible.');
+        $('#lp-au').value = j.url; drawAu(); msg.textContent = '✓ Audio envoyé : enregistrez le produit.'; }catch(err){ msg.textContent = err.message; } };
+    const pkPrev = ()=>{ const v = id=>($(id)?.value||'').trim(), b = $('#pk-prev'); if(!b) return; const pr = Number(v('#pf-price').replace(/\s/g,''))||0; const out = [0,1,2].map(i=>{ const q = parseInt(v('#pk-q-'+i))||0, u = Number(v('#pk-p-'+i).replace(/\s/g,''))||0; return q>=2&&u>0 ? `${q} pièces = <b>${fmt(q*u)}</b>${pr&&u<pr?` (économie ${fmt((pr-u)*q)})`:' ⚠️ prix à l’unité trop élevé'}` : ''; }).filter(Boolean); b.innerHTML = out.join(' · '); };
+    [0,1,2].forEach(i=>['#pk-q-'+i,'#pk-p-'+i].forEach(id=>{ if($(id)) $(id).addEventListener('input', pkPrev); })); pkPrev(); }
   if($('#lp-vimp')) $('#lp-vimp').onclick = async e=>{ e.preventDefault(); const b = e.currentTarget, src = $('#lp-vid').value.trim(), pr = $('#lp-vprog'); b.disabled = true; pr.textContent = 'Téléchargement de la vidéo sur la boutique…'; pr.style.color='var(--muted)';
     try{ const r = await window.importVideo(src); const prev = $('#lp-vfile-url').value; if(prev && prev!==p.lpVideoFile && window.deleteVideo) window.deleteVideo(prev.split('/media/')[1]);
       $('#lp-vfile-url').value = location.origin + r.url; $('#lp-vid').value = ''; $('#lp-vid').dispatchEvent(new Event('input')); drawVfile(); pr.textContent = '✓ Vidéo importée ('+(r.size/1048576).toFixed(1).replace('.',',')+' Mo) : enregistrez le produit.'; pr.style.color='var(--kola)'; }
@@ -4427,6 +4592,8 @@ function productForm(p){
         return {partner:{platform:plat, url:u.slice(0,600)}, stock:0}; })(),
       ...(()=>{ if(!$('#pf-seot')) return {}; const a = autoSeo({...p, name:v('#pf-name'), price:Number(v('#pf-price').replace(/\s/g,'')), comparePrice:Number(v('#pf-cmp').replace(/\s/g,''))||0, highlights:v('#pf-hl'), description:v('#pf-desc'), condition:$('#pf-cond').value}); return {seoTitle:v('#pf-seot')||a.title, seoDesc:v('#pf-seod')||a.desc, seoAuto:!v('#pf-seot') && !v('#pf-seod')}; })(),
       lpHook:v('#lp-hook'), lpSub:v('#lp-sub'), lpProblem:$('#lp-pb').value.trim(), lpSolution:$('#lp-so').value.trim(), lpUsages:$('#lp-us').value.trim(), lpFaq:$('#lp-faq').value.trim(), lpOffer:v('#lp-off'), lpUntil:$('#lp-until').value, lpVideo:(pv=>pv&&!pv.short)(parseVideo(v('#lp-vid')))?v('#lp-vid'):'', lpVideoTitle:v('#lp-vidt'),
+      ...($('#lp-xp')?{lpExpress:$('#lp-xp').checked, lpGuarantee:v('#lp-gar').slice(0,300), lpCompare:$('#lp-cmp').value.trim().slice(0,1500), lpCompareOff:$('#lp-cmpoff').checked, lpProofs:[...(window.__pfList||p.lpProofs||[])].slice(0,10), lpAudio:$('#lp-au').value, lpAudioTitle:v('#lp-aut').slice(0,80),
+        packs:[0,1,2].map(i=>({qty:parseInt(v('#pk-q-'+i))||0, price:Number(v('#pk-p-'+i).replace(/\s/g,''))||0, label:v('#pk-l-'+i).slice(0,30)})).filter(k=>k.qty>=2 && k.price>0)}:{}),
       highlights:$('#pf-hl').value.trim(), details:$('#pf-details').value.trim(), specs:$('#pf-specs').value.trim(), warranty:v('#pf-war'), active:$('#pf-active').checked,
       upsell:($('#pf-up')||{}).value||'auto', downsell:($('#pf-down')||{}).value||'auto',
       bulkMin:Math.max(0,parseInt(v('#pf-bmin'))||0), bulkPrice:Number(v('#pf-bprice').replace(/\s/g,''))||0,
@@ -4436,6 +4603,7 @@ function productForm(p){
       createdAt:p.createdAt||Date.now(), updatedAt:Date.now()};
     if(data.partner && !(data.price>=0)) data.price = 0;
     if(!data.name || !(data.price>0 || data.partner)){ $('#pf-err').textContent='Le nom et un prix supérieur à zéro sont obligatoires.'; return; }
+    if((data.packs||[]).some(k=>k.price>=data.price)){ $('#pf-err').textContent='Offres par quantité : le prix à l’unité doit être inférieur au prix de vente.'; return; }
     if(data.bulkMin>1 && !(data.bulkPrice>0 && data.bulkPrice<data.price)){ $('#pf-err').textContent='Le prix de gros doit être inférieur au prix de vente.'; return; }
     $('#pf-save').disabled=true;
     try{
@@ -4652,7 +4820,13 @@ function panePayments(){
     <label class="check-row" style="display:flex;gap:8px;align-items:center;margin-bottom:8px"><input type="checkbox" id="st-gift-on" ${st.giftOn!==false?'checked':''}> Offrir des cadeaux à partir d’un montant d’achat (barre de progression dans le panier)</label>
     ${giftEditor(st)}
     <div class="row"><div class="field" style="max-width:260px"><label for="st-days">Délai de livraison (jours ouvrés)</label><input class="input" id="st-days" maxlength="10" value="${esc(st.deliveryDays||'1-2')}" placeholder="ex. 1-2 ou 0-1"></div></div>
-    <p class="muted small" style="margin:4px 0 0">Jusqu’à 3 paliers, et jusqu’à 3 cadeaux au choix par palier : le client reçoit le cadeau du palier le plus haut atteint et choisit lui-même s’il y en a plusieurs. Un cadeau choisi parmi vos produits affiche sa photo et sort du stock avec la commande ; en texte libre, rien n’est déduit. Un produit en rupture n’est plus proposé.</p>
+    <h4 style="margin:16px 0 6px">🛍️ Page de vente</h4>
+    <div class="field"><label for="st-gar">Garantie affichée par défaut</label><input class="input" id="st-gar" maxlength="300" value="${esc(st.lpGuarantee||'')}" placeholder="Vérifiez votre produit devant le livreur avant de payer. S’il ne vous convient pas, vous ne payez rien."></div>
+    <label class="check-row" style="display:flex;gap:8px;align-items:center;margin-bottom:6px"><input type="checkbox" id="st-exit" ${st.exitOn!==false?'checked':''}> Fenêtre « Laissez votre numéro WhatsApp » quand un visiteur s’apprête à quitter la page (une fois par visite)</label>
+    <div class="row" style="align-items:flex-end"><label class="check-row" style="display:flex;gap:8px;align-items:center;flex:2 1 260px"><input type="checkbox" id="st-addon" ${st.addonOn!==false?'checked':''}> Offre juste après la commande : un article ajouté au même colis</label>
+      <div class="field" style="flex:1 1 140px"><label for="st-addonpct">Remise sur cet article (%)</label><input class="input" id="st-addonpct" inputmode="numeric" value="${esc(st.addonPct??10)}"></div></div>
+    <p class="muted small" style="margin:4px 0 0">Les numéros laissés arrivent dans Clients › Paniers abandonnés, prêts à relancer sur WhatsApp. L’offre après commande n’est proposée que pour le paiement à la livraison, pendant 30 minutes.</p>
+    <p class="muted small" style="margin:10px 0 0">Jusqu’à 3 paliers, et jusqu’à 3 cadeaux au choix par palier : le client reçoit le cadeau du palier le plus haut atteint et choisit lui-même s’il y en a plusieurs. Un cadeau choisi parmi vos produits affiche sa photo et sort du stock avec la commande ; en texte libre, rien n’est déduit. Un produit en rupture n’est plus proposé.</p>
   </div>
   <div style="margin-top:16px;display:flex;justify-content:flex-end"><button class="btn primary" data-a="saveSettings">Enregistrer les réglages</button></div>`;
 }
@@ -4729,7 +4903,7 @@ async function saveSettings(){
   const s = structuredClone(S.settings), v = id=>($(id)?.value||'').trim();
   s.shopName=v('#st-name')||'foûfoûni-Market'; s.city=v('#st-city'); s.tagline=v('#st-tag'); s.intro=v('#st-intro'); s.currency=v('#st-cur')||'FCFA'; s.phone=v('#st-phone');
   s.deliveryFee=Number(v('#st-fee'))||0; s.freeFrom=Number(v('#st-free'))||0; s.testMode=$('#st-test').checked;
-  if($('#st-gift-on')){ s.giftOn=$('#st-gift-on').checked; s.giftTiers = readGiftEditor(); s.giftFrom = s.giftTiers[0]?.at || 0; s.giftName = s.giftTiers[0]?.items[0]?.name || ''; s.deliveryDays=v('#st-days').slice(0,10)||'1-2'; }
+  if($('#st-gift-on')){ s.giftOn=$('#st-gift-on').checked; s.giftTiers = readGiftEditor(); s.lpGuarantee=v('#st-gar').slice(0,300); s.exitOn=$('#st-exit').checked; s.addonOn=$('#st-addon').checked; s.addonPct=Math.min(50, Math.max(0, parseInt(v('#st-addonpct'))||0)); s.giftFrom = s.giftTiers[0]?.at || 0; s.giftName = s.giftTiers[0]?.items[0]?.name || ''; s.deliveryDays=v('#st-days').slice(0,10)||'1-2'; }
   document.querySelectorAll('[data-proc]').forEach(i=>{ s.processors[i.dataset.proc].account=i.value.trim(); });
   document.querySelectorAll('[data-proc-on]').forEach(i=>{ s.processors[i.dataset.procOn].enabled=i.checked; });
   document.querySelectorAll('[data-proc-show]').forEach(i=>{ const k = i.dataset.procShow; s.processors[k] = {...(s.processors[k]||{}), showLogo:i.checked}; });
@@ -4835,6 +5009,25 @@ document.addEventListener('click', async e=>{
     case 'scroll': $('#catalogue').scrollIntoView({behavior:matchMedia('(prefers-reduced-motion:reduce)').matches?'auto':'smooth'}); break;
     case 'cart': openCart(); break;
     case 'ghAdd': { const p = S.products.find(x=>x.id===id); closeAll(); const b = document.querySelector('#main [data-a=pdpAdd], main [data-a=pdpAdd]'); if(!b || !p) break; const n0 = cartCount(); b.click(); setTimeout(()=>{ if(cartCount()>n0 && !$('#overlay').innerHTML.trim()) giftHowModal(p); }, 120); break; }
+    case 'packPick': { S.pqty = Math.max(1, parseInt(el.dataset.q)||1); schedule(); break; }
+    case 'xpGo': { const f = $('#xp'); if(f){ f.scrollIntoView({behavior:'smooth', block:'center'}); setTimeout(()=>$('#xp-name')?.focus({preventScroll:true}), 450); } break; }
+    case 'xpSend': { const p = S.products.find(x=>x.id===S.pid); if(!p) break; const err = $('#xp-err'), name = $('#xp-name').value.trim(), phone = $('#xp-phone').value.trim(), addr = $('#xp-addr').value.trim();
+      if(hasVar(p) && !selVariant(p)){ err.textContent = 'Choisissez d’abord vos options plus haut.'; $('.opt')?.scrollIntoView({behavior:'smooth', block:'center'}); break; }
+      if(name.length<2){ err.textContent = 'Indiquez votre nom.'; $('#xp-name').focus(); break; }
+      if(phone.replace(/\D/g,'').length<8){ err.textContent = 'Indiquez un numéro de téléphone valide (8 chiffres).'; $('#xp-phone').focus(); break; }
+      if(addr.length<3){ err.textContent = 'Indiquez votre quartier et un repère pour le livreur.'; $('#xp-addr').focus(); break; }
+      try{ localStorage.setItem('ffm-xp', JSON.stringify({name, phone, addr})); }catch(e){}
+      const d = xpData(p); el.disabled = true; el.textContent = 'Envoi de votre commande…'; err.textContent = '';
+      expressOrder({p, qty:d.q, v:d.sv?d.sv.key:'', unit:d.unit, name, phone, address:addr, giftPick:d.g?d.g.item.key:''})
+        .then(o=>{ try{ sessionStorage.setItem('ffm-ordered','1'); }catch(e){} S.pqty = 1; showReceipt(o, true); })
+        .catch(e=>{ err.textContent = e.message || 'Envoi impossible, réessayez.'; el.disabled = false; el.textContent = '✅ Je commande, je paie à la livraison'; });
+      break; }
+    case 'exitSend': { const p = S.products.find(x=>x.id===S.pid), err = $('#ex-err'), name = $('#ex-name').value.trim(), phone = $('#ex-phone').value.trim(); if(!p) break;
+      if(phone.replace(/\D/g,'').length<8){ err.textContent = 'Indiquez un numéro WhatsApp valide.'; $('#ex-phone').focus(); break; }
+      el.disabled = true; leadCapture(p, name || 'Client', phone).then(()=>{ closeAll(); toast('Merci ! Nous vous écrivons sur WhatsApp très vite.'); }).catch(e=>{ err.textContent = e.message || 'Envoi impossible, réessayez.'; el.disabled = false; }); break; }
+    case 'exitOrder': { closeAll(); const f = $('#xp'); if(f){ f.scrollIntoView({behavior:'smooth', block:'center'}); setTimeout(()=>$('#xp-name')?.focus({preventScroll:true}), 450); } else { const b = document.querySelector('#main [data-a=pdpBuy]'); b?.scrollIntoView({behavior:'smooth', block:'center'}); } break; }
+    case 'pfZoom': zoomBox(el.dataset.v); break;
+    case 'addonAdd': { el.disabled = true; el.textContent = 'Ajout en cours…'; orderAddon(el.dataset.o, el.dataset.id).then(o=>{ showReceipt(o, true); toast('Article ajouté à votre commande ✓'); }).catch(e=>{ toast(e.message || 'Ajout impossible.'); el.disabled = false; el.textContent = '+ Ajouter à ma commande'; }); break; }
     case 'giftHow': { const p = S.products.find(x=>x.id===id); if(p) giftHowModal(p); break; }
     case 'add': addToCart(id); break;
     case 'product': openBest(id); break;

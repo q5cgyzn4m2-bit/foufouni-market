@@ -140,7 +140,7 @@ function publicSettings() {
   const s = settings();
   const procs = {}; for (const [k, v] of Object.entries(s.processors || {})) procs[k] = { enabled: !!v.enabled, ...(typeof v.showLogo === 'boolean' ? { showLogo: v.showLogo } : {}), ...(/^data:image\/(png|jpeg|webp);base64,/.test(v.logo || '') && v.logo.length < 250000 ? { logo: v.logo } : {}) }; // jamais d'identifiants côté public, seulement le logo
   return { shopName: s.shopName, tagline: s.tagline, intro: s.intro, currency: s.currency, deliveryFee: s.deliveryFee, freeFrom: s.freeFrom, city: s.city, phone: s.phone, processors: procs,
-    giftOn: s.giftOn !== false, giftFrom: Math.max(0, Number(s.giftFrom) || 0), giftName: String(s.giftName || 'Cadeau surprise').slice(0, 60), giftTiers: giftTiers(s), deliveryDays: String(s.deliveryDays || '1-2').slice(0, 10),
+    giftOn: s.giftOn !== false, giftFrom: Math.max(0, Number(s.giftFrom) || 0), giftName: String(s.giftName || 'Cadeau surprise').slice(0, 60), giftTiers: giftTiers(s), lpGuarantee: String(s.lpGuarantee || '').slice(0, 300), exitOn: s.exitOn !== false, addonOn: s.addonOn !== false, addonPct: Math.min(50, Math.max(0, Number(s.addonPct ?? 10))), deliveryDays: String(s.deliveryDays || '1-2').slice(0, 10),
     carouselOn: s.carouselOn !== false, carouselMode: ['both', 'new', 'sale'].includes(s.carouselMode) ? s.carouselMode : 'both', carouselSpeed: ['lent', 'normal', 'rapide'].includes(s.carouselSpeed) ? s.carouselSpeed : 'normal',
     showTrust: s.showTrust !== false, deliveryPromise: String(s.deliveryPromise || '').slice(0, 40), returnPolicy: String(s.returnPolicy || '').slice(0, 40),
     manualPay: manualPay(), shipCountries: Array.isArray(s.shipCountries) ? s.shipCountries : ['ML'], carriers: cleanCarriers(s.carriers).filter(c => c.active).map(({ phone, ...c }) => c), localCities: String(s.localCities || '').slice(0, 400),
@@ -269,7 +269,13 @@ function checkPromo(code, subtotal) {
   }
   return { code: c, type: p.type, value: Number(p.value) || 0 };
 }
-const unitPrice = (p, qty) => (p.bulkMin > 1 && p.bulkPrice > 0 && qty >= p.bulkMin) ? Math.round(p.bulkPrice) : Math.round(Number(p.price) || 0);
+/* Prix à l'unité selon la quantité : prix normal, prix de gros, ou offre par quantité (« lots » de la page de vente) — le plus avantageux */
+const cleanPacks = p => (Array.isArray(p && p.packs) ? p.packs : []).map(k => ({ qty: Math.round(Number(k && k.qty) || 0), price: Math.round(Number(k && k.price) || 0), label: String(k && k.label || '').slice(0, 30) }))
+  .filter(k => k.qty >= 2 && k.qty <= 50 && k.price > 0 && k.price < (Number(p.price) || 0)).sort((a, b) => a.qty - b.qty).slice(0, 3);
+const unitPrice = (p, qty) => { let u = Math.round(Number(p.price) || 0);
+  if (p.bulkMin > 1 && p.bulkPrice > 0 && qty >= p.bulkMin) u = Math.min(u, Math.round(p.bulkPrice));
+  for (const k of cleanPacks(p)) if (qty >= k.qty) u = Math.min(u, k.price);
+  return u; };
 function expandItems(items) {
   const m = new Map();
   for (const i of items || []) {
@@ -654,6 +660,17 @@ app.post('/api/admin/video-import', express.json({ limit: '10kb' }), requireStaf
   await store.files.save(id, mime, buf);
   res.json({ id, url: `/media/${id}.${VIDEO_TYPES[mime]}`, size: buf.length });
 }));
+/* Message audio de la page de vente (ex. présentation en bambara) */
+const AUDIO_TYPES = { 'audio/mpeg': 'mp3', 'audio/mp3': 'mp3', 'audio/mp4': 'm4a', 'audio/x-m4a': 'm4a', 'audio/m4a': 'm4a', 'audio/aac': 'aac', 'audio/ogg': 'ogg', 'audio/webm': 'webm', 'audio/wav': 'wav', 'audio/x-wav': 'wav', 'audio/wave': 'wav' };
+app.post('/api/admin/audio', requireStaff, express.raw({ type: ['audio/*', 'application/octet-stream'], limit: '12mb' }), h(async (req, res) => {
+  const mime = String(req.headers['content-type'] || '').split(';')[0].trim().toLowerCase();
+  if (!AUDIO_TYPES[mime]) throw httpErr(400, 'Format non pris en charge : envoyez un fichier MP3 ou M4A (enregistreur du téléphone).');
+  const buf = req.body; if (!Buffer.isBuffer(buf) || buf.length < 1000) throw httpErr(400, 'Fichier audio vide ou illisible.');
+  const u = await store.files.usage(); if (u.bytes + buf.length > 350 * 1024 * 1024) throw httpErr(413, 'Espace de stockage plein : supprimez d’anciennes vidéos.');
+  const id = 'v' + Date.now().toString(36) + rnd(6).toLowerCase(), ext = AUDIO_TYPES[mime];
+  await store.files.save(id, ext === 'mp3' ? 'audio/mpeg' : ext === 'm4a' ? 'audio/mp4' : mime, buf);
+  res.json({ id, url: `/media/${id}.${ext}`, size: buf.length });
+}));
 app.delete('/api/admin/video/:id', requireStaff, h(async (req, res) => {
   const id = String(req.params.id || '').replace(/\.\w+$/, ''); if (!/^v[a-z0-9]{6,30}$/.test(id)) throw httpErr(400, 'Vidéo invalide.');
   await store.files.del(id); res.json({ ok: true });
@@ -1000,6 +1017,9 @@ const publicProduct = p => ({ ...(isPartnerS(p) ? { partner: { platform: ['amazo
   lpHook: p.lpHook || '', lpSub: p.lpSub || '', lpProblem: p.lpProblem || '', lpSolution: p.lpSolution || '', lpUsages: p.lpUsages || '', lpFaq: p.lpFaq || '', lpOffer: p.lpOffer || '', lpUntil: p.lpUntil || '',
   angleCaps: Array.isArray(p.angleCaps) ? p.angleCaps : [], spin: Array.isArray(p.spin) ? p.spin : [],
   lpVideo: p.lpVideo || '', lpVideoFile: /^(https?:\/\/[^/]+)?\/media\/v[a-z0-9]{6,30}\.(mp4|mov|webm)$/i.test(p.lpVideoFile || '') ? p.lpVideoFile : '', lpVideoTitle: p.lpVideoTitle || '', sold30: sold30(p.id),
+  packs: hasVar(p) ? [] : cleanPacks(p), lpExpress: p.lpExpress !== false, lpGuarantee: String(p.lpGuarantee || '').slice(0, 300), lpCompare: String(p.lpCompare || '').slice(0, 1500), lpCompareOff: !!p.lpCompareOff,
+  lpProofs: (Array.isArray(p.lpProofs) ? p.lpProofs : []).filter(u => /^\/media\/sp[a-z0-9]{6,30}\.jpg$/.test(u)).slice(0, 10),
+  lpAudio: /^\/media\/v[a-z0-9]{6,30}\.(mp3|m4a|aac|ogg|webm|wav|mp4)$/i.test(p.lpAudio || '') ? p.lpAudio : '', lpAudioTitle: String(p.lpAudioTitle || '').slice(0, 80),
   options: Array.isArray(p.options) ? p.options : [], variants: Array.isArray(p.variants) ? p.variants.map(v => ({ key: v.key, vals: v.vals, stock: v.stock, price: v.price, barcode: v.barcode || '' })) : [],
   barcode: p.barcode || '',
   gallery: Array.isArray(p.gallery) ? p.gallery : [], highlights: p.highlights || '', details: p.details || '', specs: p.specs || '', warranty: p.warranty || '' });
@@ -1226,7 +1246,7 @@ app.post('/api/carts', h(async (req, res) => {
   const changed = !prev || prev.value !== value || prev.count !== count;
   let pushId = prev?.pushId || '';
   if (b.push && /^https:\/\//.test(String(b.push))) { const pidh = await WP.subId(String(b.push)); if (getDoc('push-subs', pidh)) pushId = pidh; }
-  putDoc('carts', id, { lines, value, count, contact, pushId, createdAt: prev?.createdAt || Date.now(), updatedAt: changed ? Date.now() : prev.updatedAt, notified: changed ? false : !!prev.notified, pushed: changed ? false : !!prev.pushed, relaunchedAt: prev?.relaunchedAt || 0, converted: false });
+  putDoc('carts', id, { ...(b.lead || prev?.lead ? { lead: String(b.lead || prev.lead).slice(0, 20) } : {}), lines, value, count, contact, pushId, createdAt: prev?.createdAt || Date.now(), updatedAt: changed ? Date.now() : prev.updatedAt, notified: changed ? false : !!prev.notified, pushed: changed ? false : !!prev.pushed, relaunchedAt: prev?.relaunchedAt || 0, converted: false });
   res.json({ ok: true });
 }));
 /* Toutes les minutes : signale les paniers sans commande depuis ABANDON_MINUTES, nettoie les anciens */
@@ -1254,7 +1274,7 @@ setInterval(() => {
 app.get('/api/admin/carts', requireStaff, (req, res) => {
   const t = Date.now();
   res.json({ ai: !!env.ANTHROPIC_API_KEY, carts: allDocs('carts').filter(c => !c.converted && c.value && t - c.updatedAt >= 5 * 60e3).sort((a, b) => b.updatedAt - a.updatedAt).slice(0, 200)
-    .map(c => ({ id: c.id, lines: c.lines, value: c.value, count: c.count, contact: c.contact, updatedAt: c.updatedAt, pushed: !!c.pushed, relaunchedAt: c.relaunchedAt || 0, device: !!c.pushId })) });
+    .map(c => ({ id: c.id, lines: c.lines, value: c.value, count: c.count, contact: c.contact, updatedAt: c.updatedAt, pushed: !!c.pushed, relaunchedAt: c.relaunchedAt || 0, device: !!c.pushId, lead: c.lead || '' })) });
 });
 /* Audience : paniers avec contact (120 derniers jours) pour les segments de retargeting */
 app.get('/api/admin/audience-carts', requireStaff, (req, res) => {
@@ -1367,6 +1387,27 @@ app.post('/api/orders', h(async (req, res) => {
     throw httpErr(502, 'Le service de paiement ne répond pas. Réessayez ou choisissez un autre moyen de paiement.');
   }
   res.json({ id, token: order.token, redirect, order: publicOrder(getDoc('orders', id), id) });
+}));
+/* Offre juste après la commande : un article ajouté au même colis, à prix réduit, pendant 30 minutes (paiement à la livraison) */
+app.post('/api/orders/:id/addon', h(async (req, res) => {
+  if (limited('addon:' + req.ip, 10, 600e3)) throw httpErr(429, 'Trop de requêtes.');
+  const id = req.params.id, o = validId(id) && getDoc('orders', id);
+  if (!o || !req.body?.t || !safeEq(o.token, String(req.body.t))) throw httpErr(404, 'Commande introuvable.');
+  const s = settings(), pct = Math.min(50, Math.max(0, Number(s.addonPct ?? 10)));
+  if (s.addonOn === false) throw httpErr(400, 'Offre indisponible.');
+  if (o.payment?.method !== 'cod' || o.status !== 'en_attente' || o.stockApplied || Date.now() - (o.createdAt || 0) > 30 * 60e3) throw httpErr(400, 'Cette commande ne peut plus être modifiée en ligne : écrivez-nous sur WhatsApp.');
+  if ((o.items || []).some(i => i.addon)) throw httpErr(400, 'Vous avez déjà profité de cette offre.');
+  const pid = String(req.body?.pid || ''), p = validId(pid) && getDoc('products', pid);
+  if (!p || p.active === false || isPartnerS(p) || hasVar(p) || (Number(p.stock) || 0) <= 0) throw httpErr(400, 'Ce produit n’est plus disponible.');
+  const price = Math.max(0, Math.round(unitPrice(p, 1) * (1 - pct / 100)));
+  const items = [...o.items, { id: pid, name: p.name, price, qty: 1, addon: true }], subtotal = (o.subtotal || 0) + price;
+  let shipping = o.shipping || 0;
+  if (o.delivery === 'livraison' && !o.carrier && !o.shipQuote && Number(s.freeFrom) > 0 && subtotal >= Number(s.freeFrom)) shipping = 0;
+  const upd = { ...o, items, subtotal, shipping, total: Math.max(0, subtotal - (o.discount || 0) + shipping), addonAt: Date.now() };
+  if (!o.gift) { const g = giftOf(subtotal, req.body?.giftPick); if (g) { upd.gift = g.item.name; upd.giftItem = { name: g.item.name, pid: g.item.pid, at: g.at }; if (g.item.pid) upd.items.push({ id: g.item.pid, name: '🎁 ' + g.item.name + ' (offert)', price: 0, qty: 1, gift: true }); } }
+  putDoc('orders', id, upd);
+  notify({ title: `Article ajouté à ${o.number}`, tags: ['heavy_plus_sign'], priority: 3, message: `${o.customer?.name || ''} a ajouté ${p.name} (+${money(price)})\nNouveau total : ${money(upd.total)}`, click: BASE_URL });
+  res.json({ order: publicOrder(upd, id) });
 }));
 /* Retrouver sa commande (numéro + téléphone) pour donner un avis depuis un autre appareil */
 app.post('/api/orders/find', h(async (req, res) => {
