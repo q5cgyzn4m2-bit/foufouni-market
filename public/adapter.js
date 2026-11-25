@@ -257,13 +257,18 @@
     let d; try { d = await api('GET', '/api/driver/me?t=' + encodeURIComponent(t)); } catch (e) { $('#overlay').innerHTML = `<div class="scrim"><div class="modal"><div class="m-b"><h2>Espace livreur</h2><p>${esc(e.message)}</p></div></div></div>`; return; }
     const todo = d.orders.filter(o => o.status !== 'livree'), done = d.orders.filter(o => o.status === 'livree');
     const card = o => `<div class="panel" style="margin-bottom:12px"><div style="display:flex;justify-content:space-between;gap:10px;align-items:baseline"><b style="font-size:17px">${esc(o.number)}</b>${o.status === 'livree' ? '<span class="pill ok">Livrée ✓</span>' : o.toCollect ? `<span class="pill warn">À encaisser ${fmt(o.toCollect)}</span>` : '<span class="pill ok">Déjà payée</span>'}</div>
-      <p style="margin:8px 0 4px"><b>${esc(o.customer.name)}</b> · ${esc(o.customer.phone)}</p><p class="muted small" style="margin:0">📍 ${esc([o.customer.address, o.customer.city].filter(Boolean).join(', '))}${o.customer.note ? '<br>Repère : ' + esc(o.customer.note) : ''}</p>
+      <p style="margin:8px 0 4px"><b>${esc(o.customer.name)}</b> · ${esc(o.customer.phone)}</p><p class="muted small" style="margin:0">📍 ${esc([o.customer.address, o.customer.city].filter(Boolean).join(', '))}${o.customer.note ? '<br>Repère : ' + esc(o.customer.note) : ''}</p>${o.slot ? `<p class="small" style="margin:6px 0 0">🕒 Créneau : <b>${esc(o.slot)}</b></p>` : ''}${o.confirm === 'ok' ? '<p class="small" style="margin:4px 0 0;color:var(--kola)">✅ Commande confirmée par le client</p>' : ''}
       <p class="small" style="margin:8px 0 0">${o.items.map(i => i.qty + ' × ' + esc(i.name)).join('<br>')}</p>
       ${o.status !== 'livree' ? `<div class="fin-actions" style="margin:12px 0 0"><a class="btn ghost sm" href="tel:${esc(o.customer.phone.replace(/\s/g, ''))}">📞 Appeler</a><a class="btn ghost sm" target="_blank" rel="noopener" href="https://wa.me/${waNumber(o.customer.phone)}">💬 WhatsApp</a><a class="btn ${o.customer.geo ? 'primary' : 'ghost'} sm" target="_blank" rel="noopener" href="${esc(mapsLink(o.customer))}">🗺 ${o.customer.geo ? 'Position exacte' : 'Itinéraire'}</a></div>
+        <div class="fin-actions" style="margin:10px 0 0">${o.enRouteAt ? `<span class="pill info">🛵 En route depuis ${new Date(o.enRouteAt).toLocaleTimeString('fr-FR', { hour: '2-digit', minute: '2-digit' })}</span>` : `<button class="btn ghost sm" data-drv-act="route" data-id="${esc(o.id)}">🛵 Je pars livrer</button>`}<button class="btn ghost sm" data-drv-act="absent" data-id="${esc(o.id)}">📵 Client absent</button><button class="btn ghost sm" data-drv-act="refused" data-id="${esc(o.id)}">🚫 Colis refusé</button></div>
         <label class="btn primary block" style="margin-top:12px">📷 Colis livré : prendre la photo<input type="file" accept="image/*" capture="environment" class="sr" data-drv-photo="${esc(o.id)}"></label>` : `<p class="muted small" style="margin:10px 0 0">Livrée le ${dateFr(o.proof ? o.proof.at : o.createdAt)}</p>`}</div>`;
     $('#overlay').innerHTML = `<div class="scrim"><div class="modal wide" role="dialog" aria-modal="true" aria-label="Espace livreur"><div class="m-h"><h2>🛵 Bonjour ${esc(d.driver.name)}</h2></div>
       <div class="m-b"><p class="muted" style="margin-top:0">${todo.length} livraison${todo.length > 1 ? 's' : ''} à faire pour ${esc(d.shop)}. Une fois le colis remis, prenez la photo : la commande passe en « Livrée ».</p>
       ${todo.map(card).join('') || '<p class="muted">Aucune livraison en attente 👍</p>'}${done.length ? `<h3 style="margin:18px 0 10px">Livrées récemment</h3>${done.slice(0, 10).map(card).join('')}` : ''}</div></div></div>`;
+    document.querySelectorAll('[data-drv-act]').forEach(b => b.onclick = async () => {
+      const act = b.dataset.drvAct; if (act === 'refused' && !confirm('Le client refuse le colis ? La commande sera annulée et le colis revient en stock.')) return;
+      b.disabled = true; try { await api('POST', '/api/driver/status', { t, orderId: b.dataset.id, action: act }); toast(act === 'route' ? '🛵 Bonne route ! Le client voit que vous êtes en route.' : act === 'absent' ? 'Absence notée : la boutique est prévenue.' : 'Refus enregistré.'); driverSpace(); }
+      catch (e) { toast(e.message || 'Envoi impossible.'); b.disabled = false; } });
     document.querySelectorAll('[data-drv-photo]').forEach(inp => inp.onchange = async () => {
       const f = inp.files[0]; if (!f) return; const id = inp.dataset.drvPhoto, o = d.orders.find(x => x.id === id);
       const photo = await compress(f).catch(() => null); if (!photo) return toast('Photo illisible.');
@@ -345,7 +350,7 @@
       const r = await api('POST', '/api/orders', {
         items: S.cart.map(l => l.b ? { bundle: l.b, qty: l.qty } : (l.v ? { id: l.id, qty: l.qty, v: l.v } : { id: l.id, qty: l.qty })), promoCode: S.appliedPromo ? S.appliedPromo.code : '',
         customer: { name: CO.name, phone: CO.phone, address: CO.address, city: CO.city, note: CO.note, country: CO.country || 'ML', ...(CO.geo ? { geo: CO.geo } : {}) }, payRef: CO.payRef || '',
-        delivery: CO.delivery, carrier: CO.carrier || '', giftPick: typeof giftPickKey === 'function' ? giftPickKey() : '', method: CO.method, cartId, ref: refCode(), source: srcCode(), campaign: cmpCode(), lpPids: lpSeen().filter(id => S.cart.some(l => l.id === id))
+        delivery: CO.delivery, carrier: CO.carrier || '', slot: CO.slot || '', giftPick: typeof giftPickKey === 'function' ? giftPickKey() : '', method: CO.method, cartId, ref: refCode(), source: srcCode(), campaign: cmpCode(), lpPids: lpSeen().filter(id => S.cart.some(l => l.id === id))
       });
       addMine(r.id, r.token); syncAlerts();
       { const tt = computeTotals(S.cart, S.appliedPromo, CO.delivery, CO); ttTrack('PlaceAnOrder', { transaction_id: (r.order && r.order.number) || r.id, value: Math.round(tt.total), contents: tt.lines.filter(l => l.kind === 'product').map(l => ttItem(l.p, l.qty, l.unit)) }); ttIdentify(CO.phone); }
@@ -363,13 +368,18 @@
   window.expressOrder = async function (o) {
     const items = [o.v ? { id: o.p.id, qty: o.qty, v: o.v } : { id: o.p.id, qty: o.qty }];
     const r = await api('POST', '/api/orders', {
-      items, promoCode: '', method: 'cod', delivery: 'livraison', carrier: '', giftPick: o.giftPick || '',
-      customer: { name: o.name, phone: o.phone, address: o.address, city: S.settings.city || 'Bamako', note: 'Commande express (page de vente)', country: 'ML' },
+      items, promoCode: '', method: 'cod', delivery: 'livraison', carrier: '', slot: o.slot || '', giftPick: o.giftPick || '',
+      customer: { name: o.name, phone: o.phone, address: o.address, city: S.settings.city || 'Bamako', note: '', country: 'ML' },
       cartId, ref: refCode(), source: srcCode(), campaign: cmpCode(), lpPids: [o.p.id]
     });
     addMine(r.id, r.token); syncAlerts();
     ttTrack('PlaceAnOrder', { transaction_id: (r.order && r.order.number) || r.id, value: Math.round(r.order ? r.order.total : 0), contents: [ttItem(o.p, o.qty, o.unit)] }); ttIdentify(o.phone);
     load(); return r.order;
+  };
+  window.orderConfirm = async function (o, answer) {
+    const m = myOrders().find(x => x.id === o.id), t = (m && m.t) || o.token; if (!t) throw new Error('Lien de commande incomplet.');
+    const r = await api('POST', `/api/orders/${encodeURIComponent(o.id)}/confirm`, { t, answer });
+    const i = S.orders.findIndex(x => x.id === o.id); if (i >= 0) S.orders[i] = r.order; S.guideOrder = { ...r.order, token: t }; schedule(); return r.order;
   };
   window.leadCapture = async function (p, name, phone) {
     contact = { name, phone };

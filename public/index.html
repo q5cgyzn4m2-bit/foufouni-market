@@ -543,6 +543,10 @@ tr.mv-tr td:first-child{box-shadow:inset 3px 0 0 var(--indigo)}
 .line-item.gift{background:var(--kola-soft); border-radius:12px; padding:10px; margin-top:8px; border:1px dashed var(--kola)}
 .line-item.gift .li-img{background:var(--surface)}
 .cd-reco{margin:16px 0 4px}
+.slots{display:flex; flex-wrap:wrap; gap:6px}
+.slot{padding:8px 12px; border-radius:99px; border:1.5px solid var(--line); background:var(--surface); color:inherit; font:600 13px var(--f-b); cursor:pointer}
+.slot.on{border-color:var(--saffron); background:var(--saffron-soft)}
+.gc{margin:12px 0 0; padding:12px 14px; border-radius:14px; border:2px solid var(--saffron); background:var(--saffron-soft); display:flex; flex-direction:column; gap:4px}
 /* Page de vente : offres, commande express, garantie, preuves, comparatif, audio, offre après commande */
 .pk{display:grid; gap:8px; margin:16px 0 4px}
 .pk-o{position:relative; display:flex; align-items:center; gap:12px; width:100%; padding:13px 14px; border-radius:14px; border:2px solid var(--line); background:var(--surface); color:inherit; font:inherit; text-align:left; cursor:pointer}
@@ -1783,9 +1787,22 @@ function proofSrc(o){
 }
 const deliveredLink = o => shopUrl()+'?livre='+encodeURIComponent(o.id)+'&t='+encodeURIComponent(o.token||'');
 const driverLink = d => shopUrl()+'?livreur='+encodeURIComponent(d.token||'');
+/* Créneaux de livraison, confirmation des commandes et fiabilité des numéros */
+const SLOT_DEF = {matin:'Matin (8 h – 12 h)', apresmidi:'Après-midi (12 h – 17 h)', soir:'Soir (17 h – 20 h)'};
+const slotsOf = () => S.settings.slots || SLOT_DEF;
+const slotLabel = k => (slotsOf()[k] || '');
+const slotChips = (cur, act) => `<div class="field"><label>🕒 Quand préférez-vous être livré ? (facultatif)</label><div class="slots">${[['','Peu importe'], ...Object.entries(slotsOf())].map(([k,l])=>`<button type="button" class="slot${(cur||'')===k?' on':''}" data-a="${act}" data-v="${k}" aria-pressed="${(cur||'')===k}">${esc(l)}</button>`).join('')}</div></div>`;
+const phKey = ph => String(ph||'').replace(/\D/g,'').slice(-8);
+function phoneRecord(ph){ const k = phKey(ph); if(k.length<8) return null; const os = S.orders.filter(o=>o.channel!=='caisse' && phKey(o.customer?.phone)===k);
+  return {n:os.length, delivered:os.filter(o=>o.status==='livree').length, refused:os.filter(o=>o.refused).length, cancelled:os.filter(o=>o.status==='annulee' && !o.refused).length}; }
+const needsConfirm = o => o.channel!=='caisse' && (o.payment||{}).method==='cod' && o.status==='en_attente' && !(o.confirm && ['ok','cancel'].includes(o.confirm.state));
+function confirmPill(o){ if((o.payment||{}).method!=='cod' || o.channel==='caisse') return ''; const c = o.confirm||{};
+  if(c.state==='ok') return '<span class="pill ok">✅ Confirmée</span>'; if(c.state==='cancel') return '<span class="pill bad">❌ Annulée par le client</span>';
+  if(c.state==='call') return '<span class="pill warn">📞 À rappeler</span>'; return o.status==='en_attente' ? '<span class="pill warn">⏳ À confirmer</span>' : ''; }
+function confirmText(o){ const c = o.customer||{}; return `Bonjour ${firstName(c.name)||''} 😊 Merci pour votre commande ${o.number} chez ${S.settings.shopName} : ${(o.items||[]).filter(i=>!i.gift).map(i=>i.qty+' × '+i.name).join(', ')}, total ${fmt(o.total).replace(/[\u202f\u00a0]/g,' ')} à payer à la livraison.${o.slot?' Créneau souhaité : '+slotLabel(o.slot)+'.':''}\n\n👉 Confirmez votre commande en un clic ici : ${guideLink(o)}\n\nSans confirmation, nous vous appellerons avant de l’envoyer. Merci !`; }
 function courseText(o, d){
   const c = o.customer||{}, cod = /cod|livraison/.test(o.payment&&o.payment.method||'') && !PAID.includes(o.status);
-  return `🛵 Nouvelle livraison ${o.number} · ${S.settings.shopName}\nClient : ${c.name||''} · ${c.phone||''}\nAdresse : ${[c.address, c.city, c.country&&c.country!=='ML'?WA[c.country]:''].filter(Boolean).join(', ')}${c.note?'\nRepère : '+c.note:''}\n📍 ${c.geo?'Position exacte':'Localisation'} : ${mapsLink(c)}\nArticles : ${(o.items||[]).map(i=>i.qty+' × '+i.name).join(', ')}\n${cod?'À encaisser : '+fmt(o.total).replace(/[\u202f\u00a0]/g,' '):'Déjà payé'}${isServer()&&d&&d.token?`\n\nAprès la livraison, envoyez la photo ici : ${driverLink(d)}`:'\n\nAprès la livraison, envoyez-moi la photo du colis livré.'}`;
+  return `🛵 Nouvelle livraison ${o.number} · ${S.settings.shopName}\nClient : ${c.name||''} · ${c.phone||''}\nAdresse : ${[c.address, c.city, c.country&&c.country!=='ML'?WA[c.country]:''].filter(Boolean).join(', ')}${c.note?'\nRepère : '+c.note:''}${o.slot?'\n🕒 Créneau : '+slotLabel(o.slot):''}${o.confirm&&o.confirm.state==='ok'?'\n✅ Commande confirmée par le client':''}\n📍 ${c.geo?'Position exacte':'Localisation'} : ${mapsLink(c)}\nArticles : ${(o.items||[]).map(i=>i.qty+' × '+i.name).join(', ')}\n${cod?'À encaisser : '+fmt(o.total).replace(/[\u202f\u00a0]/g,' '):'Déjà payé'}${isServer()&&d&&d.token?`\n\nAprès la livraison, envoyez la photo ici : ${driverLink(d)}`:'\n\nAprès la livraison, envoyez-moi la photo du colis livré.'}`;
 }
 function clientDeliveredText(o){ const c = o.customer||{};
   return `Bonjour ${firstName(c.name)||''} 😊 Votre commande ${o.number} a bien été livrée ✅${o.proof?`\nVoici la photo de votre colis : ${deliveredLink(o)}`:''}\n⭐ Votre avis nous aide beaucoup : ${reviewLink(o)}\nMerci pour votre confiance ! — ${S.settings.shopName}`; }
@@ -2091,10 +2108,15 @@ function guideTrack(o){
   return `<div class="panel" style="margin-top:18px"><div class="muted small" style="font-weight:800;letter-spacing:.08em;text-transform:uppercase">Votre commande ${esc(o.number||'')}</div>
     <div class="track" aria-label="Avancement de la commande">${labels.map((l,i)=>`<div class="${i<=cur?'on':''} ${i===cur?'cur':''}"><i></i>${l}</div>`).join('')}</div>
     <p style="margin:8px 0 0"><b>${esc(next)}</b></p>
+    ${o.enRouteAt && o.status==='expediee' ? `<p class="small" style="margin:6px 0 0">🛵 Le livreur est parti à ${new Date(o.enRouteAt).toLocaleTimeString('fr-FR',{hour:'2-digit',minute:'2-digit'})} : gardez votre téléphone à portée de main.</p>` : ''}
+    ${o.slot ? `<p class="small muted" style="margin:6px 0 0">🕒 Créneau demandé : ${esc(slotLabel(o.slot))}</p>` : ''}
+    ${needsConfirm(o) ? `<div class="gc"><b>Confirmez-vous votre commande ?</b><span class="muted small">${(o.items||[]).filter(i=>!i.gift).map(i=>i.qty+' × '+esc(i.name)).join(', ')} · <b>${fmt(o.total)}</b> à payer à la livraison${o.customer&&o.customer.address?' · 📍 '+esc(o.customer.address):''}</span>
+      <div class="fin-actions" style="margin:8px 0 0"><button class="btn primary btn-live" data-a="gConfirm" data-v="ok">✅ Oui, je confirme</button><button class="btn ghost sm" data-a="gConfirm" data-v="cancel">Annuler la commande</button></div></div>`
+      : o.confirm && o.confirm.state==='ok' && o.status!=='livree' ? '<p class="small" style="margin:6px 0 0;color:var(--kola)"><b>✅ Commande confirmée, merci !</b></p>' : ''}
     <div class="fin-actions" style="margin:12px 0 0"><button class="btn ghost sm" data-a="guideReceipt">🧾 Voir mon reçu</button>${['livree','expediee'].includes(o.status)?'<button class="btn primary sm btn-live" data-a="guideReview">★ Donner mon avis</button>':''}${shopWa()?`<a class="btn wa sm" target="_blank" rel="noopener" href="https://wa.me/${shopWa()}?text=${encodeURIComponent('Bonjour, je vous écris au sujet de ma commande '+(o.number||'')+'.')}">${WA_ICON}Nous écrire</a>`:''}</div></div>`;
 }
 function viewGuide(){
-  const st = S.settings, o = S.guideOrder, tab = S.guideTab || 'site', city = st.city||'Bamako', man = st.manualPay||{}, procs = enabledProcs().map(([k])=>PROCESSORS[k].name);
+  const st = S.settings, o = S.guideOrder ? {...S.guideOrder, ...(S.orders.find(x=>x.id===S.guideOrder.id)||{}), token:S.guideOrder.token} : null, tab = S.guideTab || 'site', city = st.city||'Bamako', man = st.manualPay||{}, procs = enabledProcs().map(([k])=>PROCESSORS[k].name);
   const payTxt = procs.length ? procs.join(', ') : 'paiement à la livraison';
   const step = (ico, t, d, tip) => `<li><h3>${ico} ${t}</h3><p>${d}</p>${tip?`<span class="tip">💡 ${tip}</span>`:''}</li>`;
   const site = [
@@ -2176,6 +2198,7 @@ function expressForm(p){ if(!xpOk(p)) return ''; const d = xpData(p), st = S.set
     <input class="input" id="xp-name" name="name" autocomplete="name" maxlength="80" placeholder="Votre nom" value="${esc(m.name||'')}">
     <input class="input" id="xp-phone" name="tel" type="tel" inputmode="tel" autocomplete="tel" maxlength="30" placeholder="Téléphone / WhatsApp (ex. 76 00 00 00)" value="${esc(m.phone||'')}">
     <input class="input" id="xp-addr" name="address" autocomplete="street-address" maxlength="200" placeholder="Quartier et repère (ex. ACI 2000, près de la pharmacie)" value="${esc(m.addr||'')}">
+    ${slotChips(S.xpSlot,'xpSlot')}
     <button class="btn primary btn-live block xp-go" data-a="xpSend">✅ Je commande, je paie à la livraison</button>
     <div class="xp-err" id="xp-err" role="alert"></div>
     <div class="xp-f">🔒 Aucun paiement maintenant · Nous vous appelons pour confirmer · Livraison à ${esc(st.city||'Bamako')}. Hors de ${esc(st.city||'Bamako')} ? <button class="linkbtn" data-a="pdpBuy">Commandez ici</button></div></div>`; }
@@ -3233,6 +3256,7 @@ function drawCheckout(){
         : `<p class="small" style="margin:-4px 0 12px;color:var(--indigo)">🌍 Livraison hors de ${esc(S.settings.city||'Bamako')} : le prix du transport et le délai vous seront confirmés par notre équipe sur WhatsApp avant l’expédition.</p>`) : ''}
       <div class="field"><label for="co-address" style="display:flex;justify-content:space-between;gap:8px"><span>📍 ${t.remote?'Quartier ou adresse de réception *':'Quartier *'}</span>${qs.length?'<span class="small" style="color:var(--indigo);font-weight:700">Quartier introuvable ? Tapez-le</span>':''}</label><input class="input" id="co-address" list="co-quarts" value="${esc(CO.address)}" placeholder="${qs.length?'Tapez votre quartier (ex. Faladié, ACI 2000…)':'Quartier, rue ou adresse'}" autocomplete="off"><datalist id="co-quarts">${qs.map(v=>`<option value="${esc(v)}">`).join('')}</datalist></div>
       <div class="field"><label for="co-note">Indications ou repère (facultatif)</label><input class="input" id="co-note" value="${esc(CO.note)}" placeholder="ex. derrière la pharmacie, portail bleu, 2e étage"></div>
+      ${t.remote?'':slotChips(CO.slot,'coSlot')}
       <div class="geo-box">${CO.geo?`<span style="flex:1"><b style="color:var(--kola)">✓ Position exacte enregistrée</b><br><span class="muted small">Précision d’environ ${Math.round(CO.geo.acc||0)} m · <a href="${esc(mapsLink({geo:CO.geo}))}" target="_blank" rel="noopener" style="color:var(--indigo)">voir sur la carte</a></span></span><button class="btn ghost sm" data-a="coGeoDel" style="flex:0">Retirer</button>`
         :`<span style="flex:1;min-width:180px"><b>Livraison plus rapide</b><br><span class="muted small">Si vous êtes à l’adresse de livraison, partagez votre position : le livreur arrive directement chez vous.</span></span><button class="btn primary sm" data-a="coGeo" style="flex:0;white-space:nowrap">📍 Partager ma position</button>`}</div>`; })():`<div class="field"><label for="co-note">Instructions (facultatif)</label><input class="input" id="co-note" value="${esc(CO.note)}" placeholder="Horaire de passage…"></div>`}`;
   if(CO.step===3){
@@ -3345,7 +3369,7 @@ function payFail(msg){ $('#overlay').innerHTML = `<div class="scrim" data-a="clo
 function receiptHTML(o){
   const st = S.settings;
   return `<div class="receipt"><div class="rh"><b style="font:800 20px var(--f-d)">${esc(st.shopName)}</b>${st.legalName&&st.legalName!==st.shopName?`<div class="small">${esc(st.legalName)}${st.legalForm?' · '+esc(st.legalForm):''}</div>`:''}<div class="muted small">${esc([st.address, st.city].filter(Boolean).join(', '))}${st.phone?' · '+esc(st.phone):''}</div>${st.rccm||st.nif?`<div class="muted small">${st.rccm?'RCCM '+esc(st.rccm):''}${st.rccm&&st.nif?' · ':''}${st.nif?'NIF '+esc(st.nif):''}</div>`:''}
-    <div style="margin-top:8px"><b>${esc(o.number)}</b></div><div class="muted small">${dateFr(o.createdAt)} · ${esc(o.channel==='caisse'?'Vente en caisse':'Commande en ligne')}</div></div>
+    <div style="margin-top:8px"><b>${esc(o.number)}</b></div><div class="muted small">${dateFr(o.createdAt)} · ${esc(o.channel==='caisse'?'Vente en caisse':'Commande en ligne')}</div>${o.slot?`<div class="small">🕒 Livraison : ${esc(slotLabel(o.slot))}</div>`:''}</div>
     ${o.items.map(i=>`<div class="rr"><span>${i.qty} × ${esc(i.name)}</span><span>${fmt(i.price*i.qty)}</span></div>`).join('')}
     <div style="border-top:2px dashed var(--line); margin:10px 0"></div>
     <div class="rr"><span>Sous-total</span><span>${fmt(o.subtotal)}</span></div>
@@ -4650,11 +4674,11 @@ function compress(file){
 }
 function paneOrders(){
   const f = S.orderFilter, q = S.aq.trim().toLowerCase();
-  const list = S.orders.filter(o=>(f==='all'||o.status===f) && (!q || (o.number+' '+(o.customer?.name||'')+' '+(o.customer?.phone||'')).toLowerCase().includes(q)));
+  const list = S.orders.filter(o=>(f==='all'||(f==='toconfirm'?needsConfirm(o):o.status===f)) && (!q || (o.number+' '+(o.customer?.name||'')+' '+(o.customer?.phone||'')).toLowerCase().includes(q)));
   return `<div class="toolbar"><h2 style="font-size:24px;flex:1">Commandes</h2><label class="sr" for="aq">Rechercher</label><input class="input" id="aq" data-in="aq" value="${esc(S.aq)}" placeholder="N°, client, téléphone">${dl?'<button class="btn ghost" data-a="guideShare">📖 Guide client</button><button class="btn ghost" data-a="drivers">🛵 Livreurs</button><button class="btn ghost" data-a="exportOrders">Exporter CSV</button>':''}</div>
-    <div class="cats">${[['all','Toutes'],...Object.entries(STATUS).map(([k,v])=>[k,v.label])].map(([k,l])=>`<button aria-pressed="${f===k}" data-a="ofilter" data-v="${k}">${l} <span class="muted">${k==='all'?S.orders.length:S.orders.filter(o=>o.status===k).length}</span></button>`).join('')}</div>
+    <div class="cats">${[['all','Toutes'],['toconfirm','⏳ À confirmer'],...Object.entries(STATUS).map(([k,v])=>[k,v.label])].map(([k,l])=>`<button aria-pressed="${f===k}" data-a="ofilter" data-v="${k}">${l} <span class="muted">${k==='all'?S.orders.length:k==='toconfirm'?S.orders.filter(needsConfirm).length:S.orders.filter(o=>o.status===k).length}</span></button>`).join('')}</div>
     <div class="panel tbl-wrap">${list.length?`<table><thead><tr><th>N°</th><th>Date</th><th>Client</th><th>Canal</th><th>Paiement</th><th>Total</th><th>Statut</th></tr></thead><tbody>
-    ${list.map(o=>`<tr class="click" data-a="orderDetail" data-id="${o.id}"><td><b>${esc(o.number)}</b>${o.driver?`<div class="muted small">🛵 ${esc(o.driver.name)}${o.proof?' · 📷':''}</div>`:''}</td><td class="muted">${dateFr(o.createdAt)}</td><td>${esc(o.customer?.name||'—')}</td><td>${o.channel==='caisse'?'Caisse':'En ligne'}</td><td class="small">${esc(PROCESSORS[o.payment?.method]?.name||(o.payment?.method==='cash'?'Espèces':o.payment?.method==='credit'?'À crédit':''))}</td><td><b>${fmt(o.total)}</b></td><td><span class="pill ${STATUS[o.status]?.cls}">${STATUS[o.status]?.label}</span></td></tr>`).join('')}</tbody></table>`
+    ${list.map(o=>`<tr class="click" data-a="orderDetail" data-id="${o.id}"><td><b>${esc(o.number)}</b>${o.driver?`<div class="muted small">🛵 ${esc(o.driver.name)}${o.proof?' · 📷':''}</div>`:''}</td><td class="muted">${dateFr(o.createdAt)}</td><td>${esc(o.customer?.name||'—')}</td><td>${o.channel==='caisse'?'Caisse':'En ligne'}</td><td class="small">${esc(PROCESSORS[o.payment?.method]?.name||(o.payment?.method==='cash'?'Espèces':o.payment?.method==='credit'?'À crédit':''))}</td><td><b>${fmt(o.total)}</b></td><td><span class="pill ${STATUS[o.status]?.cls}">${STATUS[o.status]?.label}</span>${o.status==='en_attente'?'<br>'+confirmPill(o):''}${o.refused?'<br><span class="pill bad">🚫 Refusée</span>':''}${o.slot?`<div class="muted small">🕒 ${esc(slotLabel(o.slot).replace(/ \(.*/,''))}</div>`:''}</td></tr>`).join('')}</tbody></table>`
     :'<div class="empty"><h3>Aucune commande</h3><p>Les commandes en ligne et les ventes en caisse s’afficheront ici.</p></div>'}</div>`;
 }
 function orderDetail(o){
@@ -4663,9 +4687,15 @@ function orderDetail(o){
   $('#overlay').innerHTML = `<div class="scrim" data-a="closeAll"><div class="modal wide" role="dialog" aria-modal="true" aria-label="Commande ${esc(o.number)}">
     <div class="m-h"><h2>${esc(o.number)} <span class="pill ${STATUS[o.status]?.cls}" style="vertical-align:middle">${STATUS[o.status]?.label}</span></h2><button class="x" data-a="closeAll" aria-label="Fermer">×</button></div>
     <div class="m-b"><div class="two"><div class="panel">${receiptHTML(o)}</div>
-      <div>${o.affiliate?`<div class="panel"><h3>Ambassadeur</h3><p style="margin:0"><b>${esc(o.affiliate.code)}</b> · ${esc((S.affiliates.find(a=>a.id===o.affiliate.id)||{}).name||'')}<br>Commission ${fmt(o.affiliate.commission)} <span class="pill ${AFF_ST[affState(o)].c}">${AFF_ST[affState(o)].l}</span></p></div>`:''}<div class="panel"><h3>Client</h3><p style="margin:0">${esc(c.name||'—')}<br>${esc(c.phone||'')}<br>${o.delivery==='livraison'?esc([c.address, c.city, c.country&&c.country!=='ML'?WA[c.country]:''].filter(Boolean).join(', ')):'Retrait en boutique'}${c.note?`<br><span class="muted">Repère : ${esc(c.note)}</span>`:''}</p>
+      <div>${o.affiliate?`<div class="panel"><h3>Ambassadeur</h3><p style="margin:0"><b>${esc(o.affiliate.code)}</b> · ${esc((S.affiliates.find(a=>a.id===o.affiliate.id)||{}).name||'')}<br>Commission ${fmt(o.affiliate.commission)} <span class="pill ${AFF_ST[affState(o)].c}">${AFF_ST[affState(o)].l}</span></p></div>`:''}<div class="panel"><h3>Client</h3><p style="margin:0">${esc(c.name||'—')}<br>${esc(c.phone||'')}<br>${o.delivery==='livraison'?esc([c.address, c.city, c.country&&c.country!=='ML'?WA[c.country]:''].filter(Boolean).join(', ')):'Retrait en boutique'}${c.note?`<br><span class="muted">Repère : ${esc(c.note)}</span>`:''}${o.slot?`<br>🕒 Créneau : <b>${esc(slotLabel(o.slot))}</b>`:''}</p>
+      ${(()=>{ const r = o.channel!=='caisse' && phoneRecord(c.phone); if(!r || r.n<2) return r&&r.n===1?'<p class="small muted" style="margin:8px 0 0">🆕 Premier achat de ce numéro</p>':''; const bad = r.refused>=Math.max(1, Number(S.settings.riskMax)||2);
+        return `<p class="small" style="margin:8px 0 0">${bad?'🔴':r.refused?'🟠':'🟢'} Fiabilité : <b>${r.delivered} livrée${r.delivered>1?'s':''}</b> · ${r.refused} refusée${r.refused>1?'s':''}${r.cancelled?' · '+r.cancelled+' annulée'+(r.cancelled>1?'s':''):''} (${r.n} commandes)${bad?' · <b>acompte exigé</b> pour le paiement à la livraison':''}</p>`; })()}
       <div class="fin-actions" style="margin:10px 0 0">${c.phone?`<a class="btn ghost sm" href="tel:${esc(c.phone.replace(/\s/g,''))}">Appeler</a>`:''}
       ${o.delivery==='livraison'&&mapsLink(c)?`<a class="btn ghost sm" href="${esc(mapsLink(c))}" target="_blank" rel="noopener">📍 Google Maps${c.geo?' (position exacte)':''}</a><button class="btn ghost sm" data-a="copyMaps" data-v="${esc(mapsLink(c))}">Copier le lien</button>`:''}</div></div>
+      ${(o.payment||{}).method==='cod' && o.channel!=='caisse' && !['livree'].includes(o.status) ? `<div class="panel"><h3>📲 Confirmation ${confirmPill(o)}</h3>
+        ${o.confirm&&o.confirm.at?`<p class="muted small" style="margin:0 0 8px">${o.confirm.state==='ok'?'Confirmée':o.confirm.state==='cancel'?'Annulée':'Notée « à rappeler »'} le ${dateFr(o.confirm.at)}${o.confirm.by==='client'?' par le client (lien WhatsApp)':o.confirm.by?' par '+esc(o.confirm.by):''}</p>`:'<p class="muted small" style="margin:0 0 8px">Envoyez le lien de confirmation avant de confier le colis au livreur : le client confirme en un clic.</p>'}
+        ${o.status!=='annulee'?`<div class="fin-actions" style="margin:0">${c.phone&&needsConfirm(o)?`<a class="btn primary sm" target="_blank" rel="noopener" href="https://wa.me/${waNumber(c.phone)}?text=${encodeURIComponent(confirmText(o))}">💬 Demander la confirmation</a>`:''}${needsConfirm(o)?`<button class="btn ghost sm" data-a="odConfirm" data-id="${o.id}" data-v="ok">✅ Confirmée par téléphone</button><button class="btn ghost sm" data-a="odConfirm" data-id="${o.id}" data-v="call">📞 À rappeler</button>`:''}${['en_attente','payee','preparation','expediee'].includes(o.status)?`<button class="btn ghost sm" data-a="odRefused" data-id="${o.id}">🚫 Refusée à la livraison</button>`:''}</div>`:''}
+        ${o.absent&&o.absent.length?`<p class="small" style="margin:8px 0 0">📵 Client absent ${o.absent.length} fois (dernier passage ${dateFr(o.absent[o.absent.length-1].at)})</p>`:''}${o.enRouteAt?`<p class="small" style="margin:6px 0 0">🛵 Livreur parti le ${dateFr(o.enRouteAt)}</p>`:''}</div>` : ''}
       ${o.gift?`<div class="panel" style="border:2px dashed var(--kola)"><h3>🎁 Cadeau à joindre au colis</h3><p style="margin:0"><b>${esc(o.gift)}</b> : le client a commandé pour ${fmt(o.subtotal)}${o.giftItem&&o.giftItem.at?` (palier ${fmt(o.giftItem.at)})`:''}.${o.giftItem&&o.giftItem.pid?' <span class="muted small">Ce produit est retiré du stock avec la commande.</span>':''}</p></div>`:''}
       ${o.delivery==='livraison'&&(o.carrier||o.shipQuote)?`<div class="panel"><h3>${o.carrier?SHIP_MODES[o.carrier.mode||'route'][0]:'🌍'} Transport vers ${esc(o.customer?.city||'')}</h3>${o.carrier?`<p style="margin:0"><b>${esc(o.carrier.name)}</b> · ${esc(SHIP_MODES[o.carrier.mode||'route'][1])} · <b>${fmt(o.carrier.price)}</b>${o.carrier.days?' · '+esc(o.carrier.days):''}</p>${o.carrier.note?`<p class="muted small" style="margin:6px 0 0">${esc(o.carrier.note)}</p>`:''}${(()=>{ const c=(S.settings.carriers||[]).find(x=>x.id===o.carrier.id); return c&&c.phone?`<a class="btn ghost sm" style="margin-top:8px" href="tel:${esc(String(c.phone).replace(/\s/g,''))}">📞 Appeler ${esc(c.name)}</a>`:''; })()}`:`<p style="margin:0">Transport <b>sur devis</b> : aucune compagnie n’a de tarif pour cette destination. Confirmez le prix au client sur WhatsApp.</p>`}</div>`:''}
       ${o.delivery==='livraison'?`<div class="panel"><h3>🛵 Livraison</h3>
@@ -4820,6 +4850,9 @@ function panePayments(){
     <label class="check-row" style="display:flex;gap:8px;align-items:center;margin-bottom:8px"><input type="checkbox" id="st-gift-on" ${st.giftOn!==false?'checked':''}> Offrir des cadeaux à partir d’un montant d’achat (barre de progression dans le panier)</label>
     ${giftEditor(st)}
     <div class="row"><div class="field" style="max-width:260px"><label for="st-days">Délai de livraison (jours ouvrés)</label><input class="input" id="st-days" maxlength="10" value="${esc(st.deliveryDays||'1-2')}" placeholder="ex. 1-2 ou 0-1"></div></div>
+    <h4 style="margin:16px 0 6px">🛡️ Paiement à la livraison : clients peu fiables</h4>
+    <div class="row" style="align-items:flex-end"><label class="check-row" style="display:flex;gap:8px;align-items:center;flex:2 1 260px"><input type="checkbox" id="st-risk" ${st.riskOn!==false?'checked':''}> Exiger un paiement d’avance (Orange Money, Wave…) pour les numéros qui ont déjà refusé des colis</label>
+      <div class="field" style="flex:1 1 140px"><label for="st-riskmax">À partir de combien de refus</label><input class="input" id="st-riskmax" inputmode="numeric" value="${esc(st.riskMax??2)}"></div></div>
     <h4 style="margin:16px 0 6px">🛍️ Page de vente</h4>
     <div class="field"><label for="st-gar">Garantie affichée par défaut</label><input class="input" id="st-gar" maxlength="300" value="${esc(st.lpGuarantee||'')}" placeholder="Vérifiez votre produit devant le livreur avant de payer. S’il ne vous convient pas, vous ne payez rien."></div>
     <label class="check-row" style="display:flex;gap:8px;align-items:center;margin-bottom:6px"><input type="checkbox" id="st-exit" ${st.exitOn!==false?'checked':''}> Fenêtre « Laissez votre numéro WhatsApp » quand un visiteur s’apprête à quitter la page (une fois par visite)</label>
@@ -4903,7 +4936,7 @@ async function saveSettings(){
   const s = structuredClone(S.settings), v = id=>($(id)?.value||'').trim();
   s.shopName=v('#st-name')||'foûfoûni-Market'; s.city=v('#st-city'); s.tagline=v('#st-tag'); s.intro=v('#st-intro'); s.currency=v('#st-cur')||'FCFA'; s.phone=v('#st-phone');
   s.deliveryFee=Number(v('#st-fee'))||0; s.freeFrom=Number(v('#st-free'))||0; s.testMode=$('#st-test').checked;
-  if($('#st-gift-on')){ s.giftOn=$('#st-gift-on').checked; s.giftTiers = readGiftEditor(); s.lpGuarantee=v('#st-gar').slice(0,300); s.exitOn=$('#st-exit').checked; s.addonOn=$('#st-addon').checked; s.addonPct=Math.min(50, Math.max(0, parseInt(v('#st-addonpct'))||0)); s.giftFrom = s.giftTiers[0]?.at || 0; s.giftName = s.giftTiers[0]?.items[0]?.name || ''; s.deliveryDays=v('#st-days').slice(0,10)||'1-2'; }
+  if($('#st-gift-on')){ s.giftOn=$('#st-gift-on').checked; s.giftTiers = readGiftEditor(); s.lpGuarantee=v('#st-gar').slice(0,300); s.riskOn=$('#st-risk').checked; s.riskMax=Math.max(1, parseInt(v('#st-riskmax'))||2); s.exitOn=$('#st-exit').checked; s.addonOn=$('#st-addon').checked; s.addonPct=Math.min(50, Math.max(0, parseInt(v('#st-addonpct'))||0)); s.giftFrom = s.giftTiers[0]?.at || 0; s.giftName = s.giftTiers[0]?.items[0]?.name || ''; s.deliveryDays=v('#st-days').slice(0,10)||'1-2'; }
   document.querySelectorAll('[data-proc]').forEach(i=>{ s.processors[i.dataset.proc].account=i.value.trim(); });
   document.querySelectorAll('[data-proc-on]').forEach(i=>{ s.processors[i.dataset.procOn].enabled=i.checked; });
   document.querySelectorAll('[data-proc-show]').forEach(i=>{ const k = i.dataset.procShow; s.processors[k] = {...(s.processors[k]||{}), showLogo:i.checked}; });
@@ -5009,6 +5042,14 @@ document.addEventListener('click', async e=>{
     case 'scroll': $('#catalogue').scrollIntoView({behavior:matchMedia('(prefers-reduced-motion:reduce)').matches?'auto':'smooth'}); break;
     case 'cart': openCart(); break;
     case 'ghAdd': { const p = S.products.find(x=>x.id===id); closeAll(); const b = document.querySelector('#main [data-a=pdpAdd], main [data-a=pdpAdd]'); if(!b || !p) break; const n0 = cartCount(); b.click(); setTimeout(()=>{ if(cartCount()>n0 && !$('#overlay').innerHTML.trim()) giftHowModal(p); }, 120); break; }
+    case 'coSlot': CO.slot = el.dataset.v; drawCheckout(); break;
+    case 'xpSlot': { S.xpSlot = el.dataset.v; document.querySelectorAll('[data-a=xpSlot]').forEach(b=>{ const on = b.dataset.v===S.xpSlot; b.classList.toggle('on', on); b.setAttribute('aria-pressed', on); }); break; }
+    case 'gConfirm': { const o = S.guideOrder; if(!o) break; if(el.dataset.v==='cancel' && !confirm('Annuler votre commande ?')) break; el.disabled = true;
+      orderConfirm(o, el.dataset.v).then(()=>toast(el.dataset.v==='cancel'?'Commande annulée.':'Merci ! Votre commande est confirmée ✅')).catch(e=>{ toast(e.message||'Envoi impossible.'); el.disabled = false; }); break; }
+    case 'odConfirm': { const o = S.orders.find(x=>x.id===el.dataset.id); if(!o) break; const st = el.dataset.v;
+      patch('orders', o.id, {confirm:{state:st, at:Date.now(), by:S.myName||'Boutique'}}).then(()=>{ o.confirm = {state:st, at:Date.now(), by:S.myName||'Boutique'}; toast(st==='ok'?'Commande confirmée':'Marquée « À rappeler »'); orderDetail(o); }).catch(dbErr); break; }
+    case 'odRefused': { const o = S.orders.find(x=>x.id===el.dataset.id); if(!o || !confirm('Le client a refusé le colis ? La commande sera annulée, le stock remis, et ce refus compte dans la fiabilité du numéro.')) break;
+      (async()=>{ try{ await patch('orders', o.id, {refused:{at:Date.now(), by:S.myName||'Boutique'}}); o.refused = {at:Date.now()}; await setOrderStatus(o, 'annulee'); closeAll(); toast('Refus enregistré · commande annulée'); }catch(e){ dbErr(e); } })(); break; }
     case 'packPick': { S.pqty = Math.max(1, parseInt(el.dataset.q)||1); schedule(); break; }
     case 'xpGo': { const f = $('#xp'); if(f){ f.scrollIntoView({behavior:'smooth', block:'center'}); setTimeout(()=>$('#xp-name')?.focus({preventScroll:true}), 450); } break; }
     case 'xpSend': { const p = S.products.find(x=>x.id===S.pid); if(!p) break; const err = $('#xp-err'), name = $('#xp-name').value.trim(), phone = $('#xp-phone').value.trim(), addr = $('#xp-addr').value.trim();
@@ -5018,7 +5059,7 @@ document.addEventListener('click', async e=>{
       if(addr.length<3){ err.textContent = 'Indiquez votre quartier et un repère pour le livreur.'; $('#xp-addr').focus(); break; }
       try{ localStorage.setItem('ffm-xp', JSON.stringify({name, phone, addr})); }catch(e){}
       const d = xpData(p); el.disabled = true; el.textContent = 'Envoi de votre commande…'; err.textContent = '';
-      expressOrder({p, qty:d.q, v:d.sv?d.sv.key:'', unit:d.unit, name, phone, address:addr, giftPick:d.g?d.g.item.key:''})
+      expressOrder({p, qty:d.q, v:d.sv?d.sv.key:'', unit:d.unit, name, phone, address:addr, slot:S.xpSlot||'', giftPick:d.g?d.g.item.key:''})
         .then(o=>{ try{ sessionStorage.setItem('ffm-ordered','1'); }catch(e){} S.pqty = 1; showReceipt(o, true); })
         .catch(e=>{ err.textContent = e.message || 'Envoi impossible, réessayez.'; el.disabled = false; el.textContent = '✅ Je commande, je paie à la livraison'; });
       break; }

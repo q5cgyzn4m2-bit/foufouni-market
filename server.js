@@ -140,7 +140,7 @@ function publicSettings() {
   const s = settings();
   const procs = {}; for (const [k, v] of Object.entries(s.processors || {})) procs[k] = { enabled: !!v.enabled, ...(typeof v.showLogo === 'boolean' ? { showLogo: v.showLogo } : {}), ...(/^data:image\/(png|jpeg|webp);base64,/.test(v.logo || '') && v.logo.length < 250000 ? { logo: v.logo } : {}) }; // jamais d'identifiants côté public, seulement le logo
   return { shopName: s.shopName, tagline: s.tagline, intro: s.intro, currency: s.currency, deliveryFee: s.deliveryFee, freeFrom: s.freeFrom, city: s.city, phone: s.phone, processors: procs,
-    giftOn: s.giftOn !== false, giftFrom: Math.max(0, Number(s.giftFrom) || 0), giftName: String(s.giftName || 'Cadeau surprise').slice(0, 60), giftTiers: giftTiers(s), lpGuarantee: String(s.lpGuarantee || '').slice(0, 300), exitOn: s.exitOn !== false, addonOn: s.addonOn !== false, addonPct: Math.min(50, Math.max(0, Number(s.addonPct ?? 10))), deliveryDays: String(s.deliveryDays || '1-2').slice(0, 10),
+    giftOn: s.giftOn !== false, giftFrom: Math.max(0, Number(s.giftFrom) || 0), giftName: String(s.giftName || 'Cadeau surprise').slice(0, 60), giftTiers: giftTiers(s), slots: SLOTS, riskOn: s.riskOn !== false, lpGuarantee: String(s.lpGuarantee || '').slice(0, 300), exitOn: s.exitOn !== false, addonOn: s.addonOn !== false, addonPct: Math.min(50, Math.max(0, Number(s.addonPct ?? 10))), deliveryDays: String(s.deliveryDays || '1-2').slice(0, 10),
     carouselOn: s.carouselOn !== false, carouselMode: ['both', 'new', 'sale'].includes(s.carouselMode) ? s.carouselMode : 'both', carouselSpeed: ['lent', 'normal', 'rapide'].includes(s.carouselSpeed) ? s.carouselSpeed : 'normal',
     showTrust: s.showTrust !== false, deliveryPromise: String(s.deliveryPromise || '').slice(0, 40), returnPolicy: String(s.returnPolicy || '').slice(0, 40),
     manualPay: manualPay(), shipCountries: Array.isArray(s.shipCountries) ? s.shipCountries : ['ML'], carriers: cleanCarriers(s.carriers).filter(c => c.active).map(({ phone, ...c }) => c), localCities: String(s.localCities || '').slice(0, 400),
@@ -1334,6 +1334,10 @@ function giftTiers(s = settings()) {
 }
 const giftOf = (sub, pick) => { const t = giftTiers().filter(x => sub >= x.at).pop(); if (!t) return null;
   const ok = t.items.filter(i => i.ok), item = ok.find(i => i.key === String(pick || '')) || ok[0]; return item ? { at: t.at, item } : null; };
+/* Fiabilité des clients (paiement à la livraison) et créneaux de livraison */
+const phoneKey = ph => String(ph || '').replace(/\D/g, '').slice(-8);
+const refusedCount = ph => { const k = phoneKey(ph); return k.length < 8 ? 0 : allDocs('orders').filter(o => o.refused && phoneKey(o.customer?.phone) === k).length; };
+const SLOTS = { matin: 'Matin (8 h – 12 h)', apresmidi: 'Après-midi (12 h – 17 h)', soir: 'Soir (17 h – 20 h)' };
 app.post('/api/orders', h(async (req, res) => {
   if (limited('order:' + req.ip, 15, 600e3)) throw httpErr(429, 'Trop de commandes en peu de temps. Réessayez plus tard.');
   const b = req.body || {};
@@ -1348,6 +1352,8 @@ app.post('/api/orders', h(async (req, res) => {
   if (manual && !String(b.payRef || '').trim()) throw httpErr(400, 'Indiquez la référence de la transaction.');
   if (!customer.name || customer.phone.replace(/\D/g, '').length < 8) throw httpErr(400, 'Nom et numéro de téléphone valides requis.');
   if (delivery === 'livraison' && !customer.address) throw httpErr(400, 'Adresse de livraison requise.');
+  { const s0 = settings(); if (method === 'cod' && s0.riskOn !== false && refusedCount(customer.phone) >= Math.max(1, Number(s0.riskMax) || 2))
+    throw httpErr(400, 'Pour ce numéro, un paiement d’avance est demandé : choisissez Orange Money, Wave ou Moov Money. Écrivez-nous sur WhatsApp en cas de question.'); }
   const t = computeOrder(b.items, b.promoCode, delivery, b.ref, { country: customer.country, city: customer.city, carrier: b.carrier });
   if (method !== 'cod' && t.total < 100) throw httpErr(400, 'Montant trop faible pour un paiement mobile.');
 
@@ -1359,6 +1365,7 @@ app.post('/api/orders', h(async (req, res) => {
     items: t.lines, subtotal: t.subtotal, discount: t.discount, shipping: t.shipping, total: t.total, promoCode: t.promoCode, affiliate: t.affiliate, ...(t.carrier ? { carrier: t.carrier } : {}), ...(t.shipQuote ? { shipQuote: true } : {}), ...(gift ? { gift: gift.item.name, giftItem: { name: gift.item.name, pid: gift.item.pid, at: gift.at } } : {}),
     lpPids: (Array.isArray(b.lpPids) ? b.lpPids : []).map(String).filter(x => validId(x) && t.lines.some(l => l.id === x)).slice(0, 20),
     source: String(b.source || '').toLowerCase().replace(/[^a-z0-9_-]/g, '').slice(0, 20), campaign: String(b.campaign || '').replace(/[^A-Za-z0-9_-]/g, '').slice(0, 30),
+    ...(delivery === 'livraison' && SLOTS[b.slot] ? { slot: String(b.slot) } : {}),
     customer, delivery, payment: { method, status: method === 'cod' ? 'à encaisser' : manual ? 'à vérifier' : 'en attente', ref: manual ? String(b.payRef || '').trim().slice(0, 60) : '', manual: !!manual, to: manual || '' },
     status: 'en_attente', channel: 'en ligne', stockApplied: false, createdAt: Date.now(), createdBy: 'web', token: randomToken()
   };
@@ -1387,6 +1394,18 @@ app.post('/api/orders', h(async (req, res) => {
     throw httpErr(502, 'Le service de paiement ne répond pas. Réessayez ou choisissez un autre moyen de paiement.');
   }
   res.json({ id, token: order.token, redirect, order: publicOrder(getDoc('orders', id), id) });
+}));
+/* Le client confirme (ou annule) sa commande payable à la livraison depuis le lien reçu sur WhatsApp */
+app.post('/api/orders/:id/confirm', h(async (req, res) => {
+  if (limited('oconf:' + req.ip, 20, 600e3)) throw httpErr(429, 'Trop de requêtes.');
+  const id = req.params.id, o = validId(id) && getDoc('orders', id);
+  if (!o || !req.body?.t || !safeEq(o.token, String(req.body.t))) throw httpErr(404, 'Commande introuvable.');
+  if (o.status !== 'en_attente' || (o.confirm && ['ok', 'cancel'].includes(o.confirm.state))) return res.json({ order: publicOrder(o, id) });
+  const yes = req.body?.answer !== 'cancel', upd = { confirm: { state: yes ? 'ok' : 'cancel', at: Date.now(), by: 'client' }, updatedAt: Date.now() };
+  if (!yes) { upd.status = 'annulee'; upd.payment = { ...o.payment, status: 'annulée par le client' }; }
+  patchDoc('orders', id, upd);
+  notify({ title: yes ? `✅ Confirmée par le client : ${o.number}` : `❌ Annulée par le client : ${o.number}`, tags: [yes ? 'white_check_mark' : 'x'], priority: yes ? 3 : 4, message: `${o.customer?.name || ''} · ${money(o.total)}`, click: BASE_URL });
+  res.json({ order: publicOrder({ ...o, ...upd }, id) });
 }));
 /* Offre juste après la commande : un article ajouté au même colis, à prix réduit, pendant 30 minutes (paiement à la livraison) */
 app.post('/api/orders/:id/addon', h(async (req, res) => {
@@ -1444,6 +1463,7 @@ app.get('/api/driver/me', h((req, res) => {
   const orders = allDocs('orders').filter(o => o.driver && o.driver.id === d.id && o.status !== 'annulee' && (o.createdAt || 0) >= since).sort((a, b) => (a.status === 'livree') - (b.status === 'livree') || b.createdAt - a.createdAt)
     .map(o => ({ id: o.id, number: o.number, status: o.status, createdAt: o.createdAt, customer: { name: o.customer?.name || '', phone: o.customer?.phone || '', address: o.customer?.address || '', city: o.customer?.city || '', note: o.customer?.note || '', country: o.customer?.country || 'ML', geo: o.customer?.geo || null },
       items: (o.items || []).map(i => ({ name: i.name, qty: i.qty })), total: o.total, toCollect: (o.payment?.method === 'cod' && !['payee'].includes(o.status) && !/encaissé|réussi/.test(o.payment?.status || '')) ? o.total : 0, proof: o.proof ? { at: o.proof.at } : null }));
+  orders.forEach(x => { const o = getDoc('orders', x.id); if (o) { x.slot = o.slot ? SLOTS[o.slot] : ''; x.confirm = o.confirm?.state || ''; x.enRouteAt = o.enRouteAt || 0; } });
   res.json({ driver: { name: d.name }, shop: settings().shopName, orders });
 }));
 app.post('/api/driver/deliver', h(async (req, res) => {
@@ -1461,6 +1481,24 @@ app.post('/api/driver/deliver', h(async (req, res) => {
   res.json({ ok: true });
   notify({ title: `Livrée par ${d.name} : ${o.number}`, message: `${o.customer?.name || ''} · ${money(o.total)}${req.body?.collected ? ' · encaissé par le livreur' : ''}\nPhoto du colis reçue.`, tags: ['package', 'white_check_mark'], click: `${BASE_URL}/` });
   pushOrder(id, { ...o, ...upd });
+}));
+
+/* Livreur : « en route » (le client le voit sur son suivi), client absent, colis refusé */
+app.post('/api/driver/status', h(async (req, res) => {
+  if (limited('drvs:' + req.ip, 60, 600e3)) throw httpErr(429, 'Trop de requêtes.');
+  const d = driverByToken(req.body?.t); if (!d) throw httpErr(403, 'Espace livreur introuvable.');
+  const id = String(req.body?.orderId || ''), o = validId(id) && getDoc('orders', id), act = String(req.body?.action || '');
+  if (!o || !o.driver || o.driver.id !== d.id) throw httpErr(404, 'Commande introuvable.');
+  if (['livree', 'annulee'].includes(o.status)) throw httpErr(400, 'Cette commande est déjà clôturée.');
+  const now = Date.now(); let upd, msg;
+  if (act === 'route') { upd = { enRouteAt: now, updatedAt: now, ...(o.status !== 'expediee' ? { status: 'expediee' } : {}) }; if (!o.stockApplied) { applyStock(expandItems(o.items), 1); upd.stockApplied = true; } msg = `🛵 En route : ${o.number}`; }
+  else if (act === 'absent') { upd = { absent: [...(o.absent || []), { at: now, by: d.name }].slice(-10), updatedAt: now }; msg = `📵 Client absent : ${o.number}`; }
+  else if (act === 'refused') { upd = { status: 'annulee', refused: { at: now, by: d.name }, updatedAt: now, payment: { ...o.payment, status: 'refusée à la livraison' } }; if (o.stockApplied) { applyStock(expandItems(o.items), -1); upd.stockApplied = false; } msg = `🚫 Refusée à la livraison : ${o.number}`; }
+  else throw httpErr(400, 'Action inconnue.');
+  patchDoc('orders', id, upd);
+  notify({ title: `${msg} (${d.name})`, tags: ['motor_scooter'], priority: act === 'route' ? 2 : 4, message: `${o.customer?.name || ''} · ${o.customer?.phone || ''} · ${money(o.total)}`, click: BASE_URL });
+  if (act === 'route') pushOrder(id, { ...o, ...upd });
+  res.json({ ok: true });
 }));
 
 /* Recherche d'un code-barres dans les bases publiques de produits (équipe) */
