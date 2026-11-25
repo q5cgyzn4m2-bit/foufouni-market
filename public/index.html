@@ -558,6 +558,27 @@ tr.mv-tr td:first-child{box-shadow:inset 3px 0 0 var(--indigo)}
 .hrv-im{border:0; padding:0; width:100%; aspect-ratio:4/3; border-radius:12px; overflow:hidden; cursor:zoom-in; background:var(--surface-2)}
 .hrv-im img{width:100%; height:100%; object-fit:cover}
 .hero-cta{display:flex; gap:10px; flex-wrap:wrap}
+/* Accroche transparente avec cascade de photos */
+.hero.has-flow{position:relative; isolation:isolate; background:color-mix(in srgb, var(--surface) 55%, transparent)}
+.hero.has-flow>*:not(.hero-flow){position:relative; z-index:1}
+.hero.has-flow .hero-txt{background:linear-gradient(90deg, color-mix(in srgb, var(--surface) 88%, transparent) 0%, color-mix(in srgb, var(--surface) 70%, transparent) 70%, color-mix(in srgb, var(--surface) 35%, transparent) 100%); -webkit-backdrop-filter:blur(1.5px); backdrop-filter:blur(1.5px)}
+.hero.has-flow .vitrine{background:color-mix(in srgb, var(--surface-2) 82%, transparent); -webkit-backdrop-filter:blur(8px); backdrop-filter:blur(8px)}
+.hero-flow{position:absolute; inset:-40px -20px; z-index:0; display:grid; grid-template-columns:repeat(5,minmax(0,1fr)); gap:12px; transform:rotate(-8deg) scale(1.15); opacity:.55; pointer-events:none;
+  -webkit-mask-image:linear-gradient(90deg, rgba(0,0,0,.35) 0%, #000 45%, #000 100%); mask-image:linear-gradient(90deg, rgba(0,0,0,.35) 0%, #000 45%, #000 100%)}
+.hf-col{overflow:hidden; height:100%}
+.hf-track{display:flex; flex-direction:column; gap:12px; animation:hfDown var(--hf-d) linear infinite; animation-delay:var(--hf-o)}
+.hf-col.up .hf-track{animation-name:hfUp}
+.hf-track span{display:block; aspect-ratio:3/4; border-radius:16px; overflow:hidden; background:var(--surface-2); box-shadow:0 10px 30px rgba(0,0,0,.35)}
+.hf-track img{width:100%; height:100%; object-fit:cover; display:block}
+@keyframes hfDown{from{transform:translateY(-50%)} to{transform:translateY(0)}}
+@keyframes hfUp{from{transform:translateY(0)} to{transform:translateY(-50%)}}
+@media (prefers-reduced-motion:reduce){ .hf-track{animation:none} }
+@media (max-width:760px){
+  .hero-flow{grid-template-columns:repeat(3,minmax(0,1fr)); opacity:.7; inset:-60px -30px; -webkit-mask-image:linear-gradient(180deg, #000 0%, rgba(0,0,0,.55) 100%); mask-image:linear-gradient(180deg, #000 0%, rgba(0,0,0,.55) 100%)}
+  .hero-flow .hf-col:nth-child(n+4){display:none}
+  .hero.has-flow .hero-txt{background:linear-gradient(180deg, color-mix(in srgb, var(--surface) 45%, transparent) 0%, color-mix(in srgb, var(--surface) 68%, transparent) 50%, color-mix(in srgb, var(--surface) 82%, transparent) 100%)}
+  .hero.has-flow h1{text-shadow:0 2px 18px rgba(0,0,0,.55)}
+}
 @media (max-width:760px){
   .tb{grid-template-columns:repeat(2,minmax(0,1fr)); margin:-18px 0 28px} .tb>div{padding:11px}
   .sec-h{flex-direction:column; align-items:flex-start; gap:4px}
@@ -1302,6 +1323,12 @@ function homeReviews(){ const rv = S.reviews.filter(r=>r.status!=='hidden' && r.
     <div class="hrv">${top.map(r=>{ const p = S.products.find(x=>x.id===r.productId), im = (r.photos||[])[0] && reviewImgSrc(r.photos[0]);
       return `<figure class="hrv-c">${im?`<button class="hrv-im" data-a="rvZoom" data-v="${esc(r.photos[0])}" aria-label="Agrandir la photo du client"><img src="${esc(im)}" alt="Photo d’un client" loading="lazy"></button>`:''}<div>${starsHTML(r.rating)}</div><blockquote>« ${esc(cut(r.comment))} »</blockquote>
         <figcaption><b>${esc(shortName(r.name))}</b> <span class="rvp-ok">✓ Achat vérifié</span>${p?`<button class="linkbtn small" data-a="product" data-id="${p.id}" style="display:block;margin-top:2px">${esc(niceName(p.name))}</button>`:''}</figcaption></figure>`; }).join('')}</div>`; }
+/* Photos produits qui défilent en cascade derrière l'accroche */
+function heroFlow(){ if(S.settings.heroFlow===false) return ''; const ims = shopBase().filter(p=>p.image && p.stock>0 && !isPartner(p)).map(p=>p.image); if(ims.length<4) return '';
+  const cols = 5, list = []; while(list.length < cols*4) list.push(...ims); 
+  return `<div class="hero-flow" aria-hidden="true">${Array.from({length:cols}, (_,c)=>{ const col = list.slice(c*4, c*4+4).concat(list.slice((c*4+7)%ims.length, (c*4+7)%ims.length+2)).slice(0,5);
+    const html = col.map(u=>`<span><img src="${esc(u)}" alt="" loading="lazy" decoding="async"></span>`).join('');
+    return `<div class="hf-col${c%2?' up':''}" style="--hf-d:${34+c*7}s;--hf-o:${-c*9}s"><div class="hf-track">${html}${html}</div></div>`; }).join('')}</div>`; }
 function viewShop(){
   const st = S.settings;
   const live = S.products.filter(p=>p.active!==false);
@@ -1311,7 +1338,7 @@ function viewShop(){
   const list = S.cat==='Lots' ? [] : shopProducts();
   const pool = S.products.filter(p=>p.active!==false && p.stock>0);
   const feat = pool.slice().sort((a,b)=>((b.comparePrice>b.price?b.comparePrice-b.price:0)-(a.comparePrice>a.price?a.comparePrice-a.price:0)) || b.price-a.price)[0];
-  const hero = !S.q ? `<section class="hero"><div class="hero-txt">
+  const hero = !S.q ? `<section class="hero${heroFlow()?' has-flow':''}">${heroFlow()}<div class="hero-txt">
       <h1>${esc(st.tagline)}</h1><p>${esc(st.intro)}</p>
       <div class="hero-cta"><button class="btn primary" data-a="scroll">Voir tous les produits</button><button class="btn ghost" data-a="catDrawer">🗂️ Rayons</button></div>${payRow(true)}
     </div>${feat?`<aside class="vitrine" aria-label="Pièce du moment"><em>La pièce du moment</em>
