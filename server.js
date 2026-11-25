@@ -1016,7 +1016,7 @@ const publicProduct = p => ({ ...(isPartnerS(p) ? { partner: { platform: ['amazo
   upsell: /^(auto|off|[A-Za-z0-9_-]{1,40})$/.test(p.upsell || '') ? p.upsell : 'auto', downsell: /^(auto|off|[A-Za-z0-9_-]{1,40})$/.test(p.downsell || '') ? p.downsell : 'auto',
   lpHook: p.lpHook || '', lpSub: p.lpSub || '', lpProblem: p.lpProblem || '', lpSolution: p.lpSolution || '', lpUsages: p.lpUsages || '', lpFaq: p.lpFaq || '', lpOffer: p.lpOffer || '', lpUntil: p.lpUntil || '',
   angleCaps: Array.isArray(p.angleCaps) ? p.angleCaps : [], spin: Array.isArray(p.spin) ? p.spin : [],
-  lpVideo: p.lpVideo || '', lpVideoFile: /^(https?:\/\/[^/]+)?\/media\/v[a-z0-9]{6,30}\.(mp4|mov|webm)$/i.test(p.lpVideoFile || '') ? p.lpVideoFile : '', lpVideoTitle: p.lpVideoTitle || '', sold30: sold30(p.id),
+  lpVideo: p.lpVideo || '', lpVideoFile: /^(https?:\/\/[^/]+)?\/media\/v[a-z0-9]{6,30}\.(mp4|mov|webm)$/i.test(p.lpVideoFile || '') ? p.lpVideoFile : '', lpVideoTitle: p.lpVideoTitle || '', lpHookB: String(p.lpHookB || '').slice(0, 90), sold30: sold30(p.id),
   packs: hasVar(p) ? [] : cleanPacks(p), lpExpress: p.lpExpress !== false, lpGuarantee: String(p.lpGuarantee || '').slice(0, 300), lpCompare: String(p.lpCompare || '').slice(0, 1500), lpCompareOff: !!p.lpCompareOff,
   lpProofs: (Array.isArray(p.lpProofs) ? p.lpProofs : []).filter(u => /^\/media\/sp[a-z0-9]{6,30}\.jpg$/.test(u)).slice(0, 10),
   lpAudio: /^\/media\/v[a-z0-9]{6,30}\.(mp3|m4a|aac|ogg|webm|wav|mp4)$/i.test(p.lpAudio || '') ? p.lpAudio : '', lpAudioTitle: String(p.lpAudioTitle || '').slice(0, 80),
@@ -1042,7 +1042,8 @@ app.post('/api/lp-view', h((req, res) => {
   if (p && !limited('lpv:' + req.ip + ':' + pid, 1, 6 * 3600e3)) {
     const v = getDoc('lp-stats', pid) || { views: 0, days: {} }, d = today(), days = { ...(v.days || {}) };
     days[d] = (days[d] || 0) + 1; for (const k of Object.keys(days)) if (k < addDays(d, -90)) delete days[k];
-    putDoc('lp-stats', pid, { views: (v.views || 0) + 1, days, lastAt: Date.now() });
+    const ab = ['A', 'B'].includes(req.body?.ab) ? req.body.ab : '', abv = { ...(v.ab || {}) }; if (ab) abv[ab] = (abv[ab] || 0) + 1;
+    putDoc('lp-stats', pid, { views: (v.views || 0) + 1, days, lastAt: Date.now(), ...(ab || v.ab ? { ab: abv } : {}) });
   }
   res.json({ ok: true });
 }));
@@ -1364,6 +1365,7 @@ app.post('/api/orders', h(async (req, res) => {
     number: 'FM-' + new Date().toISOString().slice(2, 10).replace(/-/g, '') + '-' + rnd(4),
     items: t.lines, subtotal: t.subtotal, discount: t.discount, shipping: t.shipping, total: t.total, promoCode: t.promoCode, affiliate: t.affiliate, ...(t.carrier ? { carrier: t.carrier } : {}), ...(t.shipQuote ? { shipQuote: true } : {}), ...(gift ? { gift: gift.item.name, giftItem: { name: gift.item.name, pid: gift.item.pid, at: gift.at } } : {}),
     lpPids: (Array.isArray(b.lpPids) ? b.lpPids : []).map(String).filter(x => validId(x) && t.lines.some(l => l.id === x)).slice(0, 20),
+    ...(b.lpAb && typeof b.lpAb === 'object' ? (() => { const m = {}; for (const [k, v] of Object.entries(b.lpAb).slice(0, 20)) if (validId(k) && ['A', 'B'].includes(v) && t.lines.some(l => l.id === k)) m[k] = v; return Object.keys(m).length ? { lpAb: m } : {}; })() : {}),
     source: String(b.source || '').toLowerCase().replace(/[^a-z0-9_-]/g, '').slice(0, 20), campaign: String(b.campaign || '').replace(/[^A-Za-z0-9_-]/g, '').slice(0, 30),
     ...(delivery === 'livraison' && SLOTS[b.slot] ? { slot: String(b.slot) } : {}),
     customer, delivery, payment: { method, status: method === 'cod' ? 'à encaisser' : manual ? 'à vérifier' : 'en attente', ref: manual ? String(b.payRef || '').trim().slice(0, 60) : '', manual: !!manual, to: manual || '' },
@@ -1596,7 +1598,7 @@ app.get('/api/admin/state', requireStaff, (req, res) => {
     costs: ['Gérant', 'Gestionnaire de stock'].includes(req.user.role) ? allDocs('costs') : [], stockMoves: allDocs('stock-moves').sort((a, b) => b.createdAt - a.createdAt).slice(0, 1000),
     ai: !!env.ANTHROPIC_API_KEY, socialPosts: allDocs('social-posts').sort((a, b) => (a.at || 0) - (b.at || 0)), social: socialStatus(),
     drivers: allDocs('drivers').sort((a, b) => a.name.localeCompare(b.name)),
-    lpStats: allDocs('lp-stats'), articles: allDocs('articles'), affClicks: allDocs('aff-clicks'),
+    lpStats: allDocs('lp-stats'), ...(req.user.role === 'Gérant' ? { adSpend: allDocs('ad-spend') } : {}), articles: allDocs('articles'), affClicks: allDocs('aff-clicks'),
     purchases: allDocs('purchases').sort((a, b) => b.createdAt - a.createdAt).slice(0, 500),
     campaigns: allDocs('campaigns').sort((a, b) => b.createdAt - a.createdAt).slice(0, 200), contactFlags: allDocs('contact-flags'),
     visits: allDocs('visits').map(v => ({ id: v.id, count: v.count || 0, count30: Object.entries(v.days || {}).filter(([k]) => k >= addDays(today(), -30)).reduce((t, [, n]) => t + n, 0) })),
@@ -1611,7 +1613,7 @@ app.get('/api/admin/state', requireStaff, (req, res) => {
     settings: s, users: store.users.list(), providers: providers(), configured: CONFIGURED, me: req.user
   });
 });
-const ADMIN_COLS = new Set(['articles', 'aff-clicks', 'products', 'product-images', 'costs', 'stock-moves', 'lp-stats', 'campaigns', 'contact-flags', 'drivers', 'delivery-photos', 'purchases', 'reviews', 'review-images', 'bundles', 'promos', 'orders', 'settings', 'affiliates', 'aff-payouts', 'aff-lookup', 'clients', 'suppliers', 'fin-moves', 'fin-ledger', 'fin-config', 'social-posts']);
+const ADMIN_COLS = new Set(['articles', 'aff-clicks', 'products', 'product-images', 'costs', 'stock-moves', 'lp-stats', 'campaigns', 'contact-flags', 'drivers', 'delivery-photos', 'purchases', 'reviews', 'review-images', 'bundles', 'promos', 'orders', 'settings', 'affiliates', 'aff-payouts', 'aff-lookup', 'clients', 'suppliers', 'fin-moves', 'fin-ledger', 'fin-config', 'social-posts', 'ad-spend']);
 function adminTarget(req) {
   const { col, id } = req.params;
   if (!ADMIN_COLS.has(col) || !validId(id)) throw httpErr(400, 'Requête invalide.');

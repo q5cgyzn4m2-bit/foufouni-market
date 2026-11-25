@@ -543,6 +543,8 @@ tr.mv-tr td:first-child{box-shadow:inset 3px 0 0 var(--indigo)}
 .line-item.gift{background:var(--kola-soft); border-radius:12px; padding:10px; margin-top:8px; border:1px dashed var(--kola)}
 .line-item.gift .li-img{background:var(--surface)}
 .cd-reco{margin:16px 0 4px}
+.pub-sub td{font-size:13px; color:var(--muted)} .pub-sub td:first-child{padding-left:22px}
+.ab-r{margin-top:8px; padding:10px 12px; border-radius:12px; background:var(--surface-2); font-size:13px; display:grid; gap:3px}
 .slots{display:flex; flex-wrap:wrap; gap:6px}
 .slot{padding:8px 12px; border-radius:99px; border:1.5px solid var(--line); background:var(--surface); color:inherit; font:600 13px var(--f-b); cursor:pointer}
 .slot.on{border-color:var(--saffron); background:var(--saffron-soft)}
@@ -862,7 +864,7 @@ const ROLES = ['Gérant','Vendeur','Caissier','Livreur','Gestionnaire de stock']
 /* ============ état ============ */
 const S = {
   ready:false, live:false, isAdmin:false, uid:null, myName:'',
-  products:[], bundles:[], articles:[], affClicks:[], clients:[], suppliers:[], reviews:[], drivers:[], purchases:[], lpStats:[], dphoto:{}, campaigns:[], contactFlags:{}, audCarts:null, audSeg:'abandon_new', audSel:{}, costs:{}, stockMoves:[], inv:{}, topDays:30, topSort:'revenue', stFilter:'all', stCat:'', affiliates:[], affPayouts:[], moves:[], ledger:[], finConfig:{}, posTab:'vente', trAcc:'all', trType:'all', pq:'', promos:[], orders:[], settings:structuredClone(DEFAULT_SETTINGS), team:{members:[]},
+  products:[], bundles:[], articles:[], adSpend:[], affClicks:[], clients:[], suppliers:[], reviews:[], drivers:[], purchases:[], lpStats:[], dphoto:{}, campaigns:[], contactFlags:{}, audCarts:null, audSeg:'abandon_new', audSel:{}, costs:{}, stockMoves:[], inv:{}, topDays:30, topSort:'revenue', stFilter:'all', stCat:'', affiliates:[], affPayouts:[], moves:[], ledger:[], finConfig:{}, posTab:'vente', trAcc:'all', trType:'all', pq:'', promos:[], orders:[], settings:structuredClone(DEFAULT_SETTINGS), team:{members:[]},
   cart:[], pos:[], posPromo:null, appliedPromo:null,
   view:'shop', tab:'dash', cat:'Tout', q:'', aq:'', orderFilter:'all', selPromos:new Set(), names:{}
 };
@@ -1056,7 +1058,7 @@ function render(){
   if(S.view==='admin' && S.tab==='team') resolveNames();
   if(S.view==='admin' && S.tab==='studio') setTimeout(studioRender, 0);
   if(!S._deep && S.ready && S.products.length && window.__ffmCat){ const c = window.__ffmCat; if(['Tout','Soldes','Nouveautés','Occasion','Lots'].includes(c) || S.products.some(p=>p.category===c)){ S.cat = c; setTimeout(()=>$('#catalogue')?.scrollIntoView({behavior:'smooth'}), 400); } window.__ffmCat = null; }
-  if(S.view==='landing' && S._vc !== S.view+S.pid){ try{ const seen = JSON.parse(sessionStorage.getItem('ffm-lp')||'[]'); if(!seen.includes(S.pid)){ seen.push(S.pid); sessionStorage.setItem('ffm-lp', JSON.stringify(seen)); if(window.lpView && !S.isAdmin) window.lpView(S.pid); } }catch(e){} }
+  if(S.view==='landing' && S._vc !== S.view+S.pid){ try{ const seen = JSON.parse(sessionStorage.getItem('ffm-lp')||'[]'); if(!seen.includes(S.pid)){ seen.push(S.pid); sessionStorage.setItem('ffm-lp', JSON.stringify(seen)); if(window.lpView && !S.isAdmin) window.lpView(S.pid, abVar(S.products.find(x=>x.id===S.pid))); } }catch(e){} }
   if((S.view==='product' || S.view==='landing') && S._vc !== S.view+S.pid){ S._vc = S.view+S.pid; const pp = S.products.find(x=>x.id===S.pid); if(pp) ttTrack('ViewContent', {contents:[ttItem(pp)], value:Math.round(pp.price)}); }
   if(S.view!=='product' && S.view!=='landing') S._vc = '';
   if(S.view==='landing') setTimeout(lpAfterRender, 0);
@@ -2246,6 +2248,11 @@ function exitArm(){ if(window._exitArmed) return; window._exitArmed = true; let 
     if($('#overlay').innerHTML.trim() || document.querySelector('.ai-panel') || document.activeElement?.matches('input,textarea,select') || Date.now()-S._lpT0 < 10000) return null; return p; };
   document.addEventListener('mouseout', e=>{ if(e.relatedTarget || e.clientY>8) return; const p = can(); if(p) exitModal(p); });
   addEventListener('scroll', ()=>{ const now = Date.now(); hist.push([now, scrollY]); hist = hist.filter(h=>now-h[0]<700); if(hist.length<2 || hist[0][1]-scrollY < 700) return; const p = can(); if(p){ hist = []; exitModal(p); } }, {passive:true}); }
+/* 6. Test A/B de l'accroche : chaque visiteur voit toujours la même version (A ou B) */
+function abVar(p){ if(!p || !String(p.lpHookB||'').trim()) return ''; let m = {}; try{ m = JSON.parse(localStorage.getItem('ffm-ab')||'{}')||{}; }catch(e){}
+  if(!m[p.id]){ m[p.id] = Math.random()<.5 ? 'A' : 'B'; try{ localStorage.setItem('ffm-ab', JSON.stringify(m)); }catch(e){} } return m[p.id]; }
+function abMap(){ let m = {}; try{ m = JSON.parse(localStorage.getItem('ffm-ab')||'{}')||{}; }catch(e){} const out = {}; for(const k in m) if(S.products.some(p=>p.id===k && p.lpHookB)) out[k] = m[k]; return out; }
+const abHook = p => abVar(p)==='B' ? p.lpHookB : p.lpHook;
 function viewLanding(){
   const p = S.products.find(x=>x.id===S.pid && x.active!==false); if(!p){ S.view='shop'; return viewShop(); }
   const st = S.settings, imgs = galleryFor(p), caps = p.angleCaps||[], save = p.comparePrice>p.price ? p.comparePrice-p.price : 0, rt = productRating(p.id);
@@ -2262,8 +2269,8 @@ function viewLanding(){
   <nav class="crumb"><button data-a="go" data-v="shop">← ${esc(st.shopName)}</button><span>›</span><span>${esc(p.category||'')}</span></nav>
   <section class="lp-hero"><div>${gal}</div>
    <div class="pdp-info"><div class="lp-kicker">${esc(p.category||'')}${isUsed(p)?' · Occasion · '+esc(condLabel(p)):''}${isNew(p)?' · Nouveauté':''}</div>
-    <h1>${esc(p.lpHook||p.name)}</h1>
-    ${p.lpHook?`<div class="muted small" style="margin:-6px 0 10px;font-weight:700">${esc(p.name)}</div>`:''}
+    <h1>${esc(abHook(p)||p.name)}</h1>
+    ${abHook(p)?`<div class="muted small" style="margin:-6px 0 10px;font-weight:700">${esc(p.name)}</div>`:''}
     <p class="lp-sub">${esc(p.lpSub||p.description||'')}</p>
     ${rt.n?`<div class="rate-line">${starsHTML(rt.avg)}<b>${(Math.round(rt.avg*10)/10).toString().replace('.',',')}</b><button data-a="rvGo">${rt.n} avis vérifié${rt.n>1?'s':''}</button></div>`:''}
     <div class="pdp-price"><span class="price">${hasVar(p)&&!sv&&minPrice(p)<p.price?'<span class="muted small" style="font-family:var(--f-b)">Dès </span>':''}${isPartner(p)?(p.price?'<span style="font-size:.6em">env. </span>'+fmt(p.price):'<span style="font-size:.55em">Prix sur '+esc(partnerName(p))+'</span>'):fmt(price)}</span>${save?`<span class="strike">${fmt(p.comparePrice)}</span>`:''}</div>
@@ -2293,7 +2300,7 @@ function viewLanding(){
     <div><i>🛡️</i><b>${p.warranty?'Garantie':'Satisfaction'}</b><div class="muted small">${esc(p.warranty||'Un problème ? Nous trouvons une solution')}</div></div>
     <div><i>💬</i><b>À votre écoute</b><div class="muted small">${shopWa()?`<a href="https://wa.me/${shopWa()}" target="_blank" rel="noopener" style="color:#25D366;font-weight:700;display:inline-flex;align-items:center">${WA_ICON}${esc(st.whatsapp||st.phone)}</a>`:'Par téléphone et WhatsApp'}</div></div></div></section>
   <section class="lp-sec faq"><h2>Questions fréquentes</h2><div style="max-width:760px;margin:18px auto 0">${lpFaq(p).map(([q,a])=>`<details><summary>${esc(q)}</summary><p>${esc(a)}</p></details>`).join('')}</div></section>
-  <section class="lp-final"><div class="lp-kicker">${esc(st.shopName)}</div><h2 style="font-size:clamp(30px,3.6vw,46px);margin:8px 0">${esc(p.lpHook||p.name)}</h2>
+  <section class="lp-final"><div class="lp-kicker">${esc(st.shopName)}</div><h2 style="font-size:clamp(30px,3.6vw,46px);margin:8px 0">${esc(abHook(p)||p.name)}</h2>
     <div class="pdp-price" style="justify-content:center"><span class="price">${isPartner(p)?(p.price?'<span style="font-size:.6em">env. </span>'+fmt(p.price):'<span style="font-size:.55em">Prix sur '+esc(partnerName(p))+'</span>'):fmt(price)}</span>${save?`<span class="strike">${fmt(p.comparePrice)}</span>`:''}</div>${countdown}${xpOk(p)?`<button class="btn primary btn-live" data-a="xpGo" style="font-size:17px;padding:17px 26px;margin:0 auto 10px;display:flex">⚡ Commande express : paiement à la livraison</button>`:''}${cta(true)}
     <p class="muted small" style="margin:14px 0 0">${isPartner(p)?'':hasVar(p)&&!sv?'Choisissez d’abord vos options en haut de la page.':'Livraison à '+esc(st.city)+' · paiement mobile money ou à la livraison'}</p></section>
   ${isPartner(p)?`<div class="buybar"><span class="muted small">${esc(partnerName(p))}</span>${partnerBtn(p,'primary')}</div>`:out?'':`<div class="buybar"><span class="price">${isPartner(p)?(p.price?'<span style="font-size:.6em">env. </span>'+fmt(p.price):'<span style="font-size:.55em">Prix sur '+esc(partnerName(p))+'</span>'):fmt(price)}</span><span style="display:flex;gap:8px">${shopWa()?`<button class="btn wa" data-a="waProduct" data-id="${p.id}" aria-label="Commander sur WhatsApp" style="padding:12px 14px">${WA_ICON.replace('margin-right:6px','margin:0')}</button>`:''}<button class="btn primary btn-live" data-a="${xpOk(p)?'xpGo':'pdpBuy'}">Commander</button></span></div>`}
@@ -4204,7 +4211,7 @@ function paneTransport(){
   ${Object.keys(CITIES).map(k=>`<datalist id="tr-cities-${k}">${CITIES[k].map(v=>`<option value="${esc(v)}">`).join('')}</datalist>`).join('')}
   <div class="row" style="gap:8px;flex-wrap:wrap"><button class="btn ghost" data-a="trAddCar">+ Ajouter une compagnie</button>${CARRIER_SUGG.some(([n])=>!list.some(c=>normCity(c.name)===normCity(n)))?'<button class="btn ghost" data-a="trSugg">📋 Ajouter des compagnies connues (à vérifier)</button>':''}<button class="btn primary" data-a="trSave">Enregistrer</button></div>`;
 }
-const TABS = [['dash','Tableau de bord'],['products','Produits'],['stock','Stock & inventaire'],['bundles','Lots'],['orders','Commandes'],['promos','Codes promo'],['affiliates','Ambassadeurs'],['reviews','Avis clients'],['blog','Conseils (blog)'],['studio','Studio réseaux'],['audience','Clients & retargeting'],['alerts','Alertes clients'],['carts','Assistant & paniers'],['company','Société'],['social','Calendrier réseaux'],['transport','Transport'],['payments','Paiements'],['team','Équipe']];
+const TABS = [['dash','Tableau de bord'],['products','Produits'],['stock','Stock & inventaire'],['bundles','Lots'],['orders','Commandes'],['promos','Codes promo'],['affiliates','Ambassadeurs'],['reviews','Avis clients'],['blog','Conseils (blog)'],['studio','Studio réseaux'],['audience','Clients & retargeting'],['pub','Rentabilité pub'],['alerts','Alertes clients'],['carts','Assistant & paniers'],['company','Société'],['social','Calendrier réseaux'],['transport','Transport'],['payments','Paiements'],['team','Équipe']];
 /* --- Gestion › Conseils --- */
 function blogIdeas(){
   const city = S.settings.city||'Bamako', live = S.products.filter(p=>p.active!==false), cats = [...new Set(live.map(p=>p.category).filter(Boolean))];
@@ -4291,9 +4298,45 @@ function articleForm(a0){
 }
 function viewAdmin(){
   const pending = S.orders.filter(o=>o.status==='en_attente'||(o.status==='payee'&&!o.stockApplied)).length;
-  const panes = {dash:paneDash, products:paneProducts, stock:paneStock, bundles:paneBundles, orders:paneOrders, promos:panePromos, affiliates:paneAffiliates, reviews:paneReviews, blog:paneBlog, studio:paneStudio, audience:paneAudience, company:paneCompany, social:paneSocial, transport:paneTransport, alerts:()=>window.paneAlerts?window.paneAlerts():'', carts:()=>window.paneCarts?window.paneCarts():'', payments:panePayments, team:paneTeam};
-  return `<div class="admin"><nav class="side" aria-label="Gestion">${TABS.filter(([k])=>!['alerts','carts'].includes(k)||isServer()).map(([k,l])=>`<button data-a="tab" data-v="${k}" ${S.tab===k?'aria-current="page"':''}>${l}${k==='orders'&&pending?`<span class="pill warn">${pending}</span>`:''}</button>`).join('')}</nav>
+  const panes = {dash:paneDash, products:paneProducts, stock:paneStock, bundles:paneBundles, orders:paneOrders, promos:panePromos, affiliates:paneAffiliates, reviews:paneReviews, blog:paneBlog, studio:paneStudio, audience:paneAudience, pub:panePub, company:paneCompany, social:paneSocial, transport:paneTransport, alerts:()=>window.paneAlerts?window.paneAlerts():'', carts:()=>window.paneCarts?window.paneCarts():'', payments:panePayments, team:paneTeam};
+  return `<div class="admin"><nav class="side" aria-label="Gestion">${TABS.filter(([k])=>(!['alerts','carts'].includes(k)||isServer()) && (k!=='pub'||isGerant())).map(([k,l])=>`<button data-a="tab" data-v="${k}" ${S.tab===k?'aria-current="page"':''}>${l}${k==='orders'&&pending?`<span class="pill warn">${pending}</span>`:''}</button>`).join('')}</nav>
     <section>${panes[S.tab]()}</section></div>`;
+}
+function abResults(p){ if(!p.id || !p.lpHookB) return '<p class="muted small" style="margin:4px 0 0">La moitié des visiteurs voit l’accroche principale (A), l’autre moitié l’accroche B. Le site compte les visites et les commandes de chaque version.</p>';
+  const st = S.lpStats.find(x=>x.id===p.id)||{}, ab = st.ab||{}, os = S.orders.filter(o=>o.status!=='annulee' && o.lpAb && o.lpAb[p.id]);
+  const r = k => { const v = ab[k]||0, n = os.filter(o=>o.lpAb[p.id]===k).length; return {v, n, c: v ? n/v*100 : 0}; }, A = r('A'), B = r('B');
+  const win = A.v+B.v>=100 && A.n+B.n>=5 ? (B.c>A.c*1.2 ? 'B' : A.c>B.c*1.2 ? 'A' : '') : null;
+  return `<div class="ab-r"><div><b>A</b> « ${esc(p.lpHook||p.name)} » : ${A.v} visites · ${A.n} commande${A.n>1?'s':''} · <b>${A.c.toFixed(1).replace('.',',')} %</b></div><div><b>B</b> « ${esc(p.lpHookB)} » : ${B.v} visites · ${B.n} commande${B.n>1?'s':''} · <b>${B.c.toFixed(1).replace('.',',')} %</b></div>
+    <div class="small" style="margin-top:4px">${win===null?'⏳ Pas encore assez de données (au moins 100 visites et 5 commandes) pour conclure.':win?`🏆 L’accroche <b>${win}</b> vend nettement mieux.`:'🤝 Pas de différence nette pour l’instant.'}</div>
+    ${win==='B'?'<button type="button" class="btn primary sm" style="margin-top:6px" data-a="abKeepB">Garder B comme accroche principale</button>':''}</div>`; }
+/* 3. Rentabilité des publicités : dépenses saisies, commandes et marge par source et campagne */
+const AD_NETS = {facebook:'Facebook', instagram:'Instagram', tiktok:'TikTok', google:'Google', pinterest:'Pinterest', whatsapp:'WhatsApp', autre:'Autre', direct:'Direct (sans lien suivi)'};
+function panePub(){
+  if(!isGerant()) return '<div class="empty"><h3>Réservé au gérant</h3><p>Cette page utilise les prix d’achat.</p></div>';
+  const days = S.pubDays||30, since = Date.now()-days*864e5, sinceD = new Date(since).toISOString().slice(0,10);
+  const orders = S.orders.filter(o=>o.channel!=='caisse' && o.status!=='annulee' && (o.createdAt||0)>=since), spends = (S.adSpend||[]).filter(x=>(x.date||'')>=sinceD);
+  const rows = new Map(), row = (src, cmp) => { const k = src+'|'+cmp; if(!rows.has(k)) rows.set(k, {src, cmp, n:0, ca:0, marge:0, known:true, spend:0}); return rows.get(k); };
+  orders.forEach(o=>{ const src = o.source||'direct', cmp = o.campaign||'', ca = (o.subtotal||0)-(o.discount||0); let m = -(o.discount||0), known = true;
+    (o.items||[]).forEach(i=>{ const lp = lineProfit(i); if(lp===null) known = false; else m += lp; });
+    (cmp ? [row(src,''), row(src,cmp)] : [row(src,'')]).forEach(r=>{ r.n++; r.ca += ca; r.marge += m; if(!known) r.known = false; }); });
+  spends.forEach(x=>{ const src = x.net||'autre', cmp = x.campaign||''; (cmp ? [row(src,''), row(src,cmp)] : [row(src,'')]).forEach(r=>{ r.spend += Number(x.amount)||0; }); });
+  const chans = [...rows.values()].filter(r=>!r.cmp).sort((a,b)=>b.spend-a.spend || b.ca-a.ca);
+  const tot = chans.filter(r=>r.src!=='direct').reduce((t,r)=>({spend:t.spend+r.spend, n:t.n+r.n, ca:t.ca+r.ca, net:t.net+r.marge-r.spend}), {spend:0, n:0, ca:0, net:0});
+  const verdict = r => !r.spend ? '' : !r.n ? '<span class="pill bad">✂️ Aucune vente : à couper</span>' : r.marge-r.spend<0 ? '<span class="pill bad">✂️ Perte : à couper ou corriger</span>' : r.ca/r.spend>=3 ? '<span class="pill ok">🚀 À renforcer</span>' : '<span class="pill warn">👀 Rentable, à surveiller</span>';
+  const tr = (r, sub) => `<tr${sub?' class="pub-sub"':''}><td>${sub?'↳ '+esc(r.cmp):`<b>${esc(AD_NETS[r.src]||r.src)}</b>`}</td><td style="text-align:right">${r.n}</td><td style="text-align:right">${fmt(r.ca)}</td><td style="text-align:right">${fmt(r.marge)}${r.known?'':'<sup title="Prix d’achat manquants pour certains articles">*</sup>'}</td><td style="text-align:right">${r.spend?fmt(r.spend):'—'}</td><td style="text-align:right">${r.spend&&r.n?fmt(Math.round(r.spend/r.n)):'—'}</td><td style="text-align:right"><b class="${r.marge-r.spend<0?'k-out':'k-in'}">${fmt(r.marge-r.spend)}</b></td><td style="text-align:right">${r.spend?(r.ca/r.spend).toFixed(1).replace('.',',')+' ×':'—'}</td><td>${verdict(r)}</td></tr>`;
+  const cmps = [...new Set(S.orders.map(o=>o.campaign).filter(Boolean))];
+  return `<div class="toolbar"><h2 style="font-size:24px;flex:1">Rentabilité des publicités</h2><div class="cats" style="margin:0">${[7,30,90].map(d=>`<button aria-pressed="${days===d}" data-a="pubDays" data-v="${d}">${d} jours</button>`).join('')}</div></div>
+    <div class="kpis"><div class="kpi"><span>Dépenses pub</span><b>${fmt(tot.spend)}</b></div><div class="kpi"><span>Commandes venues des liens suivis</span><b>${tot.n}</b></div><div class="kpi"><span>Coût par commande</span><b>${tot.n&&tot.spend?fmt(Math.round(tot.spend/tot.n)):'—'}</b></div><div class="kpi"><span>Bénéfice net après pub</span><b class="${tot.net<0?'k-out':'k-in'}">${fmt(tot.net)}</b></div></div>
+    <div class="panel tbl-wrap"><h3>Par réseau et par campagne · ${days} derniers jours</h3>${chans.length?`<table><thead><tr><th>Source</th><th style="text-align:right">Commandes</th><th style="text-align:right">Ventes</th><th style="text-align:right">Marge</th><th style="text-align:right">Dépense</th><th style="text-align:right">Coût / cde</th><th style="text-align:right">Bénéfice net</th><th style="text-align:right">Retour</th><th>Conseil</th></tr></thead><tbody>
+      ${chans.map(c=>tr(c,false)+[...rows.values()].filter(r=>r.src===c.src && r.cmp).sort((a,b)=>b.spend-a.spend||b.ca-a.ca).map(r=>tr(r,true)).join('')).join('')}</tbody></table>
+      <p class="muted small" style="margin:10px 0 0">Marge = ventes − prix d’achat − remises (hors livraison). Retour = ventes ÷ dépense : au-dessus de 3 ×, la campagne rapporte bien. * Prix d’achat manquants pour certains articles : complétez-les dans Produits.</p>`:'<p class="muted" style="margin:0">Aucune commande ni dépense sur la période.</p>'}</div>
+    <div class="two"><div class="panel"><h3>Ajouter une dépense</h3>
+      <div class="row"><div class="field"><label for="ad-date">Date</label><input class="input" type="date" id="ad-date" value="${today()}"></div><div class="field"><label for="ad-net">Réseau</label><select class="input" id="ad-net">${Object.entries(AD_NETS).filter(([k])=>k!=='direct').map(([k,l])=>`<option value="${k}">${l}</option>`).join('')}</select></div></div>
+      <div class="row"><div class="field"><label for="ad-cmp">Campagne (facultatif)</label><input class="input" id="ad-cmp" list="ad-cmps" maxlength="40" placeholder="ex. promo-robinet"><datalist id="ad-cmps">${cmps.map(c=>`<option value="${esc(c)}">`).join('')}</datalist></div><div class="field"><label for="ad-amt">Montant dépensé (FCFA)</label><input class="input" id="ad-amt" inputmode="numeric" placeholder="ex. 25000"></div></div>
+      <button class="btn primary" data-a="adAdd">Ajouter</button><div class="xp-err" id="ad-err"></div></div>
+      <div class="panel"><h3>Comment relier vos pubs aux ventes</h3><p class="small" style="margin:0 0 8px">Dans le lien de chaque publicité, ajoutez la source et le nom de la campagne :</p><code class="small" style="display:block;padding:8px;border-radius:8px;background:var(--surface-2);overflow-wrap:anywhere">${esc(location.origin)}/?src=facebook&cmp=promo-robinet</code>
+        <p class="small" style="margin:8px 0 0">Sur Facebook et Instagram, vous pouvez aussi remplir « Paramètres d’URL » dans la publicité : <code>utm_source=facebook&amp;utm_campaign={{campaign.name}}</code>. Les clics depuis TikTok et Google sont reconnus automatiquement. Écrivez ensuite ici le même nom de campagne pour la dépense.</p></div></div>
+    ${spends.length?`<div class="panel tbl-wrap"><h3>Dépenses saisies</h3><table><thead><tr><th>Date</th><th>Réseau</th><th>Campagne</th><th style="text-align:right">Montant</th><th></th></tr></thead><tbody>${spends.sort((a,b)=>(b.date||'').localeCompare(a.date||'')).map(x=>`<tr><td>${esc(x.date)}</td><td>${esc(AD_NETS[x.net]||x.net)}</td><td>${esc(x.campaign||'—')}</td><td style="text-align:right">${fmt(x.amount)}</td><td style="text-align:right"><button class="btn ghost sm" data-a="adDel" data-id="${x.id}">Supprimer</button></td></tr>`).join('')}</tbody></table></div>`:''}`;
 }
 function lpStatsPanel(){
   const since = Date.now()-30*864e5, d30 = new Date(since).toISOString().slice(0,10);
@@ -4456,6 +4499,7 @@ function productForm(p){
         <div class="panel" style="padding:14px;margin-bottom:14px"><div class="row" style="align-items:center;margin-bottom:6px"><h3 style="font-size:19px;margin:0;flex:1">✨ Page de vente (publicités)</h3><button type="button" class="btn ghost sm" id="lp-ai" style="flex:0;white-space:nowrap">✨ Rédiger automatiquement</button></div>
           <p class="muted small" style="margin:0 0 10px">Tout est facultatif : les rubriques vides sont remplacées par le nom, la description et les points forts du produit.</p>
           <div class="field"><label for="lp-hook">Accroche (grand titre)</label><input class="input" id="lp-hook" maxlength="90" value="${esc(p.lpHook||'')}" placeholder="ex. Le boubou qui fait sensation à chaque fête"></div>
+          <div class="field"><label for="lp-hookb">🧪 Accroche B, à tester (facultatif)</label><input class="input" id="lp-hookb" maxlength="90" value="${esc(p.lpHookB||'')}" placeholder="Une autre formulation : la moitié des visiteurs verra celle-ci">${abResults(p)}</div>
           <div class="field"><label for="lp-sub">Sous-titre</label><input class="input" id="lp-sub" maxlength="200" value="${esc(p.lpSub||'')}" placeholder="ex. Brodé à la main à Bamako, en coton bazin de qualité supérieure"></div>
           <div class="row"><div class="field"><label for="lp-pb">Le problème du client</label><textarea class="input" id="lp-pb" maxlength="400" placeholder="ex. Difficile de trouver une tenue élégante, bien finie, à un prix juste…">${esc(p.lpProblem||'')}</textarea></div>
           <div class="field"><label for="lp-so">Votre solution</label><textarea class="input" id="lp-so" maxlength="400" placeholder="ex. Un boubou brodé main, ajusté, livré chez vous en 24 h…">${esc(p.lpSolution||'')}</textarea></div></div>
@@ -4615,7 +4659,7 @@ function productForm(p){
       ...(()=>{ const plat = $('#pf-pplat') ? $('#pf-pplat').value : '', u = $('#pf-purl') ? v('#pf-purl') : ''; if(!plat) return {partner:null};
         return {partner:{platform:plat, url:u.slice(0,600)}, stock:0}; })(),
       ...(()=>{ if(!$('#pf-seot')) return {}; const a = autoSeo({...p, name:v('#pf-name'), price:Number(v('#pf-price').replace(/\s/g,'')), comparePrice:Number(v('#pf-cmp').replace(/\s/g,''))||0, highlights:v('#pf-hl'), description:v('#pf-desc'), condition:$('#pf-cond').value}); return {seoTitle:v('#pf-seot')||a.title, seoDesc:v('#pf-seod')||a.desc, seoAuto:!v('#pf-seot') && !v('#pf-seod')}; })(),
-      lpHook:v('#lp-hook'), lpSub:v('#lp-sub'), lpProblem:$('#lp-pb').value.trim(), lpSolution:$('#lp-so').value.trim(), lpUsages:$('#lp-us').value.trim(), lpFaq:$('#lp-faq').value.trim(), lpOffer:v('#lp-off'), lpUntil:$('#lp-until').value, lpVideo:(pv=>pv&&!pv.short)(parseVideo(v('#lp-vid')))?v('#lp-vid'):'', lpVideoTitle:v('#lp-vidt'),
+      lpHook:v('#lp-hook'), lpHookB:($('#lp-hookb')?v('#lp-hookb'):(p.lpHookB||'')), lpSub:v('#lp-sub'), lpProblem:$('#lp-pb').value.trim(), lpSolution:$('#lp-so').value.trim(), lpUsages:$('#lp-us').value.trim(), lpFaq:$('#lp-faq').value.trim(), lpOffer:v('#lp-off'), lpUntil:$('#lp-until').value, lpVideo:(pv=>pv&&!pv.short)(parseVideo(v('#lp-vid')))?v('#lp-vid'):'', lpVideoTitle:v('#lp-vidt'),
       ...($('#lp-xp')?{lpExpress:$('#lp-xp').checked, lpGuarantee:v('#lp-gar').slice(0,300), lpCompare:$('#lp-cmp').value.trim().slice(0,1500), lpCompareOff:$('#lp-cmpoff').checked, lpProofs:[...(window.__pfList||p.lpProofs||[])].slice(0,10), lpAudio:$('#lp-au').value, lpAudioTitle:v('#lp-aut').slice(0,80),
         packs:[0,1,2].map(i=>({qty:parseInt(v('#pk-q-'+i))||0, price:Number(v('#pk-p-'+i).replace(/\s/g,''))||0, label:v('#pk-l-'+i).slice(0,30)})).filter(k=>k.qty>=2 && k.price>0)}:{}),
       highlights:$('#pf-hl').value.trim(), details:$('#pf-details').value.trim(), specs:$('#pf-specs').value.trim(), warranty:v('#pf-war'), active:$('#pf-active').checked,
@@ -5042,6 +5086,12 @@ document.addEventListener('click', async e=>{
     case 'scroll': $('#catalogue').scrollIntoView({behavior:matchMedia('(prefers-reduced-motion:reduce)').matches?'auto':'smooth'}); break;
     case 'cart': openCart(); break;
     case 'ghAdd': { const p = S.products.find(x=>x.id===id); closeAll(); const b = document.querySelector('#main [data-a=pdpAdd], main [data-a=pdpAdd]'); if(!b || !p) break; const n0 = cartCount(); b.click(); setTimeout(()=>{ if(cartCount()>n0 && !$('#overlay').innerHTML.trim()) giftHowModal(p); }, 120); break; }
+    case 'abKeepB': { const a = $('#lp-hook'), b = $('#lp-hookb'); if(a && b){ a.value = b.value; b.value = ''; toast('Accroche B copiée : enregistrez le produit.'); } break; }
+    case 'pubDays': S.pubDays = +el.dataset.v; schedule(); break;
+    case 'adAdd': { const err = $('#ad-err'), amt = Number(($('#ad-amt').value||'').replace(/\D/g,'')), date = $('#ad-date').value || today();
+      if(!(amt>0)){ err.textContent = 'Indiquez le montant dépensé.'; break; } const id = newId('ad'), d = {date, net:$('#ad-net').value, campaign:cmpNorm($('#ad-cmp').value), amount:amt, createdAt:Date.now()};
+      put('ad-spend', id, d).then(()=>{ S.adSpend = [...(S.adSpend||[]).filter(x=>x.id!==id), {id, ...d}]; toast('Dépense ajoutée'); schedule(); }).catch(dbErr); break; }
+    case 'adDel': { const id = el.dataset.id; if(!confirm('Supprimer cette dépense ?')) break; del('ad-spend', id).then(()=>{ S.adSpend = (S.adSpend||[]).filter(x=>x.id!==id); schedule(); }).catch(dbErr); break; }
     case 'coSlot': CO.slot = el.dataset.v; drawCheckout(); break;
     case 'xpSlot': { S.xpSlot = el.dataset.v; document.querySelectorAll('[data-a=xpSlot]').forEach(b=>{ const on = b.dataset.v===S.xpSlot; b.classList.toggle('on', on); b.setAttribute('aria-pressed', on); }); break; }
     case 'gConfirm': { const o = S.guideOrder; if(!o) break; if(el.dataset.v==='cancel' && !confirm('Annuler votre commande ?')) break; el.disabled = true;
@@ -5315,12 +5365,13 @@ document.addEventListener('click', async e=>{
 });
 
 const NETS = {facebook:'Facebook', instagram:'Instagram', whatsapp:'WhatsApp', tiktok:'TikTok', pinterest:'Pinterest', x:'X (Twitter)', linkedin:'LinkedIn', qr:'Affiche / QR code'};
+const cmpNorm = c => String(c||'').trim().replace(/\s+/g,'-').replace(/[^A-Za-z0-9_-]/g,'').slice(0,30);
 function captureSrc(){
-  try{ const q = new URLSearchParams(location.search), src = (q.get('src')||'').toLowerCase().replace(/[^a-z0-9_-]/g,'').slice(0,20);
+  try{ const q = new URLSearchParams(location.search), src = (q.get('src')||q.get('utm_source')||(q.get('fbclid')?'facebook':q.get('ttclid')?'tiktok':q.get('gclid')?'google':'')).toLowerCase().replace(/^(fb|meta)$/,'facebook').replace(/^ig$/,'instagram').replace(/[^a-z0-9_-]/g,'').slice(0,20);
     if(src){ localStorage.setItem('ffm-src', JSON.stringify({src, at:Date.now()})); window.__ffmNewSrc = src; }
     const pc = (q.get('promo')||'').trim().toUpperCase().replace(/[^A-Z0-9_-]/g,'').slice(0,30); if(pc) localStorage.setItem('ffm-promo', pc);
     const cat = q.get('cat'); if(cat) window.__ffmCat = cat;
-    const cm = (q.get('cmp')||'').replace(/[^A-Za-z0-9_-]/g,'').slice(0,30); if(cm) localStorage.setItem('ffm-cmp', JSON.stringify({c:cm, at:Date.now()})); }catch(e){}
+    const cm = cmpNorm(q.get('cmp')||q.get('utm_campaign')||''); if(cm) localStorage.setItem('ffm-cmp', JSON.stringify({c:cm, at:Date.now()})); }catch(e){}
 }
 function lpSeen(){ try{ return JSON.parse(sessionStorage.getItem('ffm-lp')||'[]'); }catch(e){ return []; } }
 function cmpCode(){ try{ const r = JSON.parse(localStorage.getItem('ffm-cmp')||'null'); if(r && Date.now()-r.at < 30*864e5) return r.c; }catch(e){} return ''; }
