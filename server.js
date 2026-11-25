@@ -795,6 +795,57 @@ async function graph(path, params = {}, method = 'POST', base = GRAPH) {
   if (!r.ok || j.error) { const e = httpErr(r.status >= 400 && r.status < 500 ? 400 : 502, (j.error && (j.error.error_user_msg || j.error.message)) || 'Erreur Meta ' + r.status); e.code = j.error && j.error.code; throw e; }
   return j;
 }
+/* ===================== Relances WhatsApp automatiques (API WhatsApp Cloud de Meta) ===================== */
+const WA_DEF = { on: true, lang: 'fr', tplCart1: 'relance_panier_1h', tplCart24: 'relance_panier_24h', tplConfirm: 'confirmation_commande' };
+const waCfg = () => ({ ...WA_DEF, ...(getDoc('wa-config', 'main') || {}) });
+const waReady = c => !!(c.token && c.phoneId);
+const waTo = ph => { let d = String(ph || '').replace(/\D/g, ''); if (d.startsWith('00')) d = d.slice(2); if (d.length === 8) d = '223' + d; return d.length >= 10 && d.length <= 15 ? d : ''; };
+function waLog(e) { const l = getDoc('wa-log', 'main') || { items: [] }; putDoc('wa-log', 'main', { items: [{ at: Date.now(), ...e }, ...(l.items || [])].slice(0, 60) }); }
+async function waSend(to, tpl, params, why) {
+  const c = waCfg(), num = waTo(to); if (!waReady(c)) throw httpErr(400, 'Configurez d’abord le jeton et l’identifiant du numéro WhatsApp.'); if (!num) throw httpErr(400, 'Numéro invalide.'); if (!tpl) throw httpErr(400, 'Modèle de message manquant.');
+  const body = { messaging_product: 'whatsapp', to: num, type: 'template', template: { name: tpl, language: { code: c.lang || 'fr' }, ...(params && params.length ? { components: [{ type: 'body', parameters: params.map(x => ({ type: 'text', text: String(x).slice(0, 900) })) }] } : {}) } };
+  const masked = '+' + num.slice(0, 3) + ' •• •• ' + num.slice(-4);
+  try {
+    const r = await fetch(`${GRAPH}/${encodeURIComponent(c.phoneId)}/messages`, { method: 'POST', headers: { authorization: 'Bearer ' + c.token, 'content-type': 'application/json' }, body: JSON.stringify(body), signal: AbortSignal.timeout(15000) });
+    const j = await r.json().catch(() => ({}));
+    if (!r.ok || j.error) throw new Error((j.error && (j.error.error_user_msg || j.error.message)) || 'HTTP ' + r.status);
+    waLog({ to: masked, tpl, why, ok: true }); return j;
+  } catch (e) { waLog({ to: masked, tpl, why, ok: false, err: String(e.message).slice(0, 200) }); throw httpErr(502, 'WhatsApp : ' + e.message); }
+}
+const firstNameS = n => String(n || '').trim().split(/\s+/)[0] || 'cher client';
+let waBusy = false;
+async function waTick() {
+  const c = waCfg(); if (waBusy || !c.on || !waReady(c)) return; waBusy = true;
+  try {
+    const now = Date.now(), H = 3600e3, shop = BASE_URL;
+    for (const cart of allDocs('carts')) {
+      if (cart.converted || !cart.value || !cart.contact || !waTo(cart.contact.phone)) continue;
+      const age = now - (cart.updatedAt || 0);
+      if (c.tplCart1 && !cart.wa1 && age >= H && age < 48 * H) { patchDoc('carts', cart.id, { wa1: now }); await waSend(cart.contact.phone, c.tplCart1, [firstNameS(cart.contact.name), shop], 'panier 1 h').catch(() => {}); }
+      else if (c.tplCart24 && cart.wa1 && !cart.wa24 && age >= 24 * H && age < 72 * H) { patchDoc('carts', cart.id, { wa24: now }); await waSend(cart.contact.phone, c.tplCart24, [firstNameS(cart.contact.name), shop], 'panier 24 h').catch(() => {}); }
+    }
+    if (c.tplConfirm) for (const o of allDocs('orders')) {
+      if (o.waConfirm || o.payment?.method !== 'cod' || o.status !== 'en_attente' || o.confirm || now - (o.createdAt || 0) > 2 * H || now - (o.createdAt || 0) < 60e3) continue;
+      patchDoc('orders', o.id, { waConfirm: now });
+      await waSend(o.customer?.phone, c.tplConfirm, [firstNameS(o.customer?.name), o.number, money(o.total), `${shop}/guide?o=${encodeURIComponent(o.id)}&t=${encodeURIComponent(o.token)}`], 'confirmation ' + o.number).catch(() => {});
+    }
+  } finally { waBusy = false; }
+}
+setInterval(() => { waTick().catch(e => console.warn('Relances WhatsApp :', e.message)); }, Number(env.WA_TICK_MS) || 5 * 60e3).unref();
+app.get('/api/admin/wa', requireStaff, requireManager, (req, res) => { const c = waCfg(); const { token, ...rest } = c;
+  res.json({ ...rest, tokenSet: !!token, ready: waReady(c), log: ((getDoc('wa-log', 'main') || {}).items || []).slice(0, 30) }); });
+app.post('/api/admin/wa', requireStaff, requireManager, express.json({ limit: '20kb' }), h(async (req, res) => {
+  const b = req.body || {}, prev = getDoc('wa-config', 'main') || {}, tplOk = x => String(x || '').trim().toLowerCase().replace(/[^a-z0-9_]/g, '').slice(0, 60);
+  const d = { on: b.on !== false, lang: String(b.lang || 'fr').replace(/[^a-zA-Z_]/g, '').slice(0, 10) || 'fr', phoneId: String(b.phoneId || '').replace(/\D/g, '').slice(0, 30), tplCart1: tplOk(b.tplCart1), tplCart24: tplOk(b.tplCart24), tplConfirm: tplOk(b.tplConfirm),
+    token: String(b.token || '').trim() ? String(b.token).trim().slice(0, 600) : (prev.token || '') };
+  putDoc('wa-config', 'main', d); await store.flush();
+  res.json({ ok: true, ready: waReady(d) });
+}));
+app.post('/api/admin/wa/test', requireStaff, requireManager, express.json({ limit: '5kb' }), h(async (req, res) => {
+  const c = waCfg(), tpl = { cart1: c.tplCart1, cart24: c.tplCart24, confirm: c.tplConfirm }[req.body?.tpl] || c.tplCart1;
+  const params = req.body?.tpl === 'confirm' ? ['Awa', 'FM-TEST-0001', money(12500), BASE_URL + '/guide'] : ['Awa', BASE_URL];
+  await waSend(req.body?.to, tpl, params, 'test'); res.json({ ok: true });
+}));
 app.get('/api/admin/social/status', requireStaff, (req, res) => res.json(socialStatus()));
 app.post('/api/admin/social/meta', requireStaff, requireManager, express.json({ limit: '20kb' }), h(async (req, res) => {
   if (limited('meta:' + req.user.id, 20, 3600e3)) throw httpErr(429, 'Trop d’essais en une heure.');

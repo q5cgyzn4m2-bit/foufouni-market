@@ -232,7 +232,7 @@
     if (!cartsData) { loadCarts(); return '<div class="empty"><div class="spinner"></div>Chargement…</div>'; }
     if (cartsData.error) return `<div class="empty"><h3>Indisponible</h3><p>${esc(cartsData.error)}</p></div>`;
     const st = S.settings, carts = cartsData.carts, val = carts.reduce((t, c) => t + c.value, 0), withPhone = carts.filter(c => c.contact && c.contact.phone).length;
-    return `<div class="toolbar"><h2 style="font-size:24px;flex:1">Assistant IA et paniers abandonnés</h2><button class="btn ghost" data-srv="cartsReload">Actualiser</button></div>
+    return `<div class="toolbar"><h2 style="font-size:24px;flex:1">Assistant IA et paniers abandonnés</h2><button class="btn ghost" data-srv="cartsReload">Actualiser</button></div>${typeof waPanel === 'function' ? waPanel() : ''}
     <div class="panel"><h3>Assistante IA pour vos clients</h3>
       <p style="margin:0 0 12px">${cartsData.ai ? '<span class="pill ok">Connectée</span> Une bulle « Besoin d’aide ? » s’affiche dans la boutique : elle répond aux questions et recommande vos produits, à partir de votre catalogue réel.' : '<span class="pill bad">Clé API manquante</span> Ajoutez la variable <b>ANTHROPIC_API_KEY</b> sur Render pour activer l’assistante.'}</p>
       <div class="row" style="align-items:center;gap:14px;margin-bottom:12px">${avHTML(64, true)}<div style="flex:1"><b>Image de l’assistante</b><div class="muted small">Par défaut, une illustration. Vous pouvez la remplacer par votre propre image (photo d’une personne de l’équipe avec son accord, ou illustration).</div>
@@ -334,7 +334,7 @@
   window.cancelQrOrder = id => api('PATCH', `/api/admin/orders/${encodeURIComponent(id)}`, { status: 'annulee' }).then(() => reload());
   window.resolveLink = async url => (await api('POST', '/api/admin/resolve-link', { url })).url;
   window.validatePromo = async (code, subtotal) => { try { return await api('POST', '/api/promo/check', { code, subtotal }); } catch (e) { return { err: e.message }; } };
-  window.enabledProcs = () => Object.entries(S.settings.processors).filter(([k, v]) => v.enabled && PROCESSORS[k] && providers.includes(k));
+  window.enabledProcs = () => { const l = Object.entries(S.settings.processors).filter(([k, v]) => v.enabled && PROCESSORS[k] && providers.includes(k) && k !== 'terme'); return S.pro && S.pro.terms && S.view !== 'guide' ? [...l, ['terme', { enabled: true }]] : l; };
 
   /* ---------- commande client avec paiement réel ---------- */
   window.coNext = async function () {
@@ -389,6 +389,11 @@
   window.proLogout = function () { S.pro = null; try { localStorage.removeItem('ffm-pro'); } catch (e) {} schedule(); };
   window.loyaltyInfo = async function () { try { S.loyalty = await api('POST', '/api/loyalty', { orders: myOrders().slice(0, 20) }); } catch (e) { S.loyalty = null; } schedule(); return S.loyalty; };
   if (!me) { try { const pc = JSON.parse(localStorage.getItem('ffm-pro') || 'null'); if (pc && pc.code) window.proLogin(pc.code).catch(() => { S.pro = null; }); } catch (e) {} if (myOrders().length) window.loyaltyInfo(); }
+  window.waApi = {
+    load: async () => { try { S.wa = await api('GET', '/api/admin/wa'); } catch (e) { S.wa = { error: e.message }; } schedule(); },
+    save: async d => { const r = await api('POST', '/api/admin/wa', d); await window.waApi.load(); return r; },
+    test: (to, tpl) => api('POST', '/api/admin/wa/test', { to, tpl }).finally(() => window.waApi.load())
+  };
   window.leadCapture = async function (p, name, phone) {
     contact = { name, phone };
     const lid = 'ld' + Date.now().toString(36) + Math.random().toString(36).slice(2, 10);
