@@ -119,7 +119,7 @@
     if (me) return; // l'équipe connectée n'est pas suivie
     clearTimeout(syncT);
     syncT = setTimeout(() => {
-      const items = S.cart.map(l => l.b ? { bundle: l.b, qty: l.qty } : (l.v ? { id: l.id, qty: l.qty, v: l.v } : { id: l.id, qty: l.qty }));
+      const items = S.cart.map(l => l.b ? { bundle: l.b, qty: l.qty, ...(l.vs ? { vs: l.vs } : {}), ...(l.pick ? { pick: l.pick } : {}) } : (l.v ? { id: l.id, qty: l.qty, v: l.v } : { id: l.id, qty: l.qty }));
       api('POST', '/api/carts', { id: cartId, items, contact, push: S._pushEndpoint || '' }).catch(() => {});
     }, now ? 0 : 2500);
   }
@@ -328,7 +328,7 @@
   window.attachOrder = async (id, t) => { if (!id || !t) return; addMine(id, t); if (!me) await load(); };
   window.orderToken = id => { const m = myOrders().find(x => x.id === id); return m ? m.t : ''; };
   window.lookupBarcode = code => api('GET', '/api/admin/lookup-barcode?code=' + encodeURIComponent(code));
-  window.posQrOrder = (items, promo) => api('POST', '/api/admin/pos/qr-order', { items: items.map(l => l.b ? { bundle: l.b, qty: l.qty } : (l.v ? { id: l.id, qty: l.qty, v: l.v } : { id: l.id, qty: l.qty })), promoCode: promo ? promo.code : '' });
+  window.posQrOrder = (items, promo) => api('POST', '/api/admin/pos/qr-order', { items: items.map(l => l.b ? { bundle: l.b, qty: l.qty, ...(l.vs ? { vs: l.vs } : {}), ...(l.pick ? { pick: l.pick } : {}) } : (l.v ? { id: l.id, qty: l.qty, v: l.v } : { id: l.id, qty: l.qty })), promoCode: promo ? promo.code : '' });
   window.orderStatus = (id, t) => api('GET', `/api/orders/${encodeURIComponent(id)}?t=${encodeURIComponent(t)}`);
   window.payExistingOrder = (id, t, method) => api('POST', `/api/orders/${encodeURIComponent(id)}/pay`, { t, method });
   window.cancelQrOrder = id => api('PATCH', `/api/admin/orders/${encodeURIComponent(id)}`, { status: 'annulee' }).then(() => reload());
@@ -348,7 +348,7 @@
     const btn = document.querySelector('[data-a="coNext"]'); btn.disabled = true; btn.textContent = 'Préparation du paiement…';
     try {
       const r = await api('POST', '/api/orders', {
-        items: S.cart.map(l => l.b ? { bundle: l.b, qty: l.qty } : (l.v ? { id: l.id, qty: l.qty, v: l.v } : { id: l.id, qty: l.qty })), promoCode: S.appliedPromo ? S.appliedPromo.code : '',
+        items: S.cart.map(l => l.b ? { bundle: l.b, qty: l.qty, ...(l.vs ? { vs: l.vs } : {}), ...(l.pick ? { pick: l.pick } : {}) } : (l.v ? { id: l.id, qty: l.qty, v: l.v } : { id: l.id, qty: l.qty })), promoCode: S.appliedPromo ? S.appliedPromo.code : '',
         customer: { name: CO.name, phone: CO.phone, address: CO.address, city: CO.city, note: CO.note, country: CO.country || 'ML', ...(CO.geo ? { geo: CO.geo } : {}) }, payRef: CO.payRef || '',
         delivery: CO.delivery, carrier: CO.carrier || '', slot: CO.slot || '', proCode: S.pro ? S.pro.code : '', usePoints: !!CO.usePoints, loyaltyProof: CO.usePoints ? myOrders().slice(0, 20) : [], parrain: typeof parrainCode === 'function' ? parrainCode() : '', lpAb: typeof abMap === 'function' ? abMap() : {}, giftPick: typeof giftPickKey === 'function' ? giftPickKey() : '', method: CO.method, cartId, ref: refCode(), source: srcCode(), campaign: cmpCode(), lpPids: lpSeen().filter(id => S.cart.some(l => l.id === id))
       });
@@ -366,14 +366,14 @@
 
   /* ---------- page de vente : commande express (paiement à la livraison), contact laissé, offre après commande ---------- */
   window.expressOrder = async function (o) {
-    const items = [o.v ? { id: o.p.id, qty: o.qty, v: o.v } : { id: o.p.id, qty: o.qty }];
+    const items = o.items || [o.v ? { id: o.p.id, qty: o.qty, v: o.v } : { id: o.p.id, qty: o.qty }];
     const r = await api('POST', '/api/orders', {
       items, promoCode: '', method: 'cod', delivery: 'livraison', carrier: '', slot: o.slot || '', proCode: S.pro ? S.pro.code : '', parrain: typeof parrainCode === 'function' ? parrainCode() : '', lpAb: typeof abMap === 'function' ? abMap() : {}, giftPick: o.giftPick || '',
       customer: { name: o.name, phone: o.phone, address: o.address, city: S.settings.city || 'Bamako', note: '', country: 'ML' },
-      cartId, ref: refCode(), source: srcCode(), campaign: cmpCode(), lpPids: [o.p.id]
+      cartId, ref: refCode(), source: srcCode(), campaign: cmpCode(), lpPids: o.p ? [o.p.id] : []
     });
     addMine(r.id, r.token); syncAlerts();
-    ttTrack('PlaceAnOrder', { transaction_id: (r.order && r.order.number) || r.id, value: Math.round(r.order ? r.order.total : 0), contents: [ttItem(o.p, o.qty, o.unit)] }); ttIdentify(o.phone);
+    ttTrack('PlaceAnOrder', { transaction_id: (r.order && r.order.number) || r.id, value: Math.round(r.order ? r.order.total : 0), contents: o.p ? [ttItem(o.p, o.qty, o.unit)] : [] }); ttIdentify(o.phone);
     load(); return r.order;
   };
   window.orderConfirm = async function (o, answer) {
@@ -397,7 +397,7 @@
   window.leadCapture = async function (p, name, phone) {
     contact = { name, phone };
     const lid = 'ld' + Date.now().toString(36) + Math.random().toString(36).slice(2, 10);
-    const items = S.cart.length ? S.cart.map(l => l.b ? { bundle: l.b, qty: l.qty } : (l.v ? { id: l.id, qty: l.qty, v: l.v } : { id: l.id, qty: l.qty })) : [{ id: p.id, qty: Math.max(1, S.pqty || 1) }];
+    const items = S.cart.length ? S.cart.map(l => l.b ? { bundle: l.b, qty: l.qty, ...(l.vs ? { vs: l.vs } : {}), ...(l.pick ? { pick: l.pick } : {}) } : (l.v ? { id: l.id, qty: l.qty, v: l.v } : { id: l.id, qty: l.qty })) : [{ id: p.id, qty: Math.max(1, S.pqty || 1) }];
     await api('POST', '/api/carts', { id: lid, items, contact, lead: 'sortie' });
   };
   window.orderAddon = async function (orderId, pid) {

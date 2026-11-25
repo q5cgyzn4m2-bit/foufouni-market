@@ -194,7 +194,7 @@ function shopBrief() {
     if (isPartnerS(p)) return `[[${p.id}]] ${p.name} | ${p.category || ''} | PRODUIT PARTENAIRE vendu et livré par ${({ amazon: 'Amazon', aliexpress: 'AliExpress', temu: 'Temu', jumia: 'Jumia' })[p.partner.platform] || 'un site partenaire'} (pas par la boutique : ni livraison, ni paiement, ni commande ici ; le client clique sur « Voir sur … » dans la fiche)${p.description ? ' | ' + String(p.description).slice(0, 160) : ''}`;
     return `[[${p.id}]] ${p.name} | ${p.category || ''} | ${money(p.price)}${p.comparePrice > p.price ? ' (au lieu de ' + money(p.comparePrice) + ')' : ''} | ${p.stock > 0 ? 'en stock' : 'RUPTURE'} | ${CONDITION_LABEL[p.condition] || 'Neuf'}${vars}${p.bulkMin > 1 && p.bulkPrice > 0 ? ' | prix de gros ' + money(p.bulkPrice) + ' dès ' + p.bulkMin : ''}${p.description ? ' | ' + String(p.description).slice(0, 160) : ''}${p.highlights ? ' | points forts : ' + String(p.highlights).replace(/\n/g, '; ').slice(0, 200) : ''}${p.warranty ? ' | garantie : ' + String(p.warranty).slice(0, 100) : ''}`;
   }).join('\n');
-  const bundles = allDocs('bundles').filter(b => b.active !== false).map(b => `Lot « ${b.name} » : ${money(b.price)} — contient ${(b.items || []).map(i => { const p = getDoc('products', i.id); return p ? i.qty + ' × ' + p.name : ''; }).filter(Boolean).join(', ')}`).join('\n');
+  const bundles = allDocs('bundles').filter(b => b.active !== false).map(b => b.type === 'mix' ? `Lot à composer « ${b.name} » : le client choisit ses articles, remise ${mixTiersS(b).map(t => t.n + ' articles −' + t.pct + ' %').join(', ')}` : `Lot « ${b.name} » : ${money(b.price)} — contient ${(b.items || []).map(i => { const p = getDoc('products', i.id); return p ? i.qty + ' × ' + p.name : ''; }).filter(Boolean).join(', ')}`).join('\n');
   return `BOUTIQUE : ${s.shopName}, ${s.city}. ${s.intro || ''}
 LIVRAISON : à ${s.city}, ${money(s.deliveryFee)}, offerte dès ${money(s.freeFrom)} d’achat. Retrait en boutique gratuit.
 PAIEMENT : ${pays || 'à la livraison'}.
@@ -279,7 +279,7 @@ const unitPrice = (p, qty) => { let u = Math.round(Number(p.price) || 0);
 function expandItems(items) {
   const m = new Map();
   for (const i of items || []) {
-    if (i.bundle) for (const c of i.components || []) m.set(c.id, (m.get(c.id) || 0) + c.qty * i.qty);
+    if (i.bundle) for (const c of i.components || []) { const k = c.id + (c.v ? '|' + c.v : ''); m.set(k, (m.get(k) || 0) + c.qty * i.qty); }
     else { const k = i.id + (i.variant ? '|' + i.variant : ''); m.set(k, (m.get(k) || 0) + i.qty); }
   }
   return [...m].map(([k, qty]) => { const [id, v] = k.split('|'); return v ? { id, qty, v } : { id, qty }; });
@@ -339,6 +339,11 @@ function shipOffers(s, country, city) {
 const proByCode = c => { c = String(c || '').trim().toUpperCase(); return c.length >= 6 ? allDocs('pros').find(x => x.active !== false && x.code && safeEq(String(x.code).toUpperCase(), c)) : null; };
 const proUnit = (pro, p, base) => { if (!pro) return base; let u = base; const pp = Math.round(Number(p.proPrice) || 0), pct = Math.min(60, Math.max(0, Number(pro.pct) || 0));
   if (pp > 0 && pp < u) u = pp; if (pct) u = Math.min(u, Math.round(base * (1 - pct / 100))); return u; };
+/* Lots à composer : sélection (produits choisis ou une catégorie) et paliers de remise */
+const mixPoolS = b => { const ids = Array.isArray(b.pool) ? b.pool.map(String) : []; const cat = String(b.poolCat || '');
+  return [...new Set([...ids, ...(cat ? allDocs('products').filter(p => p.active !== false && p.category === cat).map(p => p.id) : [])])]; };
+const mixTiersS = b => (Array.isArray(b.tiers) && b.tiers.length ? b.tiers : [{ n: 2, pct: 5 }, { n: 3, pct: 10 }, { n: 4, pct: 15 }])
+  .map(t => ({ n: Math.max(2, Math.round(Number(t.n) || 0)), pct: Math.min(60, Math.max(0, Number(t.pct) || 0)) })).filter(t => t.n >= 2).sort((a, b) => a.n - b.n);
 function computeOrder(items, promoCode, delivery, ref, dest, pro) {
   if (pro) promoCode = '';
   if (!Array.isArray(items) || !items.length || items.length > 50) throw httpErr(400, 'Panier invalide.');
@@ -346,7 +351,7 @@ function computeOrder(items, promoCode, delivery, ref, dest, pro) {
   for (const it of items) {
     const q = Number(it && it.qty);
     if (!Number.isInteger(q) || q < 1 || q > 999) throw httpErr(400, 'Panier invalide.');
-    if (it.bundle) { const id = String(it.bundle); if (!validId(id)) throw httpErr(400, 'Panier invalide.'); bundleQty.set(id, (bundleQty.get(id) || 0) + q); }
+    if (it.bundle) { const id = String(it.bundle); if (!validId(id)) throw httpErr(400, 'Panier invalide.'); bundleQty.set(JSON.stringify([id, it.vs && typeof it.vs === 'object' ? it.vs : null, Array.isArray(it.pick) ? it.pick.slice(0, 12) : null]), (bundleQty.get(JSON.stringify([id, it.vs && typeof it.vs === 'object' ? it.vs : null, Array.isArray(it.pick) ? it.pick.slice(0, 12) : null])) || 0) + q); }
     else { const id = String(it.id), v = String(it.v || '').slice(0, 120); if (!validId(id)) throw httpErr(400, 'Panier invalide.'); const k = id + (v ? '|' + v : ''); prodQty.set(k, (prodQty.get(k) || 0) + q); }
   }
   const lines = [];
@@ -361,11 +366,31 @@ function computeOrder(items, promoCode, delivery, ref, dest, pro) {
       { const vp = Math.round(Number(vr.price) > 0 ? Number(vr.price) : Number(p.price) || 0); lines.push({ id, name: p.name + ' — ' + v, price: pro ? Math.min(vp, Math.round(vp * (1 - Math.min(60, Math.max(0, Number(pro.pct) || 0)) / 100))) : vp, qty, variant: v }); }
     } else lines.push({ id, name: p.name, price: proUnit(pro, p, unitPrice(p, qty)), qty });
   }
-  for (const [bid, qty] of bundleQty) {
-    const b = getDoc('bundles', bid);
-    if (!b || b.active === false || !Array.isArray(b.items) || !b.items.length) throw httpErr(400, 'Un lot de votre panier n’est plus disponible.');
-    for (const c of b.items) { const p = getDoc('products', c.id); if (!p || p.active === false || isPartnerS(p)) throw httpErr(400, `Le lot ${b.name} n’est plus disponible.`); }
-    lines.push({ id: 'b:' + bid, bundle: true, name: 'Lot · ' + b.name, price: Math.round(Number(b.price) || 0), qty, components: b.items.map(c => ({ id: c.id, qty: Number(c.qty) || 1 })) });
+  for (const [key, qty] of bundleQty) {
+    const [bid, vs, pick] = JSON.parse(key), b = getDoc('bundles', bid);
+    if (!b || b.active === false) throw httpErr(400, 'Un lot de votre panier n’est plus disponible.');
+    const varOk = (p, v) => !hasVar(p) || (v && p.variants.some(x => x.key === v));
+    const vPrice = (p, v) => { const vr = v && hasVar(p) ? p.variants.find(x => x.key === v) : null; return Math.round(vr && Number(vr.price) > 0 ? Number(vr.price) : Number(p.price) || 0); };
+    if (b.type === 'mix') {
+      /* lot à composer : le client choisit ses articles dans la sélection, la remise dépend du nombre */
+      const pool = new Set(mixPoolS(b)), picks = (pick || []).map(x => ({ id: String(x && x.id || ''), v: String(x && x.v || '').slice(0, 120) }));
+      const tiers = mixTiersS(b), tier = tiers.filter(t => picks.length >= t.n).pop();
+      if (!tier) throw httpErr(400, `Choisissez au moins ${tiers[0] ? tiers[0].n : 2} articles pour le lot ${b.name}.`);
+      if (picks.length > (Number(b.maxItems) || 8)) throw httpErr(400, `Le lot ${b.name} est limité à ${Number(b.maxItems) || 8} articles.`);
+      let regular = 0; const comps = [];
+      for (const x of picks) { const p = validId(x.id) && getDoc('products', x.id);
+        if (!p || !pool.has(x.id) || p.active === false || isPartnerS(p)) throw httpErr(400, `Un article du lot ${b.name} n’est plus disponible.`);
+        if (!varOk(p, x.v)) throw httpErr(400, `Choisissez l’option de ${p.name} dans votre lot.`);
+        regular += vPrice(p, hasVar(p) ? x.v : ''); comps.push({ id: x.id, qty: 1, ...(hasVar(p) ? { v: x.v } : {}) }); }
+      lines.push({ id: 'b:' + bid, bundle: true, name: `Lot · ${b.name} (${picks.length} articles)`, price: Math.round(regular * (1 - tier.pct / 100)), qty, components: comps });
+    } else {
+      if (!Array.isArray(b.items) || !b.items.length) throw httpErr(400, 'Un lot de votre panier n’est plus disponible.');
+      const comps = b.items.map(c => { const p = getDoc('products', c.id); if (!p || p.active === false || isPartnerS(p)) throw httpErr(400, `Le lot ${b.name} n’est plus disponible.`);
+        const v = hasVar(p) ? String(c.v || (vs && vs[c.id]) || '') : ''; if (!varOk(p, v)) throw httpErr(400, `Choisissez l’option de ${p.name} dans le lot ${b.name}.`);
+        return { id: c.id, qty: Number(c.qty) || 1, ...(v ? { v } : {}) }; });
+      const vtxt = comps.filter(c => c.v).map(c => c.v).join(', ');
+      lines.push({ id: 'b:' + bid, bundle: true, name: 'Lot · ' + b.name + (vtxt ? ' (' + vtxt + ')' : ''), price: Math.round(Number(b.price) || 0), qty, components: comps });
+    }
   }
   const totals = {};
   for (const { id, qty, v } of expandItems(lines)) {
