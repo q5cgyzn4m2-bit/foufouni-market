@@ -192,7 +192,7 @@ function shopBrief() {
   const prods = allDocs('products').filter(p => p.active !== false).slice(0, 200).map(p => {
     const vars = Array.isArray(p.variants) && p.variants.length ? ' | variantes en stock : ' + p.variants.filter(v => v.stock > 0).map(v => v.key + (Number(v.price) > 0 ? ' (' + money(v.price) + ')' : '')).join(', ') : '';
     if (isPartnerS(p)) return `[[${p.id}]] ${p.name} | ${p.category || ''} | PRODUIT PARTENAIRE vendu et livré par ${({ amazon: 'Amazon', aliexpress: 'AliExpress', temu: 'Temu', jumia: 'Jumia' })[p.partner.platform] || 'un site partenaire'} (pas par la boutique : ni livraison, ni paiement, ni commande ici ; le client clique sur « Voir sur … » dans la fiche)${p.description ? ' | ' + String(p.description).slice(0, 160) : ''}`;
-    return `[[${p.id}]] ${p.name} | ${p.category || ''} | ${money(p.price)}${p.comparePrice > p.price ? ' (au lieu de ' + money(p.comparePrice) + ')' : ''} | ${p.stock > 0 ? 'en stock' : 'RUPTURE'} | ${CONDITION_LABEL[p.condition] || 'Neuf'}${vars}${p.bulkMin > 1 && p.bulkPrice > 0 ? ' | prix de gros ' + money(p.bulkPrice) + ' dès ' + p.bulkMin : ''}${p.description ? ' | ' + String(p.description).slice(0, 160) : ''}${p.highlights ? ' | points forts : ' + String(p.highlights).replace(/\n/g, '; ').slice(0, 200) : ''}${p.warranty ? ' | garantie : ' + String(p.warranty).slice(0, 100) : ''}`;
+    return `[[${p.id}]] ${p.name} | ${p.category || ''} | ${money(p.price)}${p.comparePrice > p.price ? ' (au lieu de ' + money(p.comparePrice) + ')' : ''} | ${isDsS(p) ? (p.ds.mode === 'import' ? 'en précommande, arrivée ' + (p.ds.days || 'sous quelques semaines') : 'sur commande, livré ' + (p.ds.days || 'rapidement')) : p.stock > 0 ? 'en stock' : 'RUPTURE'} | ${CONDITION_LABEL[p.condition] || 'Neuf'}${vars}${p.bulkMin > 1 && p.bulkPrice > 0 ? ' | prix de gros ' + money(p.bulkPrice) + ' dès ' + p.bulkMin : ''}${p.description ? ' | ' + String(p.description).slice(0, 160) : ''}${p.highlights ? ' | points forts : ' + String(p.highlights).replace(/\n/g, '; ').slice(0, 200) : ''}${p.warranty ? ' | garantie : ' + String(p.warranty).slice(0, 100) : ''}`;
   }).join('\n');
   const bundles = allDocs('bundles').filter(b => b.active !== false).map(b => b.type === 'mix' ? `Lot à composer « ${b.name} » : le client choisit ses articles, remise ${mixTiersS(b).map(t => t.n + ' articles −' + t.pct + ' %').join(', ')}` : `Lot « ${b.name} » : ${money(b.price)} — contient ${(b.items || []).map(i => { const p = getDoc('products', i.id); return p ? i.qty + ' × ' + p.name : ''; }).filter(Boolean).join(', ')}`).join('\n');
   return `BOUTIQUE : ${s.shopName}, ${s.city}. ${s.intro || ''}
@@ -285,11 +285,15 @@ function expandItems(items) {
   return [...m].map(([k, qty]) => { const [id, v] = k.split('|'); return v ? { id, qty, v } : { id, qty }; });
 }
 const hasVar = p => !!(p && Array.isArray(p.variants) && p.variants.length);
+/* Dropshipping : produit vendu « sur commande » (fournisseur local) ou « en précommande » (import) : jamais en rupture, stock non déduit */
+const isDsS = p => !!(p && p.ds && ['local', 'import'].includes(p.ds.mode));
+const inStockS = p => isDsS(p) || Number(p && p.stock) > 0;
+const dsPublic = p => isDsS(p) ? { mode: p.ds.mode, days: String(p.ds.days || '').slice(0, 40), deposit: p.ds.mode === 'import' ? Math.max(0, Math.min(100, Math.round(Number(p.ds.deposit) || 0))) : 0 } : null;
 /* Déduit le stock, variante par variante si besoin */
 function applyStock(list, sign) {
   const by = {}; list.forEach(x => (by[x.id] ||= []).push(x));
   for (const pid in by) {
-    const p = getDoc('products', pid); if (!p) continue;
+    const p = getDoc('products', pid); if (!p || isDsS(p)) continue;
     if (hasVar(p) && by[pid].some(x => x.v)) {
       const vars = p.variants.map(v => ({ ...v }));
       by[pid].forEach(x => { const v = x.v && vars.find(y => y.key === x.v); if (v) v.stock = Math.max(0, (Number(v.stock) || 0) - sign * x.qty); });
@@ -365,6 +369,7 @@ function computeOrder(items, promoCode, delivery, ref, dest, pro) {
       if (!vr) throw httpErr(400, `Choisissez la variante de ${p.name}.`);
       { const vp = Math.round(Number(vr.price) > 0 ? Number(vr.price) : Number(p.price) || 0); lines.push({ id, name: p.name + ' — ' + v, price: pro ? Math.min(vp, Math.round(vp * (1 - Math.min(60, Math.max(0, Number(pro.pct) || 0)) / 100))) : vp, qty, variant: v }); }
     } else lines.push({ id, name: p.name, price: proUnit(pro, p, unitPrice(p, qty)), qty });
+    if (isDsS(p)) lines[lines.length - 1].ds = p.ds.mode;
   }
   for (const [key, qty] of bundleQty) {
     const [bid, vs, pick] = JSON.parse(key), b = getDoc('bundles', bid);
@@ -394,11 +399,11 @@ function computeOrder(items, promoCode, delivery, ref, dest, pro) {
   }
   const totals = {};
   for (const { id, qty, v } of expandItems(lines)) {
-    const p = getDoc('products', id);
+    const p = getDoc('products', id); if (isDsS(p)) continue;
     if (v) { const vr = (p.variants || []).find(x => x.key === v), av = vr ? Number(vr.stock) || 0 : 0; if (qty > av) throw httpErr(409, `Stock insuffisant pour ${p.name} — ${v} (${av} disponible).`); }
     totals[id] = (totals[id] || 0) + qty;
   }
-  for (const id in totals) { const p = getDoc('products', id); if (totals[id] > (p.stock || 0)) throw httpErr(409, `Stock insuffisant pour ${p.name} (${p.stock || 0} disponible).`); }
+  for (const id in totals) { const p = getDoc('products', id); if (!isDsS(p) && totals[id] > (p.stock || 0)) throw httpErr(409, `Stock insuffisant pour ${p.name} (${p.stock || 0} disponible).`); }
   const s = settings();
   const subtotal = lines.reduce((t, l) => t + l.price * l.qty, 0);
   let shipping = delivery === 'livraison' ? (subtotal >= Number(s.freeFrom || 0) ? 0 : Math.round(Number(s.deliveryFee) || 0)) : 0;
@@ -425,7 +430,8 @@ function computeOrder(items, promoCode, delivery, ref, dest, pro) {
   }
   if (!affiliate) { const r = findAffiliate(ref); if (r) affiliate = { id: r.id, code: r.code, discountPct: 0 }; }
   if (affiliate) affiliate.commission = affCommission(lines, affiliate.discountPct);
-  return { lines, subtotal, shipping, discount, total: Math.max(0, subtotal + shipping - discount), promoCode: code, affiliate, carrier, shipQuote };
+  const deposit = lines.reduce((t, l) => { if (l.ds !== 'import') return t; const d = dsPublic(getDoc('products', l.id)); return t + Math.round(l.price * l.qty * (d ? d.deposit : 0) / 100); }, 0);
+  return { lines, subtotal, shipping, discount, total: Math.max(0, subtotal + shipping - discount), promoCode: code, affiliate, carrier, shipQuote, deposit };
 }
 
 /* Passage en « payée » : idempotent, déduit le stock une seule fois */
@@ -578,12 +584,13 @@ const dnsP = require('dns').promises, netM = require('net');
 const privateIp = ip => { if (netM.isIPv6(ip)) { const l = ip.toLowerCase(); if (l.startsWith('::ffff:')) return privateIp(l.slice(7)); return l === '::1' || l === '::' || l.startsWith('fc') || l.startsWith('fd') || l.startsWith('fe80'); }
   const [a, b] = ip.split('.').map(Number); return a === 10 || a === 127 || a === 0 || (a === 169 && b === 254) || (a === 172 && b >= 16 && b <= 31) || (a === 192 && b === 168) || (a === 100 && b >= 64 && b <= 127) || a >= 224; };
 const BROWSER_UA = 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0 Safari/537.36';
-async function safeFetch(url, hops = 0, timeout = 10000) {
+async function safeFetch(url, hops = 0, timeout = 10000, opt = {}) {
   const u = new URL(url); if (!/^https?:$/.test(u.protocol)) throw httpErr(400, 'Lien invalide.');
   let addrs; try { addrs = await dnsP.lookup(u.hostname, { all: true }); } catch (e) { throw httpErr(400, 'Site introuvable : vérifiez le lien.'); }
   if (!addrs.length || (addrs.some(x => privateIp(x.address)) && env.IMPORT_TEST_LOCAL !== '1')) throw httpErr(400, 'Adresse non autorisée.');
-  const r = await fetch(url, { redirect: 'manual', signal: AbortSignal.timeout(timeout), headers: { 'user-agent': BROWSER_UA, accept: 'text/html,application/json,image/*;q=0.9,*/*;q=0.8', 'accept-language': 'fr-FR,fr;q=0.9,en;q=0.8' } });
-  if (r.status >= 300 && r.status < 400 && r.headers.get('location')) { if (hops >= 4) throw httpErr(400, 'Trop de redirections.'); return safeFetch(new URL(r.headers.get('location'), url).href, hops + 1, timeout); }
+  const r = await fetch(url, { redirect: 'manual', signal: AbortSignal.timeout(timeout), headers: { 'user-agent': opt.ua || BROWSER_UA, accept: opt.accept || 'text/html,application/json,image/*;q=0.9,*/*;q=0.8', 'accept-language': 'fr-FR,fr;q=0.9,en;q=0.8' } });
+  if (r.status >= 300 && r.status < 400 && r.headers.get('location')) { if (hops >= 6) throw httpErr(400, 'Trop de redirections.'); return safeFetch(new URL(r.headers.get('location'), url).href, hops + 1, timeout, opt); }
+  try { Object.defineProperty(r, 'finalUrl', { value: url }); } catch (e) {}
   return r;
 }
 async function readLimited(r, max) { const buf = Buffer.from(await r.arrayBuffer()); return buf.length > max ? buf.subarray(0, max) : buf; }
@@ -597,50 +604,82 @@ async function robotsAllows(u) {
     return !best || best[0] === 'allow';
   } catch (e) { return true; }
 }
-const htmlText = h => String(h || '').replace(/<br\s*\/?>/gi, '\n').replace(/<\/(p|li|div|h\d)>/gi, '\n').replace(/<[^>]+>/g, ' ').replace(/&nbsp;/g, ' ').replace(/&amp;/g, '&').replace(/&quot;/g, '"').replace(/&#39;|&apos;/g, "'").replace(/&lt;/g, '<').replace(/&gt;/g, '>').replace(/&#(\d+);/g, (m, n) => String.fromCharCode(n)).replace(/[ \t]+/g, ' ').replace(/\n\s*\n+/g, '\n').trim();
+const htmlText = h => String(h || '').replace(/<br\s*\/?>/gi, '\n').replace(/<\/(p|li|div|h\d)>/gi, '\n').replace(/<[^>]+>/g, ' ').replace(/&nbsp;/g, ' ').replace(/&amp;/g, '&').replace(/&quot;/g, '"').replace(/&#39;|&apos;/g, "'").replace(/&lt;/g, '<').replace(/&gt;/g, '>').replace(/&#(\d+);/g, (m, n) => String.fromCodePoint(Number(n) || 32)).replace(/&#x([0-9a-f]+);/gi, (m, n) => String.fromCodePoint(parseInt(n, 16) || 32)).replace(/[ \t]+/g, ' ').replace(/\n\s*\n+/g, '\n').trim();
 function productFromHtml(html, pageUrl) {
   const out = { name: '', description: '', images: [], price: 0, currency: '', brand: '', gtin: '', sku: '', options: [] };
-  const abs = x => { try { return new URL(String(x), pageUrl).href; } catch (e) { return ''; } };
+  const abs = x => { try { return new URL(String(x).trim().replace(/^\/\//, 'https://'), pageUrl).href; } catch (e) { return ''; } };
+  const num = v => { if (typeof v === 'number') return v; let t = String(v ?? '').replace(/[^\d.,]/g, ''); if (/,\d{1,2}$/.test(t)) t = t.replace(/\./g, '').replace(',', '.'); else t = t.replace(/,/g, ''); const n = Number(t); return Number.isFinite(n) ? n : 0; };
   const nodes = [];
-  for (const m of html.matchAll(/<script[^>]+type=["']application\/ld\+json["'][^>]*>([\s\S]*?)<\/script>/gi)) {
-    try { const j = JSON.parse(m[1].trim()); const walk = n => { if (!n || typeof n !== 'object') return; if (Array.isArray(n)) return n.forEach(walk); const t = [].concat(n['@type'] || []); if (t.includes('Product') || t.includes('ProductGroup')) nodes.push(n); if (n['@graph']) walk(n['@graph']); }; walk(j); } catch (e) {}
+  /* 1. Données structurées JSON-LD (la plupart des boutiques : Shopify, WooCommerce, Jumia, sites de marques) */
+  for (const m of html.matchAll(/<script[^>]+type\s*=\s*["']?application\/ld\+json["']?[^>]*>([\s\S]*?)<\/script>/gi)) {
+    let raw = m[1].trim().replace(/^<!--|-->$/g, '').replace(/^\s*\/\/\s*<!\[CDATA\[|\/\/\s*\]\]>\s*$/g, '').trim();
+    let j = null; try { j = JSON.parse(raw); } catch (e) { try { j = JSON.parse(raw.replace(/[\u0000-\u001f]+/g, ' ')); } catch (e2) { j = null; } }
+    const walk = (n, d) => { if (!n || typeof n !== 'object' || d > 6) return; if (Array.isArray(n)) return n.forEach(x => walk(x, d + 1)); const t = [].concat(n['@type'] || []).map(String);
+      if (t.some(x => /^(Product|ProductGroup|IndividualProduct|ProductModel)$/i.test(x))) nodes.push(n); for (const k of ['@graph', 'mainEntity', 'mainEntityOfPage', 'itemListElement', 'item', 'about']) if (n[k]) walk(n[k], d + 1); };
+    walk(j, 0);
   }
-  const p = nodes[0];
+  const p = nodes.find(n => n.name && (n.offers || n.image)) || nodes[0];
   if (p) {
-    out.name = htmlText(p.name); out.description = htmlText(p.description); out.brand = htmlText(typeof p.brand === 'object' ? p.brand && p.brand.name : p.brand); out.sku = String(p.sku || ''); out.gtin = String(p.gtin13 || p.gtin12 || p.gtin || p.gtin8 || '');
-    out.images = [].concat(p.image || []).map(x => typeof x === 'object' ? x.url || x.contentUrl : x).filter(Boolean).map(abs);
-    const offers = [].concat(p.offers || (p.hasVariant ? [].concat(p.hasVariant).map(v => v.offers).flat() : []) || []).flat().filter(Boolean);
-    const o = offers.map(x => x.lowPrice ? { price: x.lowPrice, priceCurrency: x.priceCurrency } : x).find(x => Number(x.price) > 0);
-    if (o) { out.price = Number(o.price); out.currency = String(o.priceCurrency || ''); }
+    out.name = htmlText(p.name); out.description = htmlText(p.description); out.brand = htmlText(typeof p.brand === 'object' ? p.brand && p.brand.name : p.brand); out.sku = String(p.sku || ''); out.gtin = String(p.gtin13 || p.gtin12 || p.gtin || p.gtin8 || p.gtin14 || '');
+    out.images = [].concat(p.image || []).map(x => typeof x === 'object' ? x && (x.url || x.contentUrl) : x).filter(Boolean).map(abs);
+    const offers = [].concat(p.offers || [], p.hasVariant ? [].concat(p.hasVariant).map(v => v && v.offers) : []).flat(3).filter(Boolean).flatMap(x => x.offers ? [].concat(x.offers) : [x]);
+    const o = offers.map(x => x.lowPrice ? { price: x.lowPrice, priceCurrency: x.priceCurrency } : x.priceSpecification && !x.price ? { price: [].concat(x.priceSpecification)[0].price, priceCurrency: [].concat(x.priceSpecification)[0].priceCurrency } : x).find(x => num(x.price) > 0);
+    if (o) { out.price = num(o.price); out.currency = String(o.priceCurrency || ''); }
+    if (p.hasVariant) { const vs = [].concat(p.hasVariant).filter(Boolean); const keys = {}; for (const v of vs) for (const k of ['color', 'size', 'material', 'pattern']) if (v[k]) (keys[k] ||= new Set()).add(htmlText(v[k]));
+      out.options = Object.entries(keys).filter(([, set]) => set.size > 1).map(([k, set]) => ({ name: { color: 'Couleur', size: 'Taille', material: 'Matière', pattern: 'Motif' }[k], values: [...set].slice(0, 20) }));
+      if (!out.images.length) out.images = vs.map(v => [].concat(v.image || [])[0]).filter(Boolean).map(x => abs(typeof x === 'object' ? x.url : x)); }
   }
-  const meta = (prop) => { const re = new RegExp(`<meta[^>]+(?:property|name)=["']${prop}["'][^>]*content=["']([^"']*)["']|<meta[^>]+content=["']([^"']*)["'][^>]*(?:property|name)=["']${prop}["']`, 'i'); const m = re.exec(html); return m ? htmlText(m[1] || m[2]) : ''; };
-  out.name = out.name || meta('og:title') || htmlText((/<title>([^<]*)<\/title>/i.exec(html) || [])[1]);
-  out.description = out.description || meta('og:description') || meta('description');
-  if (!out.images.length) { const im = meta('og:image'); if (im) out.images.push(abs(im)); }
-  if (!out.price) { const pr = Number(meta('product:price:amount') || meta('og:price:amount')); if (pr > 0) { out.price = pr; out.currency = meta('product:price:currency') || meta('og:price:currency'); } }
-  out.images = [...new Set(out.images.filter(x => /^https?:/.test(x)))].slice(0, 8);
+  /* 2. Balises meta (Open Graph, Twitter, microdonnées) */
+  const meta = prop => { const re = new RegExp(`<meta\\s[^>]*(?:property|name|itemprop)\\s*=\\s*["']${prop}["'][^>]*?content\\s*=\\s*("([^"]*)"|'([^']*)')|<meta\\s[^>]*?content\\s*=\\s*("([^"]*)"|'([^']*)')[^>]*(?:property|name|itemprop)\\s*=\\s*["']${prop}["']`, 'i'); const m = re.exec(html); return m ? htmlText(m[2] ?? m[3] ?? m[5] ?? m[6] ?? '') : ''; };
+  const metas = prop => { const re = new RegExp(`<meta\\s[^>]*(?:property|name)\\s*=\\s*["']${prop}["'][^>]*?content\\s*=\\s*["']([^"']+)["']`, 'gi'); return [...html.matchAll(re)].map(m => m[1]); };
+  const cleanTitle = t => { const parts = String(t || '').split(/\s+[|–—]\s+|\s+-\s+(?=[^-]{2,40}$)/); return (parts[0] || '').trim().length >= 6 ? parts[0].trim() : String(t || '').trim(); };
+  out.name = out.name || cleanTitle(meta('og:title') || meta('twitter:title') || meta('name') || htmlText((/<h1[^>]*>([\s\S]*?)<\/h1>/i.exec(html) || [])[1]) || htmlText((/<title[^>]*>([^<]*)<\/title>/i.exec(html) || [])[1]));
+  out.description = out.description || meta('og:description') || meta('twitter:description') || meta('description');
+  if (!out.images.length) out.images = [...metas('og:image'), ...metas('og:image:secure_url'), ...metas('twitter:image'), meta('image')].filter(Boolean).map(abs);
+  if (!out.price) { const pr = num(meta('product:price:amount') || meta('og:price:amount') || meta('price') || meta('twitter:data1')); if (pr > 0) { out.price = pr; out.currency = meta('product:price:currency') || meta('og:price:currency') || meta('priceCurrency') || ''; } }
+  if (!out.price) { const m = /itemprop\s*=\s*["']price["'][^>]*>([^<]{1,30})</i.exec(html); if (m && num(m[1]) > 0) out.price = num(m[1]); }
+  /* 3. Données intégrées dans la page (AliExpress, Alibaba, boutiques en JavaScript) */
+  if (out.images.length < 2) { const m = /"imagePathList"\s*:\s*(\[[^\]]{5,4000}\])/.exec(html) || /"images"\s*:\s*(\["https?:[^\]]{5,4000}\])/.exec(html); if (m) { try { out.images.push(...JSON.parse(m[1]).map(abs)); } catch (e) {} } }
+  if (!out.name) { const m = /"subject"\s*:\s*"([^"]{6,200})"/.exec(html) || /"productTitle"\s*:\s*"([^"]{6,200})"/.exec(html); if (m) out.name = htmlText(m[1]); }
+  if (!out.price) { const m = /"(?:minActivityAmount|minAmount|salePrice|minPrice)"\s*:\s*\{?[^}]{0,80}?"?value"?\s*:\s*"?([\d.]+)"?[^}]{0,80}?"?currency(?:Code)?"?\s*:\s*"([A-Z]{3})"/.exec(html); if (m && num(m[1]) > 0) { out.price = num(m[1]); out.currency = m[2]; } }
+  out.images = [...new Set(out.images.filter(x => /^https?:/.test(x)).map(x => x.replace(/_\d+x\d+(q\d+)?\.(jpg|jpeg|png|webp)(_\.webp)?$/i, '.$2')))].slice(0, 8);
+  out.currency = String(out.currency || '').toUpperCase().trim();
   return out;
 }
+/* Le premier lien trouvé dans un texte collé (partage depuis une application : « Regarde ce produit https://… ») */
+const firstUrl = t => { const m = /https?:\/\/[^\s<>"'«»]+/i.exec(String(t || '')); return m ? m[0].replace(/[),.;!?]+$/, '') : String(t || '').trim(); };
+const BLOCKED_IMPORT = /(^|\.)amazon\.|(^|\.)amzn\.|yangkeduo\.com|pinduoduo\.com|1688\.com|taobao\.com|tmall\.com|temu\.com|shein\.com/;
+const MOBILE_UA = 'Mozilla/5.0 (Linux; Android 13; SM-A145F) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0 Mobile Safari/537.36';
 app.post('/api/admin/import-url', express.json({ limit: '50kb' }), requireStaff, h(async (req, res) => {
   if (limited('imp:' + req.user.id, 60, 3600e3)) throw httpErr(429, 'Trop d’imports en une heure.');
-  let u; try { u = new URL(String(req.body?.url || '').trim()); } catch (e) { throw httpErr(400, 'Collez un lien complet (https://…).'); }
-  const host = u.hostname.replace(/^www\./, '');
-  if (/(^|\.)amazon\.|(^|\.)amzn\.|yangkeduo\.com|pinduoduo\.com|1688\.com|taobao\.com|tmall\.com|temu\.com|shein\.com/.test(host))
-    throw httpErr(422, 'Ce site interdit la lecture automatique de ses pages : faites des captures d’écran de la fiche et ajoutez-les ci-dessous.');
+  let u; try { u = new URL(firstUrl(req.body?.url)); if (!/^https?:$/.test(u.protocol)) throw 0; } catch (e) { throw httpErr(400, 'Collez un lien complet (https://…). Depuis une application, utilisez « Partager › Copier le lien ».'); }
+  const blocked = h => BLOCKED_IMPORT.test(String(h).replace(/^www\./, ''));
+  const NO_READ = 'Ce site interdit la lecture automatique de ses pages : faites des captures d’écran de la fiche et ajoutez-les ci-dessous.';
+  if (blocked(u.hostname)) throw httpErr(422, NO_READ);
+  /* lien court ou de partage (a.aliexpress.com, bit.ly…) : on suit les redirections, puis on vérifie le site final */
+  let r; try { r = await safeFetch(u.href, 0, 15000); } catch (e) { if (e.status) throw e; throw httpErr(422, 'Le site ne répond pas : réessayez, ou utilisez les captures d’écran.'); }
+  if (r.finalUrl && r.finalUrl !== u.href) { try { u = new URL(r.finalUrl); } catch (e) {} if (blocked(u.hostname)) throw httpErr(422, NO_READ); }
   if (!await robotsAllows(u)) throw httpErr(422, 'Ce site interdit la lecture automatique de cette page : utilisez plutôt les captures d’écran.');
-  let r; try { r = await safeFetch(u.href); } catch (e) { if (e.status) throw e; throw httpErr(422, 'Le site ne répond pas : utilisez les captures d’écran.'); }
-  if (!r.ok) throw httpErr(422, `Le site refuse l’accès (code ${r.status}) : utilisez les captures d’écran.`);
-  const html = (await readLimited(r, 4e6)).toString('utf8');
+  if (!r.ok || [403, 429, 503].includes(r.status)) { try { const r2 = await safeFetch(u.href, 0, 15000, { ua: MOBILE_UA }); if (r2.ok) r = r2; } catch (e) {} }
+  if (!r.ok) throw httpErr(422, r.status === 404 ? 'Page introuvable (404) : vérifiez le lien, le produit a peut-être été retiré.' : `Le site bloque la lecture automatique (code ${r.status}) : utilisez les captures d’écran, elles marchent pour tous les sites.`);
+  const ctype = String(r.headers.get('content-type') || '');
+  if (/^image\//.test(ctype)) throw httpErr(422, 'Ce lien mène à une image, pas à une fiche produit : ajoutez-la plutôt dans « Photos du produit ».');
+  const buf = await readLimited(r, 4e6), cs = (/charset=([\w-]+)/i.exec(ctype) || /<meta[^>]+charset=["']?([\w-]+)/i.exec(buf.subarray(0, 3000).toString('latin1')) || [])[1] || 'utf-8';
+  let html; try { html = new TextDecoder(/^(gbk|gb2312|gb18030|big5|shift_jis|euc-kr|windows-1252|iso-8859-1)$/i.test(cs) ? cs : 'utf-8').decode(buf); } catch (e) { html = buf.toString('utf8'); }
+  if (/captcha|robot check|punish|verify you are human|access denied/i.test(html.slice(0, 20000)) && !/application\/ld\+json/i.test(html)) throw httpErr(422, 'Le site demande une vérification anti-robot : utilisez les captures d’écran.');
   let d = productFromHtml(html, u.href);
   if ((!d.name || !d.price) && /\/products\/[^/?#]+/.test(u.pathname)) {   // boutique Shopify : fiche JSON publique
-    try { const r2 = await safeFetch(u.origin + u.pathname.replace(/\/$/, '') + '.js'); if (r2.ok) { const j = JSON.parse((await readLimited(r2, 2e6)).toString('utf8'));
-      d = { ...d, name: d.name || j.title, description: d.description || htmlText(j.description), images: d.images.length ? d.images : (j.images || []).map(x => new URL(x, u.href).href).slice(0, 8), price: d.price || (j.price ? j.price / 100 : 0), brand: d.brand || j.vendor || '',
+    try { const r2 = await safeFetch(u.origin + u.pathname.replace(/\/$/, '') + '.js', 0, 10000, { accept: 'application/json' }); if (r2.ok) { const j = JSON.parse((await readLimited(r2, 2e6)).toString('utf8'));
+      d = { ...d, name: j.title || d.name, description: d.description || htmlText(j.description), images: d.images.length ? d.images : (j.images || []).map(x => new URL(x, u.href).href).slice(0, 8), price: d.price || (j.price ? j.price / 100 : 0), brand: d.brand || j.vendor || '',
         options: (j.options || []).map(o => ({ name: String(o.name || ''), values: (o.values || []).map(String) })).filter(o => o.name && o.values.length > 1) }; } } catch (e) {}
   }
-  if (!d.name) throw httpErr(422, 'Aucune fiche produit lisible sur cette page : utilisez les captures d’écran.');
+  if (!d.name || /^(accueil|home|404|page not found|access denied|just a moment)/i.test(d.name)) throw httpErr(422, 'Aucune fiche produit lisible sur cette page (le contenu est sans doute chargé par une application) : utilisez les captures d’écran.');
   // Photos du produit (copiées pour être recadrées dans la boutique)
   const images = [];
-  for (const src of d.images.slice(0, 6)) { try { const ri = await safeFetch(src, 0, 8000); const ct = (ri.headers.get('content-type') || '').split(';')[0]; if (ri.ok && /^image\/(jpeg|png|webp)$/.test(ct)) { const b = await readLimited(ri, 3e6); if (b.length < 3e6) images.push(`data:${ct};base64,${b.toString('base64')}`); } } catch (e) {} }
+  const sniff = b => b[0] === 0xff && b[1] === 0xd8 ? 'image/jpeg' : b[0] === 0x89 && b[1] === 0x50 ? 'image/png' : b.subarray(0, 4).toString('latin1') === 'RIFF' && b.subarray(8, 12).toString('latin1') === 'WEBP' ? 'image/webp' : b.subarray(0, 3).toString('latin1') === 'GIF' ? 'image/gif' : '';
+  const got = await Promise.all(d.images.slice(0, 8).map(async src => { try { const ri = await safeFetch(src, 0, 12000, { accept: 'image/webp,image/jpeg,image/png;q=0.9,image/*;q=0.5' }); if (!ri.ok) return null;
+    const b = await readLimited(ri, 6e6), ct = sniff(b); return ct && b.length > 1500 && b.length < 6e6 ? `data:${ct};base64,${b.toString('base64')}` : null; } catch (e) { return null; } }));
+  { let tot = 0; for (const x of got) { if (!x || images.length >= 6) continue; if (tot + x.length > 16e6) break; tot += x.length; images.push(x); } }
   // Réécriture en français par l'assistante (si la clé est configurée)
   let fr = null;
   if (env.ANTHROPIC_API_KEY) {
@@ -650,6 +689,7 @@ Réponds UNIQUEMENT avec un objet JSON valide : {"name":"nom court en français 
     try { const txt = await askClaude(system, [{ role: 'user', content: data }], 2500); fr = parseAIJson(txt); } catch (e) { fr = null; }
   }
   const str = (v, n) => String(v || '').slice(0, n), num = v => { const n = Number(String(v ?? '').replace(/[^\d.,]/g, '').replace(',', '.')); return Number.isFinite(n) ? n : 0; };
+  const host = u.hostname.replace(/^www\./, '');
   const cur = String(d.currency || '').toUpperCase().replace('XOF', 'FCFA');
   res.json({ source: host, url: u.href, title_cn: '', name: str(fr && fr.name || d.name, 80), category: str(fr && fr.category, 30), description: str(fr && fr.description || d.description.slice(0, 300), 400),
     highlights: (fr && Array.isArray(fr.highlights) ? fr.highlights : []).slice(0, 6).map(x => str(x, 90)),
@@ -1131,7 +1171,7 @@ function sold30(id) {
     soldCache = { at: Date.now(), map: m }; }
   return soldCache.map[id] || 0;
 }
-const publicProduct = p => ({ ...(isPartnerS(p) ? { partner: { platform: ['amazon', 'aliexpress', 'temu', 'jumia', 'autre'].includes(p.partner.platform) ? p.partner.platform : 'autre', url: p.partner.url } } : {}), id: p.id, name: p.name, sku: p.sku, category: p.category, price: p.price, comparePrice: p.comparePrice, stock: p.stock, lowStock: p.lowStock, emoji: p.emoji, image: p.image, description: p.description, active: true, createdAt: p.createdAt, bulkMin: p.bulkMin || 0, bulkPrice: p.bulkPrice || 0, newUntil: p.newUntil || 0, ...(typeof p.carousel === 'boolean' ? { carousel: p.carousel } : {}),
+const publicProduct = p => ({ ...(isPartnerS(p) ? { partner: { platform: ['amazon', 'aliexpress', 'temu', 'jumia', 'autre'].includes(p.partner.platform) ? p.partner.platform : 'autre', url: p.partner.url } } : {}), id: p.id, name: p.name, sku: p.sku, category: p.category, price: p.price, comparePrice: p.comparePrice, stock: isDsS(p) ? 999 : p.stock, lowStock: p.lowStock, ...(isDsS(p) ? { ds: dsPublic(p) } : {}), emoji: p.emoji, image: p.image, description: p.description, active: true, createdAt: p.createdAt, bulkMin: p.bulkMin || 0, bulkPrice: p.bulkPrice || 0, newUntil: p.newUntil || 0, ...(typeof p.carousel === 'boolean' ? { carousel: p.carousel } : {}),
   condition: p.condition || 'neuf', conditionNote: p.conditionNote || '',
   upsell: /^(auto|off|[A-Za-z0-9_-]{1,40})$/.test(p.upsell || '') ? p.upsell : 'auto', downsell: /^(auto|off|[A-Za-z0-9_-]{1,40})$/.test(p.downsell || '') ? p.downsell : 'auto',
   lpHook: p.lpHook || '', lpSub: p.lpSub || '', lpProblem: p.lpProblem || '', lpSolution: p.lpSolution || '', lpUsages: p.lpUsages || '', lpFaq: p.lpFaq || '', lpOffer: p.lpOffer || '', lpUntil: p.lpUntil || '',
@@ -1140,7 +1180,7 @@ const publicProduct = p => ({ ...(isPartnerS(p) ? { partner: { platform: ['amazo
   packs: hasVar(p) ? [] : cleanPacks(p), lpExpress: p.lpExpress !== false, lpGuarantee: String(p.lpGuarantee || '').slice(0, 300), lpCompare: String(p.lpCompare || '').slice(0, 1500), lpCompareOff: !!p.lpCompareOff,
   lpProofs: (Array.isArray(p.lpProofs) ? p.lpProofs : []).filter(u => /^\/media\/sp[a-z0-9]{6,30}\.jpg$/.test(u)).slice(0, 10),
   lpAudio: /^\/media\/v[a-z0-9]{6,30}\.(mp3|m4a|aac|ogg|webm|wav|mp4)$/i.test(p.lpAudio || '') ? p.lpAudio : '', lpAudioTitle: String(p.lpAudioTitle || '').slice(0, 80),
-  options: Array.isArray(p.options) ? p.options : [], variants: Array.isArray(p.variants) ? p.variants.map(v => ({ key: v.key, vals: v.vals, stock: v.stock, price: v.price, barcode: v.barcode || '' })) : [],
+  options: Array.isArray(p.options) ? p.options : [], variants: Array.isArray(p.variants) ? p.variants.map(v => ({ key: v.key, vals: v.vals, stock: isDsS(p) ? 999 : v.stock, price: v.price, barcode: v.barcode || '' })) : [],
   barcode: p.barcode || '',
   gallery: Array.isArray(p.gallery) ? p.gallery : [], highlights: p.highlights || '', details: p.details || '', specs: p.specs || '', warranty: p.warranty || '' });
 app.get('/api/public/catalog', (req, res) => {
@@ -1525,6 +1565,7 @@ app.post('/api/orders', h(async (req, res) => {
     ...(delivery === 'livraison' && SLOTS[b.slot] ? { slot: String(b.slot) } : {}),
     ...(pro ? { pro: { id: pro.id, name: pro.name || '', company: pro.company || '' } } : {}), ...(pointsUsed ? { pointsUsed, pointsDiscount } : {}), ...(referral ? { referral, refDiscount } : {}),
     customer, delivery, payment: { method, ...(method === 'terme' ? { dueAt: Date.now() + Math.max(7, Math.min(90, Number(pro.termDays) || 30)) * 864e5 } : {}), status: method === 'terme' ? 'à payer sous ' + Math.max(7, Math.min(90, Number(pro.termDays) || 30)) + ' jours' : method === 'cod' ? 'à encaisser' : manual ? 'à vérifier' : 'en attente', ref: manual ? String(b.payRef || '').trim().slice(0, 60) : '', manual: !!manual, to: manual || '' },
+    ...(t.deposit && method === 'cod' ? { deposit: { amount: Math.min(t.deposit, t.total), paid: false } } : {}),
     status: 'en_attente', channel: 'en ligne', stockApplied: false, createdAt: Date.now(), createdBy: 'web', token: randomToken()
   };
   putDoc('orders', id, order);
@@ -1576,7 +1617,7 @@ app.post('/api/orders/:id/addon', h(async (req, res) => {
   if (o.payment?.method !== 'cod' || o.status !== 'en_attente' || o.stockApplied || Date.now() - (o.createdAt || 0) > 30 * 60e3) throw httpErr(400, 'Cette commande ne peut plus être modifiée en ligne : écrivez-nous sur WhatsApp.');
   if ((o.items || []).some(i => i.addon)) throw httpErr(400, 'Vous avez déjà profité de cette offre.');
   const pid = String(req.body?.pid || ''), p = validId(pid) && getDoc('products', pid);
-  if (!p || p.active === false || isPartnerS(p) || hasVar(p) || (Number(p.stock) || 0) <= 0) throw httpErr(400, 'Ce produit n’est plus disponible.');
+  if (!p || p.active === false || isPartnerS(p) || hasVar(p) || !inStockS(p)) throw httpErr(400, 'Ce produit n’est plus disponible.');
   const price = Math.max(0, Math.round(unitPrice(p, 1) * (1 - pct / 100)));
   const items = [...o.items, { id: pid, name: p.name, price, qty: 1, addon: true }], subtotal = (o.subtotal || 0) + price;
   let shipping = o.shipping || 0;
@@ -2012,14 +2053,14 @@ function seoPage(req) {
 }
 function ssrMain(pg) {
   const { s, kind, p, cat } = pg, live = liveProducts(), cats = [...new Set(live.map(x => x.category).filter(Boolean))].sort();
-  const li = x => `<li><a href="${escH(canonPath(x))}">${escH(x.name)}</a> — ${plain(x.price)} FCFA${x.stock > 0 ? '' : ' (rupture)'}</li>`;
+  const li = x => `<li><a href="${escH(canonPath(x))}">${escH(x.name)}</a> — ${plain(x.price)} FCFA${inStockS(x) ? '' : ' (rupture)'}</li>`;
   const wrap = h => `<div class="seo-ssr" style="max-width:900px;margin:0 auto;padding:20px 16px;line-height:1.6">${h}</div>`;
   if ((kind === 'product' || kind === 'offer') && p) {
     const img = productImage(p.id, p), hl = lines2(p.highlights), specs = lines2(p.specs), rs = pubReviewsS(p.id);
     return wrap(`<nav aria-label="Fil d’Ariane"><a href="/">${escH(s.shopName)}</a>${p.category ? ` › <a href="${escH(catPath(p.category))}">${escH(p.category)}</a>` : ''} › ${escH(p.name)}</nav>
 <article><h1>${escH(kind === 'offer' && p.lpHook ? p.lpHook : p.name)}</h1>${kind === 'offer' && p.lpHook ? `<p><strong>${escH(p.name)}</strong></p>` : ''}
 <img src="${escH(img)}" alt="${escH(p.name)}" width="400" height="400" style="max-width:100%;height:auto">
-<p><strong>${plain(p.price)} FCFA</strong>${p.comparePrice > p.price ? ` au lieu de ${plain(p.comparePrice)} FCFA` : ''} · ${p.stock > 0 ? 'En stock' : 'Rupture de stock'}</p>
+<p><strong>${plain(p.price)} FCFA</strong>${p.comparePrice > p.price ? ` au lieu de ${plain(p.comparePrice)} FCFA` : ''} · ${isDsS(p) ? (p.ds.mode === 'import' ? 'En précommande' : 'Sur commande') : p.stock > 0 ? 'En stock' : 'Rupture de stock'}</p>
 ${p.description ? `<p>${escH(p.description)}</p>` : ''}${p.lpSub ? `<p>${escH(p.lpSub)}</p>` : ''}${p.lpProblem ? `<p>${escH(p.lpProblem)}</p>` : ''}${p.lpSolution ? `<p>${escH(p.lpSolution)}</p>` : ''}
 ${hl.length ? `<h2>Points forts</h2><ul>${hl.map(x => `<li>${escH(x)}</li>`).join('')}</ul>` : ''}
 ${lines2(p.details).length ? `<h2>En détail</h2>${lines2(p.details).map(x => `<p>${escH(x)}</p>`).join('')}` : ''}
@@ -2076,7 +2117,7 @@ function seoJson(pg) {
     const imgs = [productImage(p.id, p), ...(Array.isArray(p.gallery) ? p.gallery.slice(0, 5).map(g => `${BASE_URL}/img/pi/${encodeURIComponent(g)}`) : [])];
     out.push({ '@context': 'https://schema.org', '@type': 'Product', name: p.name, image: imgs, description: String(p.description || p.lpSub || p.name).slice(0, 500), sku: p.sku || p.id,
       ...(/^\d{13}$/.test(p.barcode || '') && !String(p.barcode).startsWith('2') ? { gtin13: p.barcode } : {}), ...(brand ? { brand: { '@type': 'Brand', name: brand } } : {}), ...(p.category ? { category: p.category } : {}),
-      offers: { '@type': 'Offer', url, priceCurrency: 'XOF', price: String(Math.round(p.price)), availability: p.stock > 0 ? 'https://schema.org/InStock' : 'https://schema.org/OutOfStock', itemCondition: condSchema(p.condition), seller: { '@id': BASE_URL + '/#store' }, ...offerExtras(s, p) },
+      offers: { '@type': 'Offer', url, priceCurrency: 'XOF', price: String(Math.round(p.price)), availability: isDsS(p) ? (p.ds.mode === 'import' ? 'https://schema.org/PreOrder' : 'https://schema.org/InStock') : p.stock > 0 ? 'https://schema.org/InStock' : 'https://schema.org/OutOfStock', itemCondition: condSchema(p.condition), seller: { '@id': BASE_URL + '/#store' }, ...offerExtras(s, p) },
       ...(rs.length ? { aggregateRating: { '@type': 'AggregateRating', ratingValue: (rs.reduce((t, r) => t + r.rating, 0) / rs.length).toFixed(1), reviewCount: rs.length },
         review: rs.slice(0, 5).map(r => ({ '@type': 'Review', author: { '@type': 'Person', name: r.name || 'Client' }, reviewRating: { '@type': 'Rating', ratingValue: r.rating, bestRating: 5 }, ...(r.text ? { reviewBody: String(r.text).slice(0, 500) } : {}), ...(r.createdAt ? { datePublished: new Date(r.createdAt).toISOString().slice(0, 10) } : {}) })) } : {}) });
     out.push({ '@context': 'https://schema.org', '@type': 'BreadcrumbList', itemListElement: [{ '@type': 'ListItem', position: 1, name: s.shopName, item: BASE_URL + '/' }, ...(p.category ? [{ '@type': 'ListItem', position: 2, name: p.category, item: BASE_URL + catPath(p.category) }] : []), { '@type': 'ListItem', position: p.category ? 3 : 2, name: p.name, item: url }] });
@@ -2142,9 +2183,9 @@ function catalogRows(src) {
     const desc = String(p.description || p.lpSub || lines2(p.highlights).join('. ') || p.name).replace(/\s+/g, ' ').trim().slice(0, 4900);
     const link = `${BASE_URL}${canonPath(p)}?src=${src}&utm_source=${src}&utm_medium=paid&utm_campaign=catalogue`;
     const extra = Array.isArray(p.gallery) ? p.gallery.slice(0, 9).map(g => `${BASE_URL}/img/pi/${encodeURIComponent(g)}`) : [];
-    return { id: p.sku || p.id, title: String(p.name).slice(0, 150), description: desc, availability: Number(p.stock) > 0 ? 'in stock' : 'out of stock',
+    return { id: p.sku || p.id, title: String(p.name).slice(0, 150), description: desc, availability: isDsS(p) ? (p.ds.mode === 'import' ? 'preorder' : 'in stock') : Number(p.stock) > 0 ? 'in stock' : 'out of stock',
       condition: p.condition && p.condition !== 'neuf' ? (/reconditionn|refurb/i.test(p.condition) ? 'refurbished' : 'used') : 'new', price: `${cmp || price} XOF`, sale_price: cmp ? `${price} XOF` : '',
-      link, image_link: productImage(p.id, p), additional_image_link: extra.join(','), brand, product_type: String(p.category || '').slice(0, 750), inventory: Math.max(0, Math.round(Number(p.stock) || 0)) };
+      link, image_link: productImage(p.id, p), additional_image_link: extra.join(','), brand, product_type: String(p.category || '').slice(0, 750), inventory: isDsS(p) ? 99 : Math.max(0, Math.round(Number(p.stock) || 0)) };
   });
 }
 const csvCell = v => { const x = String(v == null ? '' : v); return /[",\n\r]/.test(x) ? '"' + x.replace(/"/g, '""') + '"' : x; };
@@ -2189,7 +2230,7 @@ app.get('/catalogue.csv', (req, res) => {
   for (const p of allDocs('products').filter(x => x.active !== false && x.name && x.price > 0 && !isPartnerS(x))) {
     const promo = p.comparePrice > p.price;
     rows.push([p.id, p.name.slice(0, 150), (p.description || `${p.name}${p.category ? ' — ' + p.category : ''}, disponible chez ${s.shopName}.`).slice(0, 5000),
-      p.stock > 0 ? 'in stock' : 'out of stock', !p.condition || p.condition === 'neuf' ? 'new' : p.condition === 'reconditionne' ? 'refurbished' : 'used', `${Math.round(promo ? p.comparePrice : p.price)} XOF`, promo ? `${Math.round(p.price)} XOF` : '',
+      inStockS(p) ? 'in stock' : 'out of stock', !p.condition || p.condition === 'neuf' ? 'new' : p.condition === 'reconditionne' ? 'refurbished' : 'used', `${Math.round(promo ? p.comparePrice : p.price)} XOF`, promo ? `${Math.round(p.price)} XOF` : '',
       `${BASE_URL}/?p=${encodeURIComponent(p.id)}`, productImage(p.id, p), (Array.isArray(p.gallery) ? p.gallery : []).slice(0, 10).map(g => `${BASE_URL}/img/pi/${encodeURIComponent(g)}`).join(','), s.shopName, p.category || '']);
   }
   res.set({ 'Content-Type': 'text/csv; charset=utf-8', 'Cache-Control': 'no-cache' }).send(rows.map(r => r.map(q).join(',')).join('\n'));

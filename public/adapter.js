@@ -19,6 +19,7 @@
       if (me) {
         const s = await api('GET', '/api/admin/state');
         S.products = s.products; S.bundles = s.bundles || []; S.promos = s.promos; S.affiliates = s.affiliates || []; S.affPayouts = s.affPayouts || []; S.visits = s.visits || []; S.reviews = s.reviews || []; S.campaigns = s.campaigns || []; S.adSpend = s.adSpend || []; S.pros = s.pros || []; S.drivers = s.drivers || []; S.purchases = s.purchases || []; S.affClicks = s.affClicks || []; S.articles = s.articles || []; S.lpStats = s.lpStats || []; S.socialPosts = s.socialPosts || []; S.social = s.social || { meta: { connected: false } }; S.contactFlags = Object.fromEntries((s.contactFlags || []).map(f => [f.id, f])); S.costs = Object.fromEntries((s.costs || []).map(c => [c.id, Number(c.cost) || 0])); S.stockMoves = s.stockMoves || [];
+        if (window.dsNormalize) dsNormalize(S.products);
         S.clients = (s.clients||[]).sort((a,b)=>a.name.localeCompare(b.name)); S.suppliers = (s.suppliers||[]).sort((a,b)=>a.name.localeCompare(b.name));
         S.moves = s.moves || []; S.cashSessions = s.cashSessions || []; S.avoirs = s.avoirs || []; S.ledger = s.ledger || []; S.finConfig = s.finConfig || {}; S.orders = s.orders; S.users = s.users;
         S.settings = mergeSettings(s.settings); providers = s.providers; configured = s.configured || {}; notif = s.notifications || {};
