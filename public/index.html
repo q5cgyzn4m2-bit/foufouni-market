@@ -4235,6 +4235,47 @@ function openReminders(){
   }));
 }
 
+/* ===================== Brouillard de caisse : journal imprimable d'un compte sur une période ===================== */
+function brouillardModal(){ const t = today(), B = S.brl || (S.brl = {acc:'caisse', from:t, to:t});
+  const per = [['jour','Aujourd’hui',t,t],['hier','Hier',addDays(t,-1),addDays(t,-1)],['semaine','7 derniers jours',addDays(t,-6),t],['mois','Ce mois',t.slice(0,8)+'01',t]];
+  $('#overlay').innerHTML = `<div class="scrim" data-a="closeAll"><div class="modal" role="dialog" aria-modal="true" aria-label="Brouillard de caisse"><div class="m-h"><h2>🖨️ Brouillard de caisse</h2><button class="x" data-a="closeAll" aria-label="Fermer">×</button></div>
+    <div class="m-b"><p class="muted small" style="margin-top:0">Le journal de toutes les entrées et sorties d’argent, avec le report, les totaux, le solde, une grille de comptage des billets et pièces et les signatures. À imprimer ou enregistrer en PDF.</p>
+      <div class="field"><label for="br-acc">Compte</label><select class="input" id="br-acc">${Object.entries(ACCOUNTS).map(([k,l])=>`<option value="${k}" ${B.acc===k?'selected':''}>${l}</option>`).join('')}<option value="all" ${B.acc==='all'?'selected':''}>Tous les comptes (un brouillard par compte)</option></select></div>
+      <div class="cats" style="margin:4px 0 8px">${per.map(([k,l,f,to])=>`<button aria-pressed="${B.from===f&&B.to===to}" data-a="brPer" data-f="${f}" data-t="${to}">${l}</button>`).join('')}</div>
+      <div class="row"><div class="field"><label for="br-from">Du</label><input class="input" type="date" id="br-from" value="${B.from}"></div><div class="field"><label for="br-to">Au</label><input class="input" type="date" id="br-to" value="${B.to}"></div></div></div>
+    <div class="m-f"><button class="btn ghost" data-a="closeAll">Annuler</button><button class="btn primary" data-a="brPrint">🖨️ Imprimer le brouillard</button></div></div></div>`; }
+function brouillardHTML(acc, from, to){ const st = S.settings, c = S.finConfig||{}, open0 = {caisse:Number(c.openCaisse)||0, banque:Number(c.openBanque)||0, momo:Number(c.openMomo)||0};
+  const accs = acc==='all' ? Object.keys(ACCOUNTS) : [acc], printed = new Date().toLocaleString('fr-FR',{dateStyle:'long', timeStyle:'short'}), per = from===to ? 'Journée du '+dateOnly(from) : 'Du '+dateOnly(from)+' au '+dateOnly(to);
+  const money = n => fmt(Math.abs(n)).replace(/[  ]/g,' '), who = S.myName || '';
+  const sheet = a => { const mv = S.moves.filter(m=>m.account===a), before = open0[a] + mv.filter(m=>(m.date||'')<from).reduce((t,m)=>t+(Number(m.amount)||0),0);
+    const rows = mv.filter(m=>(m.date||'')>=from && (m.date||'')<=to).sort((x,y)=>(x.date||'').localeCompare(y.date||'') || (x.createdAt||0)-(y.createdAt||0));
+    let bal = before, tin = 0, tout = 0;
+    const tr = rows.map((m,i)=>{ const a2 = Number(m.amount)||0; bal += a2; if(a2>=0) tin += a2; else tout -= a2;
+      const det = [MOVE_TYPES[m.type]||'', m.category||'', m.partyId?partyName(m.type==='reg_client'||m.type==='vente'?'client':'supplier', m.partyId):''].filter(Boolean).join(' · ');
+      return `<tr><td class="c">${i+1}</td><td class="nw">${dateOnly(m.date)}</td><td><b>${esc(m.label||MOVE_TYPES[m.type]||'')}</b>${det?`<div class="d">${esc(det)}</div>`:''}</td><td class="nw">${esc(m.ref||'')}</td><td class="r in">${a2>=0?money(a2):''}</td><td class="r out">${a2<0?money(a2):''}</td><td class="r b">${bal<0?'−':''}${money(bal)}</td></tr>`; }).join('');
+    return `<section class="sheet"><div class="hd"><div><h2>${esc(st.legalName||st.shopName)}</h2><div class="d">${esc([st.address, st.city].filter(Boolean).join(', '))}${st.phone?' · Tél. '+esc(st.phone):''}${st.rccm?'<br>RCCM '+esc(st.rccm):''}${st.nif?' · NIF '+esc(st.nif):''}</div></div>
+      <div class="ttl"><h1>BROUILLARD DE CAISSE</h1><div><b>${esc(ACCOUNTS[a])}</b></div><div>${per}</div><div class="d">Édité le ${printed}${who?' par '+esc(who):''}</div></div></div>
+      <table><thead><tr><th class="c">N°</th><th>Date</th><th>Libellé</th><th>Pièce / Réf.</th><th class="r">Entrées</th><th class="r">Sorties</th><th class="r">Solde</th></tr></thead><tbody>
+        <tr class="rep"><td></td><td class="nw">${dateOnly(from)}</td><td colspan="4"><b>Report (solde à l’ouverture)</b></td><td class="r b">${before<0?'−':''}${money(before)}</td></tr>
+        ${tr || '<tr><td colspan="7" class="c d" style="padding:14px">Aucun mouvement sur la période</td></tr>'}</tbody>
+        <tfoot><tr><td colspan="4" class="r">Totaux de la période (${rows.length} opération${rows.length>1?'s':''})</td><td class="r in">${money(tin)}</td><td class="r out">${money(tout)}</td><td></td></tr>
+        <tr class="fin"><td colspan="6" class="r">Solde théorique à la clôture</td><td class="r">${bal<0?'−':''}${money(bal)}</td></tr></tfoot></table>
+      ${a==='caisse'?`<div class="two"><table class="bil"><thead><tr><th>Billets et pièces</th><th class="r">Nombre</th><th class="r">Montant</th></tr></thead><tbody>${[10000,5000,2000,1000,500,250,200,100,50,25,10,5].map(v=>`<tr><td>${money(v)} ${v>=1000||v===500?'':'(pièce)'}</td><td></td><td></td></tr>`).join('')}<tr class="fin"><td>Total compté</td><td></td><td></td></tr></tbody></table>
+        <div class="ctl"><p>Solde théorique : <b>${bal<0?'−':''}${money(bal)}</b></p><p>Espèces comptées : ...............................</p><p>Écart (compté − théorique) : ...............................</p><p>Explication de l’écart : ..........................................................................................................................................</p></div></div>`
+        :`<div class="ctl"><p>Solde théorique : <b>${bal<0?'−':''}${money(bal)}</b></p><p>Solde relevé (${a==='banque'?'relevé bancaire':'compte mobile money'}) : ...............................</p><p>Écart : ...............................</p></div>`}
+      <div class="sig"><div>Le caissier<br><span>Nom et signature</span></div><div>Le gérant<br><span>Nom et signature</span></div></div></section>`; };
+  return `<!DOCTYPE html><html lang="fr"><head><meta charset="utf-8"><title>Brouillard de caisse · ${esc(per)}</title><style>
+    body{font:12.5px/1.4 system-ui,Arial,sans-serif;color:#111;margin:24px} h1{font-size:20px;margin:0;letter-spacing:.04em} h2{font-size:16px;margin:0}
+    .sheet{page-break-after:always;max-width:1000px;margin:0 auto 30px} .sheet:last-of-type{page-break-after:auto}
+    .hd{display:flex;justify-content:space-between;gap:20px;align-items:flex-start;border-bottom:2px solid #111;padding-bottom:10px;margin-bottom:12px} .ttl{text-align:right}
+    .d{color:#555;font-size:11px} table{width:100%;border-collapse:collapse;margin:8px 0} th,td{border:1px solid #bbb;padding:5px 7px;vertical-align:top} th{background:#f0ede6;text-align:left;font-size:11.5px}
+    .r{text-align:right} .c{text-align:center} .nw{white-space:nowrap} .in{color:#11683a} .out{color:#a3241a} .b{font-weight:700} .rep td{background:#faf8f3}
+    tfoot td{font-weight:700;background:#faf8f3} tr.fin td{font-size:14px;background:#f0ede6;font-weight:800}
+    .two{display:grid;grid-template-columns:1fr 1fr;gap:18px;margin-top:12px} .bil td{height:20px} .ctl p{margin:10px 0;line-height:1.9}
+    .sig{display:flex;justify-content:space-between;gap:40px;margin-top:26px} .sig div{flex:1;border-top:1px solid #111;padding-top:6px;min-height:70px;font-weight:700} .sig span{font-weight:400;color:#666;font-size:11px}
+    .bar{position:sticky;top:0;background:#fff;padding:8px 0 12px;text-align:right} .bar button{padding:10px 18px;font-size:14px;cursor:pointer}
+    @media print{ body{margin:8mm} .bar{display:none} @page{size:A4;margin:8mm} }</style></head><body>
+    <div class="bar"><button onclick="print()">🖨️ Imprimer / Enregistrer en PDF</button></div>${accs.map(sheet).join('')}</body></html>`; }
 function viewTreasury(){
   const b = balances(), total = b.caisse+b.banque+b.momo;
   const recv = S.clients.reduce((t,c)=>t+Math.max(0,partyBalance('client',c.id)),0);
@@ -4262,6 +4303,7 @@ function viewTreasury(){
     <button class="btn ghost" data-a="finAction" data-v="reg_fournisseur">Régler un fournisseur</button>
     <button class="btn ghost" data-a="finAction" data-v="reg_client">Encaisser une créance</button>
     <button class="btn ghost" data-a="finOpen">Soldes et délais</button>
+    <button class="btn ghost" data-a="brouillard">🖨️ Brouillard de caisse</button>
   </div>
   <div class="two"><div class="panel"><div class="toolbar"><h3 style="flex:1;margin:0">Journal</h3>
       <label class="sr" for="tr-acc">Compte</label><select class="input" id="tr-acc" data-fin="acc" style="max-width:170px"><option value="all">Tous les comptes</option>${Object.entries(ACCOUNTS).map(([k,l])=>`<option value="${k}" ${S.trAcc===k?'selected':''}>${l}</option>`).join('')}</select>
@@ -5794,6 +5836,11 @@ document.addEventListener('click', async e=>{
     case 'delMove': { if(!confirmTwice(el)) break; const m=S.moves.find(x=>x.id===id); try{ const lo = m && m.orderId && S.orders.find(o=>o.id===m.orderId && o.cashed && o.cashed.moveId===m.id); if(lo) await patch('orders', lo.id, {cashed:null}); const grp = m.group ? S.moves.filter(x=>x.group===m.group) : [m]; for(const x of grp) await del('fin-moves', x.id); const le=S.ledger.find(l=>l.moveId===id); if(le) await del('fin-ledger', le.id); toast('Écriture supprimée'); }catch(err){ dbErr(err); } break; }
     case 'newParty': partyForm(el.dataset.v, null); break;
     case 'partyDetail': partyDetail(el.dataset.v, id); break;
+    case 'brouillard': brouillardModal(); break;
+    case 'brPer': { S.brl = {...(S.brl||{}), acc:$('#br-acc').value, from:el.dataset.f, to:el.dataset.t}; brouillardModal(); break; }
+    case 'brPrint': { const acc = $('#br-acc').value; let from = $('#br-from').value || today(), to = $('#br-to').value || from; if(from>to) [from, to] = [to, from];
+      S.brl = {acc, from, to}; const w = window.open('', '_blank'); if(!w){ toast('Autorisez les fenêtres pour ce site afin d’imprimer le brouillard.'); break; }
+      w.document.write(brouillardHTML(acc, from, to)); w.document.close(); setTimeout(()=>{ try{ w.focus(); w.print(); }catch(e){} }, 500); closeAll(); break; }
     case 'exportMoves': save('journal-tresorerie.csv', csv([['Date','Type','Libellé','Catégorie','Compte','Montant','Référence'], ...S.moves.slice().sort((a,b)=>(a.date||'').localeCompare(b.date||'')).map(m=>[m.date,MOVE_TYPES[m.type],m.label,m.category,ACCOUNTS[m.account],m.amount,m.ref])])); break;
     case 'exportParties': { const tp=el.dataset.v, list=tp==='client'?S.clients:S.suppliers; save(tp==='client'?'clients.csv':'fournisseurs.csv', csv([['Nom','Téléphone','E-mail','Adresse','Produits','Solde dû','Note'], ...list.map(x=>[x.name,x.phone,x.email,x.address,x.products,partyBalance(tp,x.id),x.note])])); break; }
     case 'posClear': S.pos=[]; S.posPromo=null; schedule(); break;
