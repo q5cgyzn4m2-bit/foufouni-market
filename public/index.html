@@ -835,6 +835,19 @@ tr.click:hover td{background:var(--surface-2)}
 .pos-ticket{position:sticky; top:calc(84px + env(safe-area-inset-top,0px)); background:var(--surface); border:1px solid var(--line); border-radius:var(--r-m); display:flex; flex-direction:column; max-height:calc(100vh - 110px)}
 .pos-ticket .m-b{overflow:auto; flex:1}
 .cash-keys{display:grid; grid-template-columns:repeat(3,1fr); gap:6px}
+.sess-bar{display:flex;align-items:center;gap:10px;flex-wrap:wrap;justify-content:space-between;padding:10px 14px;border-radius:12px;background:rgba(60,170,105,.13);border:1px solid rgba(60,170,105,.45);margin-bottom:12px;font-size:14px;color:inherit}
+.sess-bar.off{background:rgba(220,80,60,.12);border-color:rgba(220,80,60,.45)}.sess-bar.warn{background:rgba(230,170,40,.13);border-color:rgba(230,170,40,.5)}
+.held-row{display:flex;flex-wrap:wrap;gap:6px;padding:8px 16px 0}
+.held-chip{display:inline-flex;align-items:center;border:1px dashed currentColor;border-radius:999px;background:rgba(127,127,127,.12);font-size:12.5px;max-width:100%}
+.held-chip>button:first-child{border:0;background:none;padding:5px 4px 5px 10px;cursor:pointer;text-align:left;font:inherit;color:inherit;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.held-chip .x{border:0;background:none;padding:4px 10px 4px 4px;cursor:pointer;font-size:16px;line-height:1;color:var(--muted)}
+.split-rows{display:grid;gap:6px}.split-row{display:grid;grid-template-columns:1fr 130px auto;gap:6px;align-items:center}.split-row.av{grid-template-columns:1fr 130px 110px}
+.split-row .input{padding:8px 10px}
+.bill-grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(110px,1fr));gap:6px}.bill{display:grid;gap:2px;font-size:12.5px;font-weight:700}.bill .input{padding:6px 8px}
+.tgt-mine{padding:8px 14px;border-radius:12px;background:rgba(127,127,127,.12);margin-bottom:12px;font-size:14px}
+.tgt-bar{height:8px;border-radius:99px;background:rgba(127,127,127,.25);overflow:hidden;margin:6px 0 2px}.tgt-bar i{display:block;height:100%;background:var(--indigo);border-radius:99px}
+.tgt-row{display:flex;gap:12px;align-items:flex-start;padding:10px 0;border-bottom:1px solid var(--line)}.tgt-row:last-child{border-bottom:0}.tgt-rk{font-size:22px;width:32px;text-align:center}
+@media (max-width:560px){ .split-row{grid-template-columns:1fr 110px} .split-row .btn{grid-column:1/-1} .split-row.av{grid-template-columns:1fr 1fr} .split-row.av span{grid-column:1/-1} }
 
 /* Promo tickets */
 .tickets{display:grid; grid-template-columns:repeat(auto-fill,minmax(300px,1fr)); gap:14px}
@@ -1047,6 +1060,7 @@ function syncLocal(){
   S.moves = arr('fin-moves').sort((a,b)=>b.createdAt-a.createdAt);
   S.ledger = arr('fin-ledger').sort((a,b)=>b.createdAt-a.createdAt);
   S.finConfig = local['fin-config']?.main || {};
+  S.cashSessions = arr('cash-sessions').sort((a,b)=>b.openedAt-a.openedAt); S.avoirs = arr('avoirs').sort((a,b)=>b.createdAt-a.createdAt);
   S.promos = arr('promos').sort((a,b)=>(b.createdAt||0)-(a.createdAt||0));
   S.orders = arr('orders').sort((a,b)=>(b.createdAt||0)-(a.createdAt||0));
   S.settings = mergeSettings(local.settings?.main);
@@ -1730,6 +1744,7 @@ function posScan(code){
 })();
 /* Paiement par QR à la caisse : le client scanne l'écran et paie sur son téléphone */
 async function posQrPay(){
+  if(S.posDisc) return toast('Le QR de paiement n’applique pas la remise manuelle : encaissez avec le bouton « Encaisser ».');
   const t = computeTotals(S.pos, S.posPromo, 'retrait'); if(!t.lines.length) return;
   const issue = stockIssue(S.pos); if(issue) return toast(issue);
   let res;
@@ -3718,11 +3733,11 @@ function receiptHTML(o){
     ${o.items.map(i=>`<div class="rr"><span>${i.qty} × ${esc(i.name)}</span><span>${fmt(i.price*i.qty)}</span></div>`).join('')}
     <div style="border-top:2px dashed var(--line); margin:10px 0"></div>
     <div class="rr"><span>Sous-total</span><span>${fmt(o.subtotal)}</span></div>${o.pro?`<div class="rr"><span>💼 Compte pro</span><span>${esc(o.pro.company||o.pro.name)}</span></div>`:''}${o.pointsDiscount?`<div class="rr"><span>⭐ ${o.pointsUsed} points fidélité</span><span>−${fmt(o.pointsDiscount)}</span></div>`:''}${o.refDiscount?`<div class="rr"><span>🤝 Parrainage</span><span>−${fmt(o.refDiscount)}</span></div>`:''}${o.payment&&o.payment.dueAt?`<div class="rr"><span>Échéance</span><span>${new Date(o.payment.dueAt).toLocaleDateString('fr-FR')}</span></div>`:''}
-    ${o.discount?`<div class="rr"><span>Remise ${esc(o.promoCode)}</span><span>−${fmt(o.discount)}</span></div>`:''}
+    ${o.discount-(o.manualDisc?o.manualDisc.amount:0)>0?`<div class="rr"><span>Remise ${esc(o.promoCode)}</span><span>−${fmt(o.discount-(o.manualDisc?o.manualDisc.amount:0))}</span></div>`:''}${o.manualDisc&&o.manualDisc.amount?`<div class="rr"><span>Remise accordée</span><span>−${fmt(o.manualDisc.amount)}</span></div>`:''}
     ${o.carrier?`<div class="rr"><span>Transport · ${esc(o.carrier.name)}${o.carrier.days?' ('+esc(o.carrier.days)+')':''}</span><span>${fmt(o.shipping)}</span></div>`:o.shipping?`<div class="rr"><span>Livraison</span><span>${fmt(o.shipping)}</span></div>`:''}${o.shipQuote?`<div class="rr"><span>Transport</span><span>Sur devis</span></div>`:''}
     ${o.gift?`<div class="rr" style="color:var(--kola)"><span>🎁 ${esc(o.gift)}</span><span>Offert</span></div>`:''}
     <div class="rr" style="font:800 18px var(--f-d); margin-top:6px"><span>Total</span><span>${fmt(o.total)}</span></div>
-    <div class="rr muted small"><span>Paiement</span><span>${esc(PROCESSORS[o.payment?.method]?.name || (o.payment?.method==='cash'?'Espèces':o.payment?.method==='credit'?'À crédit':o.payment?.method))}</span></div>
+    ${o.payment?.parts&&o.payment.parts.length?o.payment.parts.map(p=>`<div class="rr muted small"><span>${esc(methodName(p.method))}${p.method==='avoir'&&o.payment.avoir?' '+esc(o.payment.avoir):''}</span><span>${fmt(p.amount)}</span></div>`).join(''):`<div class="rr muted small"><span>Paiement</span><span>${esc(PROCESSORS[o.payment?.method]?.name || (o.payment?.method==='cash'?'Espèces':o.payment?.method==='credit'?'À crédit':o.payment?.method))}</span></div>`}${o.returnedTotal?`<div class="rr small"><span>↩ Retourné</span><span>−${fmt(o.returnedTotal)}</span></div>`:''}
     ${o.payment?.received?`<div class="rr muted small"><span>Reçu / rendu</span><span>${fmt(o.payment.received)} / ${fmt(Math.max(0,o.payment.received-o.total))}</span></div>`:''}
     ${o.payment?.rest>0?`<div class="rr"><span>Payé</span><span>${fmt(o.payment.paid||0)}</span></div><div class="rr" style="font-weight:700"><span>Reste à payer</span><span>${fmt(o.payment.rest)}</span></div>${o.payment.due?`<div class="rr" style="font-weight:700"><span>Échéance de paiement</span><span>${dateOnly(o.payment.due)}</span></div><div style="margin-top:8px;padding:8px;border:1.5px dashed currentColor;border-radius:6px;text-align:center;font-weight:700">À régler au plus tard le ${dateOnly(o.payment.due)}</div>`:''}`:''}
     <div class="rr muted small"><span>Réf.</span><span>${esc(o.payment?.ref||'')}</span></div>
@@ -3757,6 +3772,8 @@ function viewSalesLog(){
   <div class="cats" style="margin-bottom:8px">${[['today','Aujourd’hui'],['week','7 jours'],['month','Ce mois'],['all','Tout']].map(([k,l])=>`<button aria-pressed="${day===k}" data-a="slDay" data-v="${k}">${l}</button>`).join('')}</div>
   <div class="cats" style="margin-bottom:14px">${[['caisse','En caisse'],['online','En ligne'],['all','Toutes']].map(([k,l])=>`<button aria-pressed="${f===k}" data-a="slF" data-v="${k}">${l}</button>`).join('')}</div>
   <div class="kpis" style="grid-template-columns:repeat(${g?3:1},minmax(0,1fr))"><div class="kpi k-in"><span>Chiffre d’affaires</span><b>${fmt(tot)}</b></div>${g?`<div class="kpi ${prof>=0?'k-in':'k-out'}"><span>Bénéfice</span><b>${fmt(prof)}</b></div><div class="kpi k-in"><span>25 % du bénéfice</span><b>${fmt(Math.round(prof*PROFIT_SHARE))}</b></div>`:''}</div>
+  <div class="fin-actions" style="margin:0 0 12px">${dayReportBtn()}</div>
+  ${g?discountsPanel(os):''}${avoirsPanel()}
   ${g&&miss?`<div class="alert"><span>⚠️ ${miss} article${miss>1?'s':''} sans <b>prix d’achat</b> : leur bénéfice n’est pas compté (« — »). Renseignez-le dans Gestion › Produits › Modifier › Prix d’achat.</span></div>`:''}
   ${g?`<p class="muted small" style="margin:0 0 10px">🔒 Les colonnes <b>Bénéfice</b> et <b>25 %</b> ne sont visibles que par le gérant. Bénéfice = (prix de vente − prix d’achat) × quantité, d’après le prix d’achat actuel.</p>`:''}
   ${window.innerWidth<760 ? `<div class="sl-cards">${os.length?os.map(o=>{ const k = disc(o); return `<div class="panel" style="padding:12px 14px;margin-bottom:10px"><div class="toolbar" style="margin-bottom:6px"><b class="click" data-a="orderDetail" data-id="${o.id}" style="flex:1">${esc(o.number||'')}</b><span class="muted small">${new Date(o.createdAt).toLocaleString('fr-FR',{day:'numeric',month:'short',hour:'2-digit',minute:'2-digit'})}</span></div>
@@ -3770,17 +3787,18 @@ function viewSalesLog(){
 }
 /* --- Caisse (POS) --- */
 function viewPos(){
-  const tabs = [['vente','Vente'],['ventes','Ventes'],['tresorerie','Trésorerie'],['clients','Clients'],['fournisseurs','Fournisseurs']];
+  const tabs = [['vente','Vente'],['ventes','Ventes'],['tresorerie','Trésorerie'],['clients','Clients'],['fournisseurs','Fournisseurs'],['reassort','Réassort'],['objectifs','Objectifs'],['reglages','Réglages caisse']];
   const nav = `<div class="cats" role="tablist" aria-label="Caisse" style="margin-bottom:22px">${tabs.map(([k,l])=>`<button role="tab" aria-pressed="${S.posTab===k}" data-a="posTab" data-v="${k}">${l}</button>`).join('')}</div>`;
-  const v = {vente:viewSale, ventes:viewSalesLog, tresorerie:viewTreasury, clients:()=>viewParties('client'), fournisseurs:()=>viewParties('supplier')}[S.posTab] || viewSale;
+  const v = {vente:viewSale, ventes:viewSalesLog, tresorerie:viewTreasury, clients:()=>viewParties('client'), fournisseurs:()=>viewParties('supplier'), reassort:viewRestock, objectifs:viewTargets, reglages:viewPosSettings}[S.posTab] || viewSale;
   return nav + v();
 }
 function viewSale(){
   const q = S.aq.trim().toLowerCase();
   const list = S.products.filter(p=>p.active!==false && !isPartner(p) && (!q || (p.name+' '+(p.sku||'')+' '+p.category).toLowerCase().includes(q)));
-  const t = computeTotals(S.pos, S.posPromo, 'retrait');
+  const t = posTotals();
   const lcd = S.posLcd || {l1:'PRÊT · SCANNEZ UN ARTICLE', l2:S.settings.shopName.toUpperCase()};
   return `<div class="sec-h"><h2>Caisse</h2><span class="muted small">Vente au comptoir · le stock est mis à jour à l’encaissement</span></div>
+  ${offlineBar()}${sessionBar()}${myTargetBar()}
   <div class="term" aria-label="Terminal de caisse"><div class="lcd" aria-live="polite"><div class="l1">${esc(lcd.l1)}</div><div class="tot">${fmt(t.total)}</div><div class="l2">${esc(lcd.l2)}</div><div class="l2" style="text-align:right">${t.lines.reduce((n,l)=>n+l.qty,0)} ARTICLE(S)</div></div>
     <div class="term-row"><label class="sr" for="pos-scan">Code-barres</label><input class="input" id="pos-scan" inputmode="numeric" autocomplete="off" placeholder="Scannez ou tapez un code puis Entrée">
       <button class="btn ghost" data-a="posCam">📷 Caméra</button><button class="btn primary" data-a="posQr" ${t.lines.length?'':'disabled'}>▦ QR de paiement</button></div>
@@ -3789,26 +3807,38 @@ function viewSale(){
     <div class="toolbar"><label class="sr" for="aq">Recherche ou code SKU</label><input class="input" id="aq" data-in="aq" value="${esc(S.aq)}" placeholder="Nom ou SKU puis Entrée" style="max-width:none; flex:1"></div>
     <div class="pos-grid">${!q?S.bundles.filter(b=>b.active!==false&&b.type!=='mix'&&bundleInfo(b).ok&&!bundleInfo(b).needVar).map(b=>`<button class="pos-item" data-a="posBundle" data-id="${b.id}" ${bundleInfo(b).max<=0?'disabled style="opacity:.45"':''}><span class="e" style="width:44px;overflow:hidden;border-radius:8px">${bundleVisual(b)}</span><b>Lot · ${esc(b.name)}</b><span class="price" style="font-size:14px">${fmt(b.price)}</span><span class="muted small">Disponible ${bundleInfo(b).max}</span></button>`).join(''):''}${list.map(p=>`<button class="pos-item" data-a="posAdd" data-id="${p.id}" ${p.stock<=0?'disabled style="opacity:.45"':''}><span class="e">${p.image?`<img src="${esc(p.image)}" alt="">`:esc(p.emoji||'📦')}</span><b>${esc(p.name)}</b><span class="price" style="font-size:14px">${fmt(p.price)}</span><span class="muted small">Stock ${p.stock}</span></button>`).join('') || '<div class="empty">Aucun produit.</div>'}</div>
   </div>
-  <aside class="pos-ticket" aria-label="Ticket en cours"><div class="m-h"><h2>Ticket</h2>${S.pos.length?'<button class="btn sm ghost" data-a="posClear">Vider</button>':''}</div>
+  <aside class="pos-ticket" aria-label="Ticket en cours"><div class="m-h"><h2>Ticket</h2>${S.pos.length?'<span class="row" style="gap:6px;flex:0;flex-wrap:nowrap"><button class="btn sm ghost" data-a="posHold" title="Mettre ce ticket de côté et servir le client suivant">⏸ Attente</button><button class="btn sm ghost" data-a="posClear">Vider</button></span>':''}</div>${heldChips()}
     <div class="m-b">${t.lines.length?t.lines.map(l=>`<div class="line-item" style="grid-template-columns:1fr auto"><div><b class="small">${esc(l.name)}</b>${l.bulk?' <span class="bulk">gros</span>':''}${isGerant()?(()=>{ const pr = lineProfit(l.kind==='bundle'?{bundle:true, comps:l.comps, price:l.unit, qty:l.qty}:{id:l.id, price:l.unit, qty:l.qty}); return `<div class="small" style="margin-top:2px">${pr===null?'<span class="muted">Bénéfice : — (prix d’achat manquant)</span>':`Bénéfice <b class="${pr>=0?'amt-in':'amt-out'}">${fmt(pr)}</b> · 25 % <b class="amt-in">${fmt(Math.round(pr*PROFIT_SHARE))}</b>`}</div>`; })():''}<div class="qty" style="margin-top:6px"><button data-a="posQty" data-id="${esc(l.key)}" data-d="-1" aria-label="Retirer un">−</button><span>${l.qty}</span><button data-a="posQty" data-id="${esc(l.key)}" data-d="1" aria-label="Ajouter un">+</button></div></div><b>${fmt(l.unit*l.qty)}</b></div>`).join(''):'<p class="muted">Touchez un produit pour l’ajouter.</p>'}
-    <div style="margin:14px 0">${promoBox('pos')}</div>
-    <div class="totals"><div><span>Sous-total</span><span>${fmt(t.subtotal)}</span></div>${t.discount?`<div style="color:var(--kola)"><span>Remise</span><span>−${fmt(t.discount)}</span></div>`:''}<div class="grand"><span>Total</span><span>${fmt(t.total)}</span></div></div></div>
+    <div style="margin:14px 0">${promoBox('pos')}${t.lines.length?`<button class="btn ghost sm" data-a="posDisc" style="margin-top:8px">🏷️ ${S.posDisc?'Modifier la remise manuelle':'Remise manuelle'}</button>`:''}${S.posAvoir?`<p class="small" style="margin:8px 0 0">🎟 Avoir <b>${esc(S.posAvoir)}</b> prêt pour l’encaissement</p>`:''}</div>
+    <div class="totals"><div><span>Sous-total</span><span>${fmt(t.subtotal)}</span></div>${t.discount-t.manual?`<div style="color:var(--kola)"><span>Remise</span><span>−${fmt(t.discount-t.manual)}</span></div>`:''}${t.manual?`<div style="color:var(--kola)"><span>Remise manuelle · ${esc(S.posDisc.reason)}</span><span>−${fmt(t.manual)}</span></div>`:''}<div class="grand"><span>Total</span><span>${fmt(t.total)}</span></div></div></div>
     <div class="m-f" style="justify-content:stretch"><button class="btn accent block" data-a="posPay" ${t.lines.length?'':'disabled'}>Encaisser ${fmt(t.total)}</button></div>
   </aside></div>`;
 }
 const phoneOk = ph => String(ph||'').replace(/\D/g,'').length >= 8;
 function posPay(){
-  const t = computeTotals(S.pos, S.posPromo, 'retrait');
-  const methods = [['cash','Espèces','#2C6A4F','💵'], ...enabledProcs().filter(([k])=>k!=='cod').map(([k])=>[k,PROCESSORS[k].name,PROCESSORS[k].color,PROCESSORS[k].short]), ['credit','Tout à crédit','#8A6A2B','📒']];
-  const st = {sel:'cash', received:String(t.total), paid:String(t.total), ref:'', clientId:'', newName:'', newPhone:''};
+  if(posNeedSession()) return sessionOpenModal(true);
+  const t = posTotals();
+  const procs = enabledProcs().filter(([k])=>k!=='cod' && k!=='terme').map(([k])=>k);
+  const methods = [['cash','Espèces','#2C6A4F','💵'], ...procs.map(k=>[k,PROCESSORS[k].name,PROCESSORS[k].color,PROCESSORS[k].short]), ['split','Mixte ou avoir','#6B4FA0','➗'], ['credit','Tout à crédit','#8A6A2B','📒']];
+  const partKeys = ['cash', ...procs];
+  const st = {sel:S.posAvoir?'split':'cash', received:String(t.total), paid:String(t.total), ref:'', clientId:'', newName:'', newPhone:'', parts:{}, avCode:S.posAvoir||'', avAmt:''};
   const calc = ()=>{
-    const tot = t.total; let paid;
+    const tot = t.total;
+    if(st.sel==='split'){
+      const av = avoirFind(st.avCode), avOk = avoirOk(av), avAmt = avOk ? Math.min(avoirBal(av), tot, st.avAmt==='' ? tot : Math.max(0, Number(st.avAmt)||0)) : 0;
+      const others = partKeys.map(k=>[k, Math.max(0, Number(String(st.parts[k]||'').replace(/\s/g,''))||0)]);
+      let sum = avAmt + others.reduce((a,[,v])=>a+v,0), change = 0; const cashIn = (others.find(([k])=>k==='cash')||[0,0])[1];
+      if(sum>tot){ const cash = others.find(([k])=>k==='cash'), take = Math.min(sum-tot, cash[1]); change = take; cash[1] -= take; sum -= take; }
+      const parts = [...(avAmt?[['avoir',avAmt]]:[]), ...others.filter(([,v])=>v>0)];
+      return {paid:Math.min(sum, tot), rest:Math.max(0, tot-sum), over:Math.max(0, sum-tot), change, parts, av, avOk, avAmt, cashIn};
+    }
+    let paid;
     if(st.sel==='credit') paid = 0;
     else if(st.sel==='cash') paid = Math.min(Math.max(0,Number(st.received)||0), tot);
     else paid = Math.min(Math.max(0,Number(st.paid)||0), tot);
-    return {paid, rest:tot-paid, change: st.sel==='cash' ? Math.max(0,(Number(st.received)||0)-tot) : 0};
+    return {paid, rest:tot-paid, over:0, change: st.sel==='cash' ? Math.max(0,(Number(st.received)||0)-tot) : 0, parts: paid>0 ? [[st.sel, paid]] : [], cashIn: st.sel==='cash' ? (Number(st.received)||0) : 0};
   };
-  const read = ()=>{ ['received','paid','ref','newName','newPhone'].forEach(k=>{ const el=$('#pp-'+k); if(el) st[k]=el.value; }); const c=$('#pp-client'); if(c) st.clientId=c.value; };
+  const read = ()=>{ ['received','paid','ref','newName','newPhone','avCode','avAmt'].forEach(k=>{ const el=$('#pp-'+k); if(el) st[k]=el.value; }); document.querySelectorAll('[data-part]').forEach(i=>{ st.parts[i.dataset.part] = i.value; }); const c=$('#pp-client'); if(c) st.clientId=c.value; };
   const clientOpts = ()=>S.clients.map(c=>`<option value="${c.id}" ${c.id===st.clientId?'selected':''}>${esc(c.name)}${c.phone?' · '+esc(c.phone):' · sans numéro'}</option>`).join('');
   const clientBlock = rest => rest<=0
     ? `<div class="field" style="margin-top:12px"><label for="pp-client">Client (facultatif)</label><select class="input" id="pp-client"><option value="">Client de passage</option>${clientOpts()}</select></div>`
@@ -3819,22 +3849,28 @@ function posPay(){
   const refresh = force=>{
     read(); const c = calc();
     if($('#change')) $('#change').textContent = fmt(c.change);
-    $('#pp-sum').innerHTML = `<span>Payé maintenant</span><b>${fmt(c.paid)}</b><span>Reste à payer</span><b style="color:${c.rest>0?'var(--danger)':'var(--kola)'}">${fmt(c.rest)}</b>`;
+    if($('#pp-avinfo')) $('#pp-avinfo').innerHTML = !st.avCode.trim() ? '' : !c.av ? '<span style="color:var(--danger)">Code d’avoir introuvable.</span>' : !c.avOk ? `<span style="color:var(--danger)">Avoir ${c.av.expiresAt<Date.now()?'expiré':'déjà utilisé'}.</span>` : `✅ Avoir de ${esc(c.av.name||'client')} · solde <b>${fmt(avoirBal(c.av))}</b> · utilisé ici <b>${fmt(c.avAmt)}</b>`;
+    $('#pp-sum').innerHTML = `<span>Payé maintenant</span><b>${fmt(c.paid)}</b><span>Reste à payer</span><b style="color:${c.rest>0?'var(--danger)':'var(--kola)'}">${fmt(c.rest)}</b>${c.over?`<span style="color:var(--danger)">Trop perçu (hors espèces)</span><b style="color:var(--danger)">${fmt(c.over)}</b>`:''}`;
     const need = c.rest>0;
     if(force || need!==lastNeed){ lastNeed = need; $('#pp-cw').innerHTML = clientBlock(c.rest); const sel=$('#pp-client'); if(sel) sel.onchange=()=>refresh(true); if(st.clientId==='__new' && force) $('#pp-newName')?.focus(); }
   };
+  const splitUI = ()=>`<div class="split-rows" style="margin-top:14px">
+      <div class="split-row av"><span>🎟 Avoir</span><input class="input" id="pp-avCode" value="${esc(st.avCode)}" placeholder="Code AV…" autocomplete="off" style="text-transform:uppercase"><input class="input" id="pp-avAmt" inputmode="numeric" value="${esc(st.avAmt)}" placeholder="Montant"></div>
+      <div class="small" id="pp-avinfo" style="margin:-2px 0 6px"></div>
+      ${partKeys.map(k=>{ const n = k==='cash' ? ['💵','Espèces'] : [PROCESSORS[k].short, PROCESSORS[k].name]; return `<div class="split-row"><span>${esc(n[0])} ${esc(n[1])}</span><input class="input" data-part="${k}" inputmode="numeric" value="${esc(st.parts[k]||'')}" placeholder="0"><button class="btn ghost sm" data-fill="${k}" title="Mettre le reste ici">Le reste</button></div>`; }).join('')}
+      <p style="margin:6px 0 0">Monnaie à rendre : <b id="change">${fmt(0)}</b></p></div>`;
   const draw = ()=>{
     const amountUI = st.sel==='cash'
       ? `<div class="field" style="margin-top:16px"><label for="pp-received">Montant reçu</label><input class="input" id="pp-received" inputmode="numeric" value="${esc(st.received)}"></div>
         <div class="cash-keys">${[1000,2000,5000,10000,t.total,Math.ceil(t.total/5000)*5000].filter((v,i,a)=>a.indexOf(v)===i).map(v=>`<button class="btn ghost sm" data-cash="${v}">${fmt(v)}</button>`).join('')}</div>
         <p style="margin:10px 0 0">Monnaie à rendre : <b id="change">${fmt(0)}</b></p>`
-      : st.sel==='credit' ? ''
+      : st.sel==='credit' ? '' : st.sel==='split' ? splitUI()
       : `<div class="row" style="margin-top:16px"><div class="field"><label for="pp-paid">Montant payé</label><input class="input" id="pp-paid" inputmode="numeric" value="${esc(st.paid)}"></div><div class="field"><label for="pp-ref">Référence de la transaction</label><input class="input" id="pp-ref" value="${esc(st.ref)}" placeholder="Ex. ID de transaction"></div></div>`;
     $('#overlay').innerHTML = `<div class="scrim" data-a="closeAll"><div class="modal" role="dialog" aria-modal="true" aria-label="Encaissement">
       <div class="m-h"><h2>Encaisser ${fmt(t.total)}</h2><button class="x" data-a="closeAll" aria-label="Fermer">×</button></div>
-      <div class="m-b"><div class="pay-opts" style="grid-template-columns:repeat(auto-fill,minmax(150px,1fr))">${methods.map(([k,n,c,sh])=>`<button class="pay-opt" data-m="${k}" aria-pressed="${st.sel===k}"><span class="pay-logo" style="background:${c}">${sh}</span><b class="small">${n}</b></button>`).join('')}</div>
+      <div class="m-b">${t.manual?`<p class="small" style="margin:0 0 10px">🏷️ Remise manuelle incluse : <b>−${fmt(t.manual)}</b> (${esc(S.posDisc.reason)})</p>`:''}<div class="pay-opts" style="grid-template-columns:repeat(auto-fill,minmax(150px,1fr))">${methods.map(([k,n,c,sh])=>`<button class="pay-opt" data-m="${k}" aria-pressed="${st.sel===k}"><span class="pay-logo" style="background:${c}">${sh}</span><b class="small">${n}</b></button>`).join('')}</div>
       ${amountUI}
-      ${st.sel==='credit'?'':'<p class="muted small" style="margin:8px 0 0">Paiement partiel possible : saisissez le montant réellement payé, le reste passera en créance.</p>'}
+      ${st.sel==='credit'?'':st.sel==='split'?'<p class="muted small" style="margin:8px 0 0">Répartissez le montant entre plusieurs moyens (ex. une partie en espèces, le reste en Orange Money) et/ou utilisez un avoir. Ce qui manque passe en créance.</p>':'<p class="muted small" style="margin:8px 0 0">Paiement partiel possible : saisissez le montant réellement payé, le reste passera en créance.</p>'}
       <div class="totals" id="pp-sum" style="grid-template-columns:1fr auto;display:grid;gap:4px 12px;margin-top:14px;padding:12px;border:1px solid var(--line);border-radius:10px"></div>
       <div id="pp-cw"></div>
       <div class="small" id="pos-err" style="color:var(--danger);margin-top:8px"></div></div>
@@ -3842,11 +3878,18 @@ function posPay(){
     lastNeed = null; refresh(false);
     $('#overlay').querySelectorAll('[data-m]').forEach(b=>b.onclick=e=>{ e.stopPropagation(); read(); st.sel=b.dataset.m; draw(); });
     $('#overlay').querySelectorAll('[data-cash]').forEach(b=>b.onclick=e=>{ e.stopPropagation(); $('#pp-received').value=b.dataset.cash; refresh(false); });
-    ['#pp-received','#pp-paid'].forEach(id=>{ const el=$(id); if(el) el.oninput=()=>refresh(false); });
+    $('#overlay').querySelectorAll('[data-fill]').forEach(b=>b.onclick=e=>{ e.stopPropagation(); const k = b.dataset.fill, i = document.querySelector(`[data-part="${k}"]`); i.value = ''; read(); const c = calc(); i.value = c.rest || ''; refresh(false); });
+    ['#pp-received','#pp-paid','#pp-avCode','#pp-avAmt'].forEach(id=>{ const el=$(id); if(el) el.oninput=()=>refresh(false); });
+    $('#overlay').querySelectorAll('[data-part]').forEach(el=>el.oninput=()=>refresh(false));
     $('#pos-ok').onclick = validate;
   };
   const validate = async ()=>{
-    read(); const {paid, rest} = calc(), err = $('#pos-err');
+    read(); const c = calc(), {paid, rest} = c, err = $('#pos-err');
+    if(st.sel==='split'){
+      if(st.avCode.trim() && !c.avOk) { err.textContent = 'Avoir invalide : corrigez le code ou videz le champ.'; return; }
+      if(c.over>0){ err.textContent = 'Le total des paiements dépasse le montant à payer (seules les espèces peuvent rendre la monnaie).'; return; }
+      if(!c.parts.length){ err.textContent = 'Indiquez au moins un montant, ou choisissez « Tout à crédit ».'; return; }
+    }
     let client = null, newClient = null;
     if(rest>0){
       if(st.clientId==='__new'){
@@ -3867,29 +3910,444 @@ function posPay(){
     const id = newId('o'), number = 'FM-'+new Date().toISOString().slice(2,10).replace(/-/g,'')+'-'+rnd(4);
     const status = rest>0 ? (paid>0?'partiel':'à crédit') : 'réussi';
     const due = rest>0 ? addDays(today(), termDays()) : '';
+    const sess = openSession(), d = S.posDisc;
     const order = {
       number, items:orderItems(t.lines),
       subtotal:t.subtotal, discount:t.discount, shipping:0, total:t.total, promoCode:S.posPromo?S.posPromo.code:'',
       affiliate:S.posPromo&&S.posPromo.affiliate?{id:S.posPromo.affiliate.id, code:S.posPromo.code, discountPct:S.posPromo.value, commission:affCommission(t.lines, S.posPromo.value)}:null,
+      ...(t.manual ? {manualDisc:{amount:t.manual, type:d.type, value:d.value, reason:d.reason, note:d.note||'', by:d.by||S.myName||'', uid:d.uid||S.uid||'', role:d.role||myRole()}} : {}),
       customer:{name:client?client.name:'', phone:client?client.phone||'':'', address:'', city:'', note:''}, clientId:client?client.id:'', delivery:'retrait',
-      payment:{method:st.sel, paid, rest, due, status, received:st.sel==='cash'?(Number(st.received)||0):0,
-        ref:st.sel==='cash'?'CAISSE-'+rnd(6):st.sel==='credit'?'CREDIT-'+rnd(6):(st.ref.trim()||st.sel.toUpperCase()+'-'+rnd(8))},
-      status:'livree', channel:'caisse', stockApplied:true, createdAt:Date.now(), createdBy:S.uid||'local', cashier:S.uid||'local'
+      payment:{method:st.sel, paid, rest, due, status, received:c.cashIn||0,
+        ...(st.sel==='split' ? {parts:c.parts.map(([m,a])=>({method:m, amount:a})), ...(c.avAmt?{avoir:c.av.code}:{})} : {}),
+        ref:st.sel==='cash'?'CAISSE-'+rnd(6):st.sel==='credit'?'CREDIT-'+rnd(6):st.sel==='split'?'MIXTE-'+rnd(6):(st.ref.trim()||st.sel.toUpperCase()+'-'+rnd(8))},
+      status:'livree', channel:'caisse', stockApplied:true, createdAt:Date.now(), createdBy:S.uid||'local', cashier:S.uid||'local', cashierName:S.myName||'', ...(sess?{sessionId:sess.id}:{})
     };
-    try{
-      if(newClient){ const {id:cid, ...cd} = newClient; await put('clients', cid, cd); }
-      await put('orders', id, order);
-      await applyStock(expandItems(order.items), 1);
-      const base = {date:today(), ref:number, orderId:id, createdAt:Date.now(), createdBy:S.uid||'local'};
-      if(paid>0) await put('fin-moves', newId('m'), {...base, type:'vente', account:accountFor(st.sel), amount:paid, label:rest>0?`Vente ${number} (acompte)`:`Vente ${number}`, partyId:client?client.id:''});
-      if(rest>0) await put('fin-ledger', newId('l'), {...base, partyType:'client', partyId:client.id, kind:'facture', amount:rest, due,
-        label: paid>0 ? `Reste à payer, vente ${number} (total ${fmt(t.total)}, payé ${fmt(paid)})` : `Vente à crédit ${number}`});
-    }catch(e){ dbErr(e); err.textContent='La vente n’a pas pu être enregistrée.'; $('#pos-ok').disabled=false; return; }
-    S.pos=[]; S.posPromo=null; schedule(); showReceipt({id,...order}, false);
-    toast(rest>0 ? `Vente enregistrée · ${fmt(rest)} à régler avant le ${dateOnly(due)}` : 'Vente enregistrée');
+    const base = {date:today(), ref:number, orderId:id, createdAt:Date.now(), createdBy:S.uid||'local'}, ops = [];
+    if(newClient){ const {id:cid, ...cd} = newClient; ops.push(['put','clients',cid,cd]); }
+    ops.push(['put','orders',id,order]);
+    ops.push(['stock', expandItems(order.items), 1]);
+    c.parts.forEach(([m,a])=>{ if(m==='avoir') ops.push(['avoirUse', c.av.id, a, id]);
+      else ops.push(['put','fin-moves',newId('m'),{...base, type:'vente', account:accountFor(m), amount:a, method:m, label:(rest>0?`Vente ${number} (acompte)`:`Vente ${number}`)+(c.parts.length>1?` · ${methodName(m)}`:''), partyId:client?client.id:''}]); });
+    if(rest>0) ops.push(['put','fin-ledger',newId('l'),{...base, partyType:'client', partyId:client.id, kind:'facture', amount:rest, due,
+        label: paid>0 ? `Reste à payer, vente ${number} (total ${fmt(t.total)}, payé ${fmt(paid)})` : `Vente à crédit ${number}`}]);
+    let res;
+    try{ res = await posCommit(ops, 'Vente '+number); }
+    catch(e){ dbErr(e); err.textContent='La vente n’a pas pu être enregistrée.'; $('#pos-ok').disabled=false; return; }
+    S.pos=[]; S.posPromo=null; S.posDisc=null; S.posAvoir=null; schedule(); showReceipt({id,...order}, false);
+    const pc = prnCfg(); if(pc.drawer && c.cashIn>0) openDrawer(false); if(pc.auto) setTimeout(()=>printTicket({id,...order}), 150);
+    toast((res&&res.offline?'📴 Vente gardée hors ligne · ':'') + (rest>0 ? `Vente enregistrée · ${fmt(rest)} à régler avant le ${dateOnly(due)}` : 'Vente enregistrée'));
   };
   draw();
 }
+
+/* ===================== Caisse+ : tickets en attente, remises contrôlées, sessions, retours et avoirs, réassort, objectifs, hors ligne, imprimante ===================== */
+const POS_DEF_DISC = {'Gérant':100, 'Vendeur':10, 'Caissier':10, 'Gestionnaire de stock':0, 'Livreur':0};
+const myRole = () => isGerant() ? 'Gérant' : (S.myRole || ((S.team&&S.team.members)||[]).find(m=>m.id===S.uid)?.role || 'Vendeur');
+const posCap = role => { const v = (S.settings.posMaxDisc||{})[role]; return Math.max(0, Math.min(100, Number(v ?? POS_DEF_DISC[role] ?? 0) || 0)); };
+const DISC_REASONS = ['Client fidèle','Achat en quantité','Article abîmé ou défaut','Geste commercial','Erreur de prix','Autre'];
+function posTotals(){
+  const t = computeTotals(S.pos, S.posPromo, 'retrait'); t.manual = 0;
+  const d = S.posDisc;
+  if(d && t.lines.length){ const base = t.total; let m = d.type==='pct' ? Math.round(base*(Number(d.value)||0)/100) : Math.min(Number(d.value)||0, base);
+    const cap = Math.round(t.subtotal*(d.cap ?? 100)/100); if(m > cap) m = cap;
+    t.manual = Math.max(0, m); t.discount += t.manual; t.total = Math.max(0, t.total - t.manual); }
+  return t;
+}
+function posDiscModal(){
+  const role = myRole(), cap = posCap(role), t0 = computeTotals(S.pos, S.posPromo, 'retrait');
+  if(!t0.lines.length) return;
+  if(cap<=0) return toast(`Votre rôle (${role}) ne permet pas d’accorder de remise : demandez au gérant.`);
+  const d = S.posDisc || {type:'pct', value:'', reason:'', note:''};
+  $('#overlay').innerHTML = `<div class="scrim" data-a="closeAll"><div class="modal" role="dialog" aria-modal="true" aria-label="Remise manuelle">
+    <div class="m-h"><h2>Remise manuelle</h2><button class="x" data-a="closeAll" aria-label="Fermer">×</button></div>
+    <div class="m-b"><p class="muted small" style="margin-top:0">Ticket : ${fmt(t0.total)} · maximum autorisé pour votre rôle (<b>${esc(role)}</b>) : <b>${cap} %</b>${cap<100?` soit ${fmt(Math.round(t0.subtotal*cap/100))}`:''}.</p>
+    <div class="cats" role="group" aria-label="Type de remise" id="pd-type"><button data-t="pct" aria-pressed="${d.type==='pct'}">En %</button><button data-t="amt" aria-pressed="${d.type==='amt'}">En FCFA</button></div>
+    <div class="field"><label for="pd-v">Valeur</label><input class="input" id="pd-v" inputmode="numeric" value="${esc(d.value)}" placeholder="${d.type==='pct'?'Ex. 5':'Ex. 2000'}"></div>
+    <div class="field"><label>Motif (obligatoire)</label><div class="cats" id="pd-r" role="group" aria-label="Motif">${DISC_REASONS.map(r=>`<button data-r="${esc(r)}" aria-pressed="${d.reason===r}">${esc(r)}</button>`).join('')}</div></div>
+    <div class="field"><label for="pd-n">Précision${d.reason==='Autre'?' (obligatoire)':' (facultatif)'}</label><input class="input" id="pd-n" value="${esc(d.note||'')}" maxlength="120" placeholder="Ex. client habitué depuis 2 ans"></div>
+    <p class="small" id="pd-sum" style="margin:6px 0 0"></p><div class="xp-err" id="pd-err"></div>
+    <p class="muted small" style="margin:8px 0 0">La remise, son motif et le vendeur sont enregistrés sur la vente et visibles par le gérant dans Caisse › Ventes.</p></div>
+    <div class="m-f">${S.posDisc?'<button class="btn ghost" id="pd-del">Retirer la remise</button>':''}<button class="btn primary" id="pd-ok">Appliquer</button></div></div></div>`;
+  const st = {type:d.type, reason:d.reason};
+  const calc = ()=>{ const v = Math.max(0, Number(($('#pd-v').value||'').replace(/\s/g,''))||0), amt = st.type==='pct' ? Math.round(t0.total*v/100) : Math.min(v, t0.total), pct = t0.subtotal ? amt/t0.subtotal*100 : 0; return {v, amt, pct}; };
+  const upd = ()=>{ const c = calc(); $('#pd-sum').innerHTML = c.amt ? `Remise : <b>−${fmt(c.amt)}</b> (${c.pct.toFixed(1).replace('.',',')} %) · nouveau total <b>${fmt(t0.total-c.amt)}</b>` : ''; $('#pd-err').textContent = c.pct>cap+0.01 ? `Au-delà de ${cap} % : seul un gérant peut accorder cette remise.` : ''; };
+  $('#pd-type').querySelectorAll('[data-t]').forEach(b=>b.onclick=e=>{ e.stopPropagation(); st.type=b.dataset.t; $('#pd-type').querySelectorAll('[data-t]').forEach(x=>x.setAttribute('aria-pressed', x===b)); $('#pd-v').placeholder = st.type==='pct'?'Ex. 5':'Ex. 2000'; upd(); });
+  $('#pd-r').querySelectorAll('[data-r]').forEach(b=>b.onclick=e=>{ e.stopPropagation(); st.reason=b.dataset.r; $('#pd-r').querySelectorAll('[data-r]').forEach(x=>x.setAttribute('aria-pressed', x===b)); });
+  $('#pd-v').oninput = upd; upd(); $('#pd-v').focus();
+  if($('#pd-del')) $('#pd-del').onclick = e=>{ e.stopPropagation(); S.posDisc = null; closeAll(); schedule(); toast('Remise retirée'); };
+  $('#pd-ok').onclick = e=>{ e.stopPropagation(); const c = calc(), note = $('#pd-n').value.trim(), err = $('#pd-err');
+    if(!c.amt) return err.textContent = 'Indiquez la valeur de la remise.';
+    if(c.pct > cap+0.01) return err.textContent = `Au-delà de ${cap} % : seul un gérant peut accorder cette remise.`;
+    if(!st.reason) return err.textContent = 'Choisissez le motif de la remise.';
+    if(st.reason==='Autre' && note.length<3) return err.textContent = 'Précisez le motif.';
+    S.posDisc = {type:st.type, value:c.v, reason:st.reason, note, cap, by:S.myName||'', uid:S.uid||'', role};
+    closeAll(); schedule(); toast(`Remise de ${fmt(c.amt)} appliquée`); };
+}
+
+/* --- Tickets en attente (gardés sur cet appareil) --- */
+const HELD_KEY = 'ffm-held';
+const heldList = () => { try{ return JSON.parse(localStorage.getItem(HELD_KEY)||'[]') || []; }catch(e){ return []; } };
+const heldSave = l => { try{ localStorage.setItem(HELD_KEY, JSON.stringify(l.slice(0,20))); }catch(e){ toast('Mémoire de l’appareil pleine.'); } };
+const hhmm = t => new Date(t).toLocaleTimeString('fr-FR',{hour:'2-digit',minute:'2-digit'});
+function posPark(label){ if(!S.pos.length) return null; const l = heldList(), n = l.length+1, t = posTotals();
+  const h = {id:newId('h'), at:Date.now(), label:(label||'').trim().slice(0,40) || `Ticket ${n}`, pos:S.pos, promo:S.posPromo||null, disc:S.posDisc||null, total:t.total, items:t.lines.reduce((a,x)=>a+x.qty,0), by:S.myName||''};
+  l.push(h); heldSave(l); S.pos=[]; S.posPromo=null; S.posDisc=null; return h; }
+function posHoldModal(){ if(!S.pos.length) return;
+  $('#overlay').innerHTML = `<div class="scrim" data-a="closeAll"><div class="modal" role="dialog" aria-modal="true" aria-label="Mettre en attente"><div class="m-h"><h2>⏸ Mettre le ticket en attente</h2><button class="x" data-a="closeAll" aria-label="Fermer">×</button></div>
+    <div class="m-b"><p class="muted small" style="margin-top:0">Le client va chercher autre chose ou de l’argent ? Mettez son ticket de côté et servez le suivant. Vous le reprendrez d’un clic.</p>
+    <div class="field"><label for="hd-l">Nom du ticket (facultatif)</label><input class="input" id="hd-l" maxlength="40" placeholder="Ex. Monsieur en boubou bleu"></div></div>
+    <div class="m-f"><button class="btn primary" id="hd-ok">Mettre en attente</button></div></div></div>`;
+  $('#hd-l').focus(); const go = ()=>{ const h = posPark($('#hd-l').value); closeAll(); schedule(); if(h) toast(`« ${h.label} » mis en attente`); };
+  $('#hd-ok').onclick = e=>{ e.stopPropagation(); go(); }; $('#hd-l').onkeydown = e=>{ if(e.key==='Enter'){ e.preventDefault(); go(); } }; }
+function posResume(id){ const l = heldList(), h = l.find(x=>x.id===id); if(!h) return;
+  const rest = l.filter(x=>x.id!==id); heldSave(rest);
+  if(S.pos.length) posPark(`Ticket ${hhmm(Date.now())}`);
+  S.pos = h.pos||[]; S.posPromo = h.promo||null; S.posDisc = h.disc||null; schedule(); toast(`« ${h.label} » repris`); }
+function heldChips(){ const l = heldList(); if(!l.length) return '';
+  return `<div class="held-row" aria-label="Tickets en attente">${l.map(h=>`<span class="held-chip"><button data-a="posResume" data-id="${h.id}" title="Reprendre ce ticket">▶ <b>${esc(h.label)}</b> <span class="muted">${h.items} art. · ${fmt(h.total)} · ${hhmm(h.at)}</span></button><button class="x" data-a="posHeldDel" data-id="${h.id}" aria-label="Supprimer ce ticket en attente">×</button></span>`).join('')}</div>`; }
+
+/* --- Avoirs (bons d'achat après un retour) --- */
+const avoirBal = a => Math.max(0, Math.round((Number(a.amount)||0) - (Number(a.used)||0)));
+const avoirFind = code => { const c = String(code||'').trim().toUpperCase(); return c ? (S.avoirs||[]).find(a=>a.code===c) : null; };
+const avoirOk = a => a && avoirBal(a)>0 && !(a.expiresAt && a.expiresAt < Date.now());
+
+/* --- Sessions de caisse : ouverture (fond), clôture (comptage), écart --- */
+const BILLETS = [10000,5000,2000,1000,500,250,200,100,50,25,10,5];
+const openSession = () => (S.cashSessions||[]).filter(s=>!s.closedAt).sort((a,b)=>b.openedAt-a.openedAt)[0] || null;
+const lastClosed = () => (S.cashSessions||[]).filter(s=>s.closedAt).sort((a,b)=>b.closedAt-a.closedAt)[0] || null;
+const posNeedSession = () => S.settings.posSession!==false && !openSession();
+const payParts = o => { const p = o.payment||{}; if(Array.isArray(p.parts) && p.parts.length) return p.parts; return p.paid>0 ? [{method:p.method, amount:p.paid}] : (o.channel==='caisse' && !p.rest && p.method!=='credit' ? [{method:p.method, amount:o.total}] : []); };
+const methodName = m => m==='cash' ? 'Espèces' : m==='avoir' ? 'Avoir' : m==='credit' ? 'Crédit' : m==='split' ? 'Paiement mixte' : (PROCESSORS[m]?.name || m || '—');
+function periodStats(from, to){
+  const os = S.orders.filter(o=>o.channel==='caisse' && o.status!=='annulee' && (o.createdAt||0)>=from && (o.createdAt||0)<to);
+  const online = S.orders.filter(o=>o.channel!=='caisse' && ['payee','preparation','expediee','livree'].includes(o.status) && (o.createdAt||0)>=from && (o.createdAt||0)<to);
+  const by = {}, prods = {}; let total=0, credit=0, disc=0;
+  os.forEach(o=>{ total += o.total||0; credit += Number(o.payment?.rest)||0; disc += Number(o.manualDisc?.amount)||0;
+    payParts(o).forEach(p=>{ by[p.method] = (by[p.method]||0) + (Number(p.amount)||0); });
+    (o.items||[]).forEach(i=>{ if(!i.gift) prods[i.name] = (prods[i.name]||0) + i.qty; }); });
+  const mv = S.moves.filter(m=>(m.createdAt||0)>=from && (m.createdAt||0)<to);
+  const cashIn = mv.filter(m=>m.account==='caisse').reduce((t,m)=>t+(Number(m.amount)||0),0);
+  const refunds = mv.filter(m=>m.type==='remboursement').reduce((t,m)=>t-(Number(m.amount)||0),0);
+  const avoirs = (S.avoirs||[]).filter(a=>(a.createdAt||0)>=from && (a.createdAt||0)<to).reduce((t,a)=>t+(Number(a.amount)||0),0);
+  const top = Object.entries(prods).sort((a,b)=>b[1]-a[1]).slice(0,3);
+  return {os, n:os.length, total, credit, disc, by, cashIn, refunds, avoirs, top, online:online.length, onlineTotal:online.reduce((t,o)=>t+(o.total||0),0)};
+}
+const sessionStats = s => { const r = periodStats(s.openedAt, (s.closedAt||Date.now())+1); r.expected = (Number(s.float)||0) + r.cashIn; return r; };
+function reportText(label, r, s){
+  const L = [`📊 ${label} · ${S.settings.shopName}`, `🧾 Caisse : ${r.n} vente${r.n>1?'s':''} · ${fmt(r.total)}`];
+  if(r.online) L.push(`🛒 En ligne : ${r.online} commande${r.online>1?'s':''} · ${fmt(r.onlineTotal)}`);
+  const by = Object.entries(r.by).filter(([,v])=>v>0); if(by.length) L.push('💰 ' + by.map(([k,v])=>`${methodName(k)} ${fmt(v)}`).join(' · '));
+  if(r.credit) L.push(`📒 À crédit : ${fmt(r.credit)}`); if(r.disc) L.push(`🏷️ Remises manuelles : ${fmt(r.disc)}`);
+  if(r.refunds || r.avoirs) L.push(`↩️ Retours : ${fmt(r.refunds)} remboursés${r.avoirs?' · '+fmt(r.avoirs)+' en avoirs':''}`);
+  if(s && s.closedAt) L.push(`🗄️ Caisse : attendu ${fmt(s.expected)} · compté ${fmt(s.counted)} · écart ${s.gap>0?'+':''}${fmt(s.gap)}`);
+  if(r.top.length) L.push('⭐ Top : ' + r.top.map(([n,q])=>`${q} × ${n}`).join(', '));
+  return L.join('\n'); }
+const waShare = (text, phone) => `https://wa.me/${phone?waNumber(phone):''}?text=${encodeURIComponent(text)}`;
+function sessionBar(){
+  const s = openSession(), need = S.settings.posSession!==false;
+  if(!s) return `<div class="sess-bar off"><span>🔴 <b>Caisse fermée</b>${need?' · ouvrez-la avant la première vente':''}</span><button class="btn primary sm" data-a="sessOpen">Ouvrir la caisse</button></div>`;
+  const r = sessionStats(s);
+  return `<div class="sess-bar"><span>🟢 <b>Caisse ouverte</b> depuis ${hhmm(s.openedAt)}${s.openedName?' par '+esc(s.openedName):''} · fond ${fmt(s.float)} · ${r.n} vente${r.n>1?'s':''} · <b>espèces attendues ${fmt(r.expected)}</b></span><button class="btn ghost sm" data-a="sessClose">Clôturer la caisse</button></div>`; }
+function sessionOpenModal(thenPay){
+  const prev = lastClosed(), def = prev ? (prev.keep ?? 0) : 0;
+  $('#overlay').innerHTML = `<div class="scrim" data-a="closeAll"><div class="modal" role="dialog" aria-modal="true" aria-label="Ouvrir la caisse"><div class="m-h"><h2>🟢 Ouvrir la caisse</h2><button class="x" data-a="closeAll" aria-label="Fermer">×</button></div>
+    <div class="m-b"><p class="muted small" style="margin-top:0">Comptez l’argent présent dans le tiroir avant la première vente : c’est le <b>fond de caisse</b>. À la clôture, le site calcule ce qui doit s’y trouver et l’écart.</p>
+    <div class="field"><label for="so-f">Fond de caisse (FCFA)</label><input class="input" id="so-f" inputmode="numeric" value="${def}"></div>
+    ${prev?`<p class="muted small" style="margin:0">Fond laissé à la dernière clôture (${dateFr(prev.closedAt)}) : <b>${fmt(prev.keep||0)}</b>.</p>`:''}<div class="xp-err" id="so-err"></div></div>
+    <div class="m-f"><button class="btn primary" id="so-ok">Ouvrir la caisse</button></div></div></div>`;
+  $('#so-f').focus(); $('#so-f').select();
+  $('#so-ok').onclick = async e=>{ e.stopPropagation(); const f = Math.max(0, Number(($('#so-f').value||'').replace(/\s/g,''))||0); $('#so-ok').disabled = true;
+    const id = newId('cs'), doc = {openedAt:Date.now(), openedBy:S.uid||'local', openedName:S.myName||'', float:f};
+    try{ await posCommit([['put','cash-sessions',id,doc]], 'Ouverture de caisse'); }catch(x){ dbErr(x); $('#so-err').textContent = 'Ouverture impossible.'; $('#so-ok').disabled=false; return; }
+    closeAll(); toast(`Caisse ouverte · fond ${fmt(f)}`); schedule(); if(thenPay) setTimeout(posPay, 50); };
+}
+function sessionCloseModal(){
+  const s = openSession(); if(!s) return;
+  const r = sessionStats(s);
+  $('#overlay').innerHTML = `<div class="scrim" data-a="closeAll"><div class="modal wide" role="dialog" aria-modal="true" aria-label="Clôturer la caisse"><div class="m-h"><h2>🔒 Clôture de caisse</h2><button class="x" data-a="closeAll" aria-label="Fermer">×</button></div>
+    <div class="m-b"><div class="kpis" style="grid-template-columns:repeat(3,minmax(0,1fr))"><div class="kpi"><span>Ventes</span><b>${r.n} · ${fmt(r.total)}</b></div><div class="kpi"><span>Fond d’ouverture</span><b>${fmt(s.float)}</b></div><div class="kpi k-in"><span>Espèces attendues</span><b>${fmt(r.expected)}</b></div></div>
+    <p class="muted small" style="margin:0 0 8px">Attendu = fond + mouvements du compte « Caisse boutique » depuis ${hhmm(s.openedAt)} (ventes en espèces, encaissements, dépenses, remboursements). ${Object.entries(r.by).filter(([,v])=>v>0).map(([k,v])=>`${methodName(k)} : <b>${fmt(v)}</b>`).join(' · ')}${r.credit?` · Crédit : <b>${fmt(r.credit)}</b>`:''}</p>
+    <h3 style="margin:10px 0 6px">Comptez le tiroir (billetage)</h3>
+    <div class="bill-grid">${BILLETS.map(b=>`<label class="bill"><span>${fmt(b)}</span><input class="input" data-bill="${b}" inputmode="numeric" placeholder="0" aria-label="Nombre de ${b}"></label>`).join('')}</div>
+    <div class="row" style="margin-top:10px"><div class="field"><label for="sc-tot">Total compté</label><input class="input" id="sc-tot" inputmode="numeric" placeholder="ou saisissez le total"></div><div class="field"><label for="sc-keep">Fond laissé pour demain</label><input class="input" id="sc-keep" inputmode="numeric" value="${s.float||0}"></div></div>
+    <div class="totals" id="sc-gap" style="display:grid;grid-template-columns:1fr auto;gap:4px 12px;padding:12px;border:1px solid var(--line);border-radius:10px"></div>
+    <div class="field" style="margin-top:10px"><label for="sc-note">Explication de l’écart</label><input class="input" id="sc-note" maxlength="200" placeholder="Obligatoire s’il y a un écart"></div><div class="xp-err" id="sc-err"></div></div>
+    <div class="m-f"><button class="btn primary" id="sc-ok">Clôturer la caisse</button></div></div></div>`;
+  let manual = false;
+  const count = ()=>{ let t = 0; document.querySelectorAll('[data-bill]').forEach(i=>{ t += (parseInt(i.value)||0)*Number(i.dataset.bill); }); return t; };
+  const counted = ()=> manual ? Math.max(0, Number(($('#sc-tot').value||'').replace(/\s/g,''))||0) : count();
+  const upd = ()=>{ const c = counted(), g = c - r.expected; if(!manual) $('#sc-tot').value = c || '';
+    $('#sc-gap').innerHTML = `<span>Espèces attendues</span><b>${fmt(r.expected)}</b><span>Compté</span><b>${fmt(c)}</b><span>Écart</span><b style="color:${g===0?'var(--kola)':'var(--danger)'}">${g>0?'+':''}${fmt(g)}${g===0?' ✓':g>0?' (excédent)':' (manquant)'}</b>`; };
+  document.querySelectorAll('[data-bill]').forEach(i=>i.oninput=()=>{ manual=false; upd(); });
+  $('#sc-tot').oninput = ()=>{ manual = true; upd(); }; upd();
+  $('#sc-ok').onclick = async e=>{ e.stopPropagation(); const c = counted(), g = c - r.expected, note = $('#sc-note').value.trim(), err = $('#sc-err');
+    if(g!==0 && note.length<3) return err.textContent = 'Expliquez l’écart avant de clôturer (ex. erreur de monnaie, dépense non saisie).';
+    const keep = Math.min(c, Math.max(0, Number(($('#sc-keep').value||'').replace(/\s/g,''))||0)), billets = {};
+    document.querySelectorAll('[data-bill]').forEach(i=>{ const n = parseInt(i.value)||0; if(n) billets[i.dataset.bill] = n; });
+    const patchD = {closedAt:Date.now(), closedBy:S.uid||'local', closedName:S.myName||'', counted:c, expected:r.expected, gap:g, keep, note, billets,
+      summary:{n:r.n, total:r.total, credit:r.credit, disc:r.disc, by:r.by, refunds:r.refunds, avoirs:r.avoirs}};
+    $('#sc-ok').disabled = true;
+    try{ await posCommit([['patch','cash-sessions',s.id,patchD]], 'Clôture de caisse'); }catch(x){ dbErr(x); err.textContent='Clôture impossible.'; $('#sc-ok').disabled=false; return; }
+    sessionZ({...s, ...patchD}); };
+}
+function zReportHTML(s){ const st = S.settings, m = s.summary||{};
+  return `<div class="receipt" style="max-width:420px;margin:auto"><div class="rh"><b style="font:800 18px var(--f-d)">${esc(st.shopName)}</b><div><b>Rapport de clôture (Z)</b></div><div class="muted small">Ouverte ${dateFr(s.openedAt)}${s.openedName?' · '+esc(s.openedName):''}<br>Clôturée ${dateFr(s.closedAt)}${s.closedName?' · '+esc(s.closedName):''}</div></div>
+    <div class="rr"><span>Ventes</span><span>${m.n||0} · ${fmt(m.total||0)}</span></div>${Object.entries(m.by||{}).filter(([,v])=>v>0).map(([k,v])=>`<div class="rr"><span>${esc(methodName(k))}</span><span>${fmt(v)}</span></div>`).join('')}
+    ${m.credit?`<div class="rr"><span>À crédit</span><span>${fmt(m.credit)}</span></div>`:''}${m.disc?`<div class="rr"><span>Remises manuelles</span><span>${fmt(m.disc)}</span></div>`:''}${m.refunds?`<div class="rr"><span>Remboursements</span><span>−${fmt(m.refunds)}</span></div>`:''}${m.avoirs?`<div class="rr"><span>Avoirs émis</span><span>${fmt(m.avoirs)}</span></div>`:''}
+    <div style="border-top:2px dashed var(--line);margin:8px 0"></div><div class="rr"><span>Fond d’ouverture</span><span>${fmt(s.float||0)}</span></div><div class="rr"><span>Espèces attendues</span><span>${fmt(s.expected)}</span></div><div class="rr"><span>Espèces comptées</span><span>${fmt(s.counted)}</span></div>
+    <div class="rr" style="font-weight:800"><span>Écart</span><span>${s.gap>0?'+':''}${fmt(s.gap)}</span></div>${s.note?`<div class="small">Motif : ${esc(s.note)}</div>`:''}
+    ${Object.keys(s.billets||{}).length?`<div style="border-top:1px dashed var(--line);margin:8px 0"></div>${Object.entries(s.billets).sort((a,b)=>b[0]-a[0]).map(([b,n])=>`<div class="rr small"><span>${n} × ${fmt(Number(b))}</span><span>${fmt(n*b)}</span></div>`).join('')}`:''}
+    <div class="rr"><span>Fond laissé</span><span>${fmt(s.keep||0)}</span></div><div class="small" style="margin-top:18px;display:flex;justify-content:space-between"><span>Caissier : ________</span><span>Gérant : ________</span></div></div>`; }
+function sessionZ(s){ const txt = reportText(`Clôture du ${dateFr(s.closedAt)}`, sessionStats(s), s);
+  $('#overlay').innerHTML = `<div class="scrim" data-a="closeAll"><div class="modal" role="dialog" aria-modal="true" aria-label="Caisse clôturée"><div class="m-h"><h2>Caisse clôturée</h2><button class="x" data-a="closeAll" aria-label="Fermer">×</button></div>
+    <div class="m-b"><div class="panel">${zReportHTML(s)}</div></div>
+    <div class="m-f"><button class="btn ghost" id="z-print">🖨 Imprimer</button><a class="btn ghost" target="_blank" rel="noopener" href="${esc(waShare(txt, S.settings.reportPhone))}">💬 Envoyer sur WhatsApp</a><button class="btn primary" data-a="closeAll">Terminé</button></div></div></div>`;
+  $('#z-print').onclick = e=>{ e.stopPropagation(); printDoc(zReportHTML(s)); }; schedule(); }
+function sessionsPanel(){ const l = (S.cashSessions||[]).filter(s=>s.closedAt).sort((a,b)=>b.closedAt-a.closedAt).slice(0,15); if(!l.length) return '';
+  return `<div class="panel tbl-wrap"><h3>🗄️ Dernières clôtures de caisse</h3><table><thead><tr><th>Date</th><th>Caissier</th><th style="text-align:right">Ventes</th><th style="text-align:right">Attendu</th><th style="text-align:right">Compté</th><th style="text-align:right">Écart</th><th></th></tr></thead><tbody>
+    ${l.map(s=>`<tr><td class="small">${dateFr(s.closedAt)}<div class="muted">${hhmm(s.openedAt)} → ${hhmm(s.closedAt)}</div></td><td class="small">${esc(s.closedName||s.openedName||'')}</td><td style="text-align:right">${fmt(s.summary?.total||0)}</td><td style="text-align:right">${fmt(s.expected)}</td><td style="text-align:right">${fmt(s.counted)}</td><td style="text-align:right"><b class="${s.gap===0?'amt-in':'amt-out'}">${s.gap>0?'+':''}${fmt(s.gap)}</b>${s.note?`<div class="muted small">${esc(s.note)}</div>`:''}</td><td><button class="btn ghost sm" data-a="sessZ" data-id="${s.id}">Rapport</button></td></tr>`).join('')}</tbody></table></div>`; }
+function dayReportBtn(){ const d0 = new Date(); d0.setHours(0,0,0,0); const r = periodStats(d0.getTime(), Date.now()+1);
+  return `<a class="btn ghost sm" target="_blank" rel="noopener" href="${esc(waShare(reportText(`Rapport du ${dateFr(Date.now())}`, r), S.settings.reportPhone))}">💬 Rapport du jour sur WhatsApp</a>`; }
+
+/* --- Retours, échanges et avoirs --- */
+const RET_REASONS = ['Changement d’avis','Article défectueux','Erreur de taille ou de modèle','Échange','Autre'];
+const retDone = (o, i) => (o.returns||[]).reduce((t,r)=>t+((r.items||[]).filter(x=>x.idx===i).reduce((a,x)=>a+x.qty,0)),0);
+const discRatio = o => { const sub = Number(o.subtotal)||0; return sub>0 ? Math.max(0, sub-(Number(o.discount)||0))/sub : 1; };
+function returnPanel(o){
+  if(!o || o.status!=='livree' || !(o.items||[]).length) return '';
+  const rs = o.returns||[], can = (o.items||[]).some((it,i)=>!it.gift && it.qty-retDone(o,i)>0);
+  return `<div class="panel"><h3>↩️ Retours et échanges</h3>${rs.length?rs.map(r=>`<p class="small" style="margin:0 0 6px">${dateFr(r.at)} · ${r.items.map(x=>`${x.qty} × ${esc(x.name)}`).join(', ')} · <b>${fmt(r.amount)}</b> ${r.mode==='avoir'?`en avoir <b>${esc(r.avoirCode)}</b>`:r.mode==='dette'?'déduits de la créance':`remboursés (${esc(ACCOUNTS[r.mode]||r.mode)})`}${r.reason?` · ${esc(r.reason)}`:''}${r.by?` · ${esc(r.by)}`:''}</p>`).join(''):'<p class="muted small" style="margin:0 0 8px">Aucun retour sur cette vente.</p>'}
+    ${can?`<button class="btn ghost sm" data-a="posReturn" data-id="${o.id}">↩ Faire un retour ou un échange</button>`:''}</div>`; }
+function returnModal(o){
+  const rows = (o.items||[]).map((it,i)=>({it, i, left:it.gift?0:it.qty-retDone(o,i), unit:Math.round((Number(it.price)||0)*discRatio(o))})).filter(r=>r.left>0);
+  if(!rows.length) return toast('Tous les articles de cette vente ont déjà été retournés.');
+  const debt = o.clientId ? Math.max(0, partyBalance('client', o.clientId)) : 0;
+  $('#overlay').innerHTML = `<div class="scrim" data-a="closeAll"><div class="modal wide" role="dialog" aria-modal="true" aria-label="Retour"><div class="m-h"><h2>↩ Retour ou échange · ${esc(o.number)}</h2><button class="x" data-a="closeAll" aria-label="Fermer">×</button></div>
+    <div class="m-b"><div class="tbl-wrap"><table><thead><tr><th>Article</th><th style="text-align:right">Prix payé</th><th style="width:100px">Rendu</th></tr></thead><tbody>
+      ${rows.map(r=>`<tr><td><b class="small">${esc(r.it.name)}</b><div class="muted small">${r.left} retournable${r.left>1?'s':''} sur ${r.it.qty}</div></td><td style="text-align:right">${fmt(r.unit)}</td><td><input class="input" data-rq="${r.i}" data-max="${r.left}" data-unit="${r.unit}" inputmode="numeric" value="0" style="padding:6px 8px"></td></tr>`).join('')}</tbody></table></div>
+    <div class="field"><label>Motif</label><div class="cats" id="rt-r" role="group" aria-label="Motif">${RET_REASONS.map((r,j)=>`<button data-r="${esc(r)}" aria-pressed="${j===0}">${esc(r)}</button>`).join('')}</div></div>
+    <label class="check-row" style="display:flex;gap:8px;align-items:center;margin:4px 0 10px"><input type="checkbox" id="rt-stock" checked> Remettre les articles en stock (décochez si l’article est abîmé)</label>
+    <div class="field"><label>Comment rendre l’argent ?</label><div class="cats" id="rt-m" role="group" aria-label="Mode de remboursement"><button data-m="avoir" aria-pressed="true">🎟 Avoir (bon d’achat)</button><button data-m="caisse" aria-pressed="false">💵 Espèces (caisse)</button><button data-m="momo" aria-pressed="false">📱 Mobile money</button>${debt?`<button data-m="dette" aria-pressed="false">📒 Déduire de sa créance (${fmt(debt)})</button>`:''}</div></div>
+    <div class="row"><div class="field"><label for="rt-amt">Montant rendu</label><input class="input" id="rt-amt" inputmode="numeric" value="0"></div><div class="field"><label for="rt-note">Précision (facultatif)</label><input class="input" id="rt-note" maxlength="120"></div></div>
+    <p class="muted small" style="margin:0">Un <b>échange</b> = retour en avoir, puis nouvelle vente payée avec l’avoir (le client ne paie que la différence).</p><div class="xp-err" id="rt-err"></div></div>
+    <div class="m-f"><button class="btn primary" id="rt-ok">Valider le retour</button></div></div></div>`;
+  const st = {reason:RET_REASONS[0], mode:'avoir'}; let touched = false;
+  const sum = ()=>{ let t = 0; document.querySelectorAll('[data-rq]').forEach(x=>{ t += Math.min(Number(x.dataset.max), Math.max(0, parseInt(x.value)||0))*Number(x.dataset.unit); }); return t; };
+  document.querySelectorAll('[data-rq]').forEach(x=>x.oninput=()=>{ if(!touched) $('#rt-amt').value = sum(); });
+  $('#rt-amt').oninput = ()=>{ touched = true; };
+  $('#rt-r').querySelectorAll('[data-r]').forEach(b=>b.onclick=e=>{ e.stopPropagation(); st.reason=b.dataset.r; $('#rt-r').querySelectorAll('[data-r]').forEach(x=>x.setAttribute('aria-pressed', x===b)); if(st.reason==='Article défectueux') $('#rt-stock').checked=false; });
+  $('#rt-m').querySelectorAll('[data-m]').forEach(b=>b.onclick=e=>{ e.stopPropagation(); st.mode=b.dataset.m; $('#rt-m').querySelectorAll('[data-m]').forEach(x=>x.setAttribute('aria-pressed', x===b)); });
+  $('#rt-ok').onclick = async e=>{ e.stopPropagation(); const err = $('#rt-err'), items = [];
+    document.querySelectorAll('[data-rq]').forEach(x=>{ const q = Math.min(Number(x.dataset.max), Math.max(0, parseInt(x.value)||0)); if(q>0){ const it = o.items[Number(x.dataset.rq)]; items.push({idx:Number(x.dataset.rq), id:it.id, name:it.name, qty:q, ...(it.variant?{variant:it.variant}:{}), ...(it.bundle?{bundle:true, components:it.components}:{})}); } });
+    if(!items.length) return err.textContent = 'Indiquez la quantité rendue pour au moins un article.';
+    const max = sum(), amount = Math.min(max, Math.max(0, Math.round(Number(($('#rt-amt').value||'').replace(/\s/g,''))||0)));
+    if(st.mode==='dette' && amount > debt) return err.textContent = `La créance du client est de ${fmt(debt)} seulement.`;
+    const at = Date.now(), by = S.myName||'', note = $('#rt-note').value.trim(), reason = st.reason + (note?' — '+note:'');
+    const rec = {at, by, uid:S.uid||'', items:items.map(({idx,name,qty})=>({idx,name,qty})), amount, mode:st.mode, reason, restock:$('#rt-stock').checked};
+    const ops = [], base = {date:today(), ref:o.number, orderId:o.id, createdAt:at, createdBy:S.uid||'local'};
+    let avoir = null;
+    if(amount>0 && st.mode==='avoir'){ avoir = {id:newId('av'), code:'AV'+rnd(6).toUpperCase(), amount, used:0, uses:[], clientId:o.clientId||'', name:o.customer?.name||'', phone:o.customer?.phone||'', orderId:o.id, orderNumber:o.number, createdAt:at, by, expiresAt:at+90*864e5};
+      rec.avoirCode = avoir.code; const {id:aid, ...ad} = avoir; ops.push(['put','avoirs',aid,ad]); }
+    else if(amount>0 && ACCOUNTS[st.mode]) ops.push(['put','fin-moves',newId('m'),{...base, type:'remboursement', account:st.mode, amount:-amount, label:`Remboursement retour ${o.number}`, partyId:o.clientId||''}]);
+    else if(amount>0 && st.mode==='dette') ops.push(['put','fin-ledger',newId('l'),{...base, partyType:'client', partyId:o.clientId, kind:'reglement', amount, label:`Retour d’articles sur ${o.number}`}]);
+    ops.push(['patch','orders',o.id,{returns:[...(o.returns||[]), rec], returnedTotal:(Number(o.returnedTotal)||0)+amount}]);
+    if(rec.restock) ops.push(['stock', expandItems(items), -1]);
+    $('#rt-ok').disabled = true;
+    try{ await posCommit(ops, 'Retour '+o.number); }catch(x){ dbErr(x); err.textContent = 'Le retour n’a pas pu être enregistré.'; $('#rt-ok').disabled=false; return; }
+    if(avoir) avoirModal(avoir); else { closeAll(); toast(amount?`Retour enregistré · ${fmt(amount)} rendus`:'Retour enregistré'); schedule(); } };
+}
+function avoirTicket(a){ const st = S.settings;
+  return `<div class="receipt" style="max-width:380px;margin:auto;text-align:center"><b style="font:800 18px var(--f-d)">${esc(st.shopName)}</b><div style="margin:8px 0;font-weight:800">BON D’AVOIR</div>
+    <div style="font:800 26px monospace;letter-spacing:2px;border:2px dashed #333;padding:8px;margin:8px 0">${esc(a.code)}</div><div style="font:800 22px var(--f-d)">${fmt(avoirBal(a))}</div>
+    <div class="small">${a.name?esc(a.name)+' · ':''}Retour de ${esc(a.orderNumber||'')}<br>Valable jusqu’au ${new Date(a.expiresAt).toLocaleDateString('fr-FR')} · utilisable en caisse en une ou plusieurs fois</div></div>`; }
+function avoirModal(a){
+  $('#overlay').innerHTML = `<div class="scrim" data-a="closeAll"><div class="modal" role="dialog" aria-modal="true" aria-label="Avoir"><div class="m-h"><h2>🎟 Avoir créé</h2><button class="x" data-a="closeAll" aria-label="Fermer">×</button></div>
+    <div class="m-b"><div class="panel">${avoirTicket(a)}</div>${a.phone?`<a class="btn ghost sm" target="_blank" rel="noopener" href="https://wa.me/${waNumber(a.phone)}?text=${encodeURIComponent(`Bonjour ${a.name||''}, voici votre avoir ${S.settings.shopName} : code ${a.code}, ${fmt(avoirBal(a))}, valable jusqu’au ${new Date(a.expiresAt).toLocaleDateString('fr-FR')}.`)}">💬 Envoyer le code au client</a>`:''}</div>
+    <div class="m-f"><button class="btn ghost" id="av-print">🖨 Imprimer</button><button class="btn primary" id="av-use">🔁 Échanger maintenant</button></div></div></div>`;
+  $('#av-print').onclick = e=>{ e.stopPropagation(); printDoc(avoirTicket(a)); };
+  $('#av-use').onclick = e=>{ e.stopPropagation(); S.posAvoir = a.code; S.view='pos'; S.posTab='vente'; closeAll(); schedule(); toast('Ajoutez les nouveaux articles : l’avoir sera proposé à l’encaissement'); };
+}
+function avoirsPanel(){ const l = (S.avoirs||[]).filter(a=>avoirBal(a)>0).sort((a,b)=>b.createdAt-a.createdAt); if(!l.length) return '';
+  return `<div class="panel tbl-wrap"><h3>🎟 Avoirs en cours · ${fmt(l.reduce((t,a)=>t+avoirBal(a),0))}</h3><table><thead><tr><th>Code</th><th>Client</th><th style="text-align:right">Reste</th><th>Valable jusqu’au</th><th></th></tr></thead><tbody>
+    ${l.slice(0,40).map(a=>`<tr><td><b style="font-family:monospace">${esc(a.code)}</b><div class="muted small">${esc(a.orderNumber||'')}</div></td><td class="small">${esc(a.name||'—')}</td><td style="text-align:right"><b>${fmt(avoirBal(a))}</b>${a.used?`<div class="muted small">sur ${fmt(a.amount)}</div>`:''}</td><td class="small" style="${a.expiresAt<Date.now()?'color:var(--danger)':''}">${new Date(a.expiresAt).toLocaleDateString('fr-FR')}</td><td><button class="btn ghost sm" data-a="avoirShow" data-id="${a.id}">Voir</button></td></tr>`).join('')}</tbody></table></div>`; }
+function discountsPanel(os){ const l = os.filter(o=>o.manualDisc&&o.manualDisc.amount); if(!l.length) return '';
+  return `<div class="panel tbl-wrap"><h3>🏷️ Remises manuelles · ${fmt(l.reduce((t,o)=>t+o.manualDisc.amount,0))}</h3><table><thead><tr><th>Vente</th><th>Vendeur</th><th style="text-align:right">Remise</th><th>Motif</th></tr></thead><tbody>
+    ${l.map(o=>`<tr><td><b class="small click" data-a="orderDetail" data-id="${o.id}">${esc(o.number)}</b><div class="muted small">${dateFr(o.createdAt)}</div></td><td class="small">${esc(o.manualDisc.by||'')}<div class="muted">${esc(o.manualDisc.role||'')}</div></td><td style="text-align:right"><b>−${fmt(o.manualDisc.amount)}</b><div class="muted small">${o.subtotal?Math.round(o.manualDisc.amount/o.subtotal*100):0} %</div></td><td class="small">${esc(o.manualDisc.reason||'')}${o.manualDisc.note?' — '+esc(o.manualDisc.note):''}</td></tr>`).join('')}</tbody></table></div>`; }
+
+/* --- Réassort : alertes de stock et bon de commande fournisseur --- */
+function restockData(){
+  const since = Date.now()-30*864e5, sold = {};
+  S.orders.filter(o=>o.status!=='annulee' && (o.createdAt||0)>=since).forEach(o=>expandItems(o.items).forEach(x=>{ sold[x.id] = (sold[x.id]||0)+x.qty; }));
+  const cover = Math.max(1, Number(S.settings.posCover)||14), defMin = Number(S.settings.posMinStock ?? 3);
+  const supOf = {}; (S.purchases||[]).slice().sort((a,b)=>a.createdAt-b.createdAt).forEach(pu=>(pu.lines||[]).forEach(l=>{ if(l.productId) supOf[l.productId] = pu.supplierId; }));
+  (S.stockMoves||[]).slice().reverse().forEach(m=>{ if(m.supplierId && m.productId && !supOf[m.productId]) supOf[m.productId] = m.supplierId; });
+  return S.products.filter(p=>p.active!==false && !isPartner(p)).map(p=>{ const s30 = sold[p.id]||0, daily = s30/30, min = (p.minStock!=null && p.minStock!=='') ? Number(p.minStock) : defMin, stock = Number(p.stock)||0;
+    const days = daily>0 ? Math.floor(stock/daily) : null, sug = Math.max(0, Math.ceil(daily*cover + min - stock));
+    return {p, s30, daily, min, stock, days, sug, low: stock<=min || (days!==null && days<7), out: stock<=0, sup: supOf[p.id]||'', cost: costOf(p.id)||0}; });
+}
+function viewRestock(){
+  const all = restockData(), f = S.rsF||'low', list = (f==='low' ? all.filter(r=>r.low) : all).sort((a,b)=>(a.days??9e9)-(b.days??9e9) || a.stock-b.stock);
+  const groups = {}; list.forEach(r=>(groups[r.sup] ||= []).push(r));
+  const lastPu = (S.purchases||[])[0];
+  return `<div class="sec-h"><h2>Réassort</h2><span class="muted small">Calculé sur les ventes des 30 derniers jours (caisse et en ligne)</span></div>
+  <div class="kpis" style="grid-template-columns:repeat(3,minmax(0,1fr))"><div class="kpi k-out"><span>En rupture</span><b>${all.filter(r=>r.out).length}</b></div><div class="kpi"><span>À commander</span><b>${all.filter(r=>r.low).length}</b></div><div class="kpi"><span>Couverture visée</span><b>${Number(S.settings.posCover)||14} jours</b></div></div>
+  <div class="toolbar" style="flex-wrap:wrap;gap:8px"><div class="cats" style="margin:0">${[['low','À commander'],['all','Tous les produits']].map(([k,l])=>`<button aria-pressed="${f===k}" data-a="rsF" data-v="${k}">${l}</button>`).join('')}</div><span style="flex:1"></span>
+    <button class="btn ghost sm" data-a="labelsPos">🏷️ Étiquettes</button>${lastPu?`<button class="btn ghost sm" data-a="labelsPu">🏷️ Étiquettes de la dernière réception (${esc(partyName('supplier', lastPu.supplierId)||lastPu.ref||'')})</button>`:''}</div>
+  <p class="muted small">« Jours restants » = stock ÷ ventes moyennes par jour. « À commander » = de quoi tenir ${Number(S.settings.posCover)||14} jours + le stock minimum. Modifiez le <b>minimum</b> de chaque produit directement dans le tableau.</p>
+  ${list.length ? Object.entries(groups).map(([sid, rows])=>{ const sup = S.suppliers.find(x=>x.id===sid), tot = rows.reduce((t,r)=>t+r.sug*r.cost,0);
+    return `<div class="panel tbl-wrap" data-grp="${esc(sid||'none')}"><div class="toolbar" style="flex-wrap:wrap;gap:8px"><h3 style="flex:1;margin:0">${sup?'🏭 '+esc(sup.name):'❔ Fournisseur non renseigné'} · ${rows.length} produit${rows.length>1?'s':''}</h3>
+      ${tot&&isGerant()?`<span class="small muted">Coût estimé ${fmt(tot)}</span>`:''}<button class="btn ghost sm" data-a="poPrint" data-v="${esc(sid)}">🧾 Bon de commande</button>${sup&&sup.phone?`<button class="btn primary sm" data-a="poWa" data-v="${esc(sid)}">💬 Envoyer au fournisseur</button>`:''}</div>
+      <table><thead><tr><th></th><th>Produit</th><th style="text-align:right">Stock</th><th style="width:80px">Minimum</th><th style="text-align:right">Ventes 30 j</th><th style="text-align:right">Jours restants</th><th style="width:90px">À commander</th></tr></thead><tbody>
+      ${rows.map(r=>`<tr><td><input type="checkbox" data-po="${r.p.id}" ${r.low?'checked':''} aria-label="Inclure ${esc(r.p.name)}"></td><td><b class="small">${esc(r.p.name)}</b>${r.p.sku?`<div class="muted small">${esc(r.p.sku)}</div>`:''}</td>
+        <td style="text-align:right"><b class="${r.out?'amt-out':''}">${r.stock}</b></td><td><input class="input" data-min="${r.p.id}" inputmode="numeric" value="${r.min}" style="padding:6px 8px" aria-label="Stock minimum"></td><td style="text-align:right">${r.s30}</td>
+        <td style="text-align:right">${r.days===null?'<span class="muted">—</span>':`<b style="color:${r.days<3?'var(--danger)':r.days<7?'#B26A00':'inherit'}">${r.days} j</b>`}</td><td><input class="input" data-oq="${r.p.id}" inputmode="numeric" value="${r.sug||(r.low?Math.max(1,r.min):0)}" style="padding:6px 8px" aria-label="Quantité à commander"></td></tr>`).join('')}</tbody></table></div>`; }).join('')
+  : `<div class="empty">✅ Aucun produit sous son stock minimum.</div>`}`;
+}
+function poLines(sid){ const g = document.querySelector(`[data-grp="${CSS.escape(sid||'none')}"]`); if(!g) return [];
+  return [...g.querySelectorAll('[data-po]')].filter(c=>c.checked).map(c=>{ const p = S.products.find(x=>x.id===c.dataset.po), q = parseInt(g.querySelector(`[data-oq="${CSS.escape(c.dataset.po)}"]`)?.value)||0; return p && q>0 ? {p, qty:q, cost:costOf(p.id)||0} : null; }).filter(Boolean); }
+function poHTML(sid, lines){ const st = S.settings, sup = S.suppliers.find(x=>x.id===sid), num = 'BC-'+new Date().toISOString().slice(2,10).replace(/-/g,'')+'-'+rnd(3).toUpperCase(), g = isGerant(), tot = lines.reduce((t,l)=>t+l.qty*l.cost,0);
+  return `<div style="font:13px/1.4 sans-serif;max-width:720px;margin:auto"><div style="display:flex;justify-content:space-between;gap:16px"><div><b style="font-size:18px">${esc(st.shopName)}</b><div>${esc([st.address, st.city].filter(Boolean).join(', '))}</div><div>${esc(st.phone||'')}</div></div><div style="text-align:right"><b style="font-size:18px">BON DE COMMANDE</b><div>${num}</div><div>${dateFr(Date.now())}</div></div></div>
+    <div style="margin:16px 0;padding:10px;border:1px solid #999"><b>Fournisseur :</b> ${esc(sup?sup.name:'—')}${sup&&sup.phone?' · '+esc(sup.phone):''}</div>
+    <table style="width:100%;border-collapse:collapse" border="1" cellpadding="6"><thead><tr><th align="left">Article</th><th align="left">Réf.</th><th align="right">Quantité</th>${g?'<th align="right">Prix unitaire</th><th align="right">Total</th>':''}</tr></thead><tbody>
+    ${lines.map(l=>`<tr><td>${esc(l.p.name)}</td><td>${esc(l.p.sku||'')}</td><td align="right">${l.qty}</td>${g?`<td align="right">${l.cost?fmt(l.cost):''}</td><td align="right">${l.cost?fmt(l.cost*l.qty):''}</td>`:''}</tr>`).join('')}</tbody>${g&&tot?`<tfoot><tr><td colspan="4" align="right"><b>Total estimé</b></td><td align="right"><b>${fmt(tot)}</b></td></tr></tfoot>`:''}</table>
+    <p>Merci de confirmer la disponibilité, le prix et le délai de livraison.</p><div style="display:flex;justify-content:space-between;margin-top:40px"><span>Le fournisseur</span><span>Pour ${esc(st.shopName)}</span></div></div>`; }
+const poText = (sid, lines) => { const sup = S.suppliers.find(x=>x.id===sid); return `Bonjour ${sup?sup.name:''},\nVoici notre commande ${S.settings.shopName} du ${dateFr(Date.now())} :\n${lines.map(l=>`• ${l.qty} × ${l.p.name}${l.p.sku?' ('+l.p.sku+')':''}`).join('\n')}\nMerci de nous confirmer la disponibilité, le prix et le délai de livraison.`; };
+
+/* --- Objectifs et classement des vendeurs --- */
+function sellers(){ const m = new Map();
+  if(isServer()) (S.users||[]).forEach(u=>m.set(u.id, {id:u.id, name:u.name||u.email||'—', role:u.role||''}));
+  else ((S.team&&S.team.members)||[]).forEach(x=>m.set(x.id, {id:x.id, name:(S.names||{})[x.id]||x.id, role:x.role||''}));
+  S.orders.forEach(o=>{ if(o.channel==='caisse' && o.cashier && !m.has(o.cashier)) m.set(o.cashier, {id:o.cashier, name:o.cashierName||(o.cashier==='local'?'Cet appareil':'Ancien membre'), role:''}); });
+  return [...m.values()].filter(u=>u.role!=='Livreur'); }
+const targetOf = (uid, per) => { const t = (S.settings.posTargets||{})[uid]||{}; return Number(t[per] ?? (S.settings.posTargetDef||{})[per]) || 0; };
+function sellerSales(from){ const by = {}; S.orders.filter(o=>o.channel==='caisse' && o.status!=='annulee' && (o.createdAt||0)>=from).forEach(o=>{ const r = by[o.cashier] ||= {total:0, n:0}; r.total += (o.total||0) - (Number(o.returnedTotal)||0); r.n++; }); return by; }
+const perStart = per => { const d = new Date(); d.setHours(0,0,0,0); if(per==='month') d.setDate(1); return d.getTime(); };
+function myTargetBar(){ if(!S.uid) return ''; const t = targetOf(S.uid, 'day'); if(!t) return ''; const s = (sellerSales(perStart('day'))[S.uid]||{total:0}).total, pc = Math.min(100, Math.round(s/t*100));
+  return `<div class="tgt-mine"><span>🎯 Mon objectif du jour : <b>${fmt(s)}</b> / ${fmt(t)}${pc>=100?' · bravo !':''}</span><div class="tgt-bar"><i style="width:${pc}%"></i></div></div>`; }
+function viewTargets(){
+  const per = S.tgPer||'day', from = perStart(per), by = sellerSales(from), g = isGerant();
+  const rows = sellers().map(u=>({...u, ...(by[u.id]||{total:0, n:0}), target:targetOf(u.id, per)})).sort((a,b)=>b.total-a.total);
+  const medal = i => ['🥇','🥈','🥉'][i] || `${i+1}.`;
+  return `<div class="sec-h"><h2>Objectifs des vendeurs</h2><span class="muted small">Ventes en caisse, retours déduits</span></div>
+  <div class="cats" style="margin-bottom:14px">${[['day','Aujourd’hui'],['month','Ce mois']].map(([k,l])=>`<button aria-pressed="${per===k}" data-a="tgPer" data-v="${k}">${l}</button>`).join('')}</div>
+  <div class="panel">${rows.length?rows.map((u,i)=>{ const pc = u.target ? Math.min(100, Math.round(u.total/u.target*100)) : 0; return `<div class="tgt-row"><span class="tgt-rk">${medal(i)}</span><div style="flex:1;min-width:0"><div class="toolbar" style="margin:0;gap:8px"><b style="flex:1">${esc(u.name)}${u.id===S.uid?' <span class="pill info">vous</span>':''}</b><span class="small">${u.n} ticket${u.n>1?'s':''}${u.n?' · panier moyen '+fmt(Math.round(u.total/u.n)):''}</span><b>${fmt(u.total)}</b></div>
+    ${u.target?`<div class="tgt-bar" title="${pc} %"><i style="width:${pc}%;${pc>=100?'background:var(--kola)':''}"></i></div><div class="muted small">${pc} % de l’objectif (${fmt(u.target)})${pc>=100?' 🎉':` · reste ${fmt(Math.max(0,u.target-u.total))}`}</div>`:'<div class="muted small">Pas d’objectif fixé</div>'}</div></div>`; }).join(''):'<p class="muted">Aucun vendeur.</p>'}</div>
+  ${g?`<div class="panel"><h3>Fixer les objectifs</h3><p class="muted small" style="margin-top:0">Montant de ventes visé par jour et par mois. La ligne « Tous » s’applique à ceux qui n’ont pas d’objectif propre.</p>
+    <div class="tbl-wrap"><table><thead><tr><th>Vendeur</th><th>Par jour</th><th>Par mois</th></tr></thead><tbody>
+    <tr><td><b>Tous (par défaut)</b></td><td><input class="input" data-tg="__def|day" inputmode="numeric" value="${(S.settings.posTargetDef||{}).day||''}" style="padding:6px 8px"></td><td><input class="input" data-tg="__def|month" inputmode="numeric" value="${(S.settings.posTargetDef||{}).month||''}" style="padding:6px 8px"></td></tr>
+    ${sellers().map(u=>{ const t = (S.settings.posTargets||{})[u.id]||{}; return `<tr><td>${esc(u.name)}<div class="muted small">${esc(u.role)}</div></td><td><input class="input" data-tg="${esc(u.id)}|day" inputmode="numeric" value="${t.day||''}" style="padding:6px 8px"></td><td><input class="input" data-tg="${esc(u.id)}|month" inputmode="numeric" value="${t.month||''}" style="padding:6px 8px"></td></tr>`; }).join('')}</tbody></table></div>
+    <div class="fin-actions" style="margin:10px 0 0"><button class="btn primary" data-a="tgSave">Enregistrer les objectifs</button></div></div>`:''}`;
+}
+
+/* --- Imprimante de tickets (58 / 80 mm) et tiroir-caisse --- */
+const PRN_KEY = 'ffm-printer';
+const prnCfg = () => { try{ return {paper:'a4', auto:false, drawer:false, baud:9600, ...(JSON.parse(localStorage.getItem(PRN_KEY)||'{}')||{})}; }catch(e){ return {paper:'a4', auto:false, drawer:false, baud:9600}; } };
+const prnSave = d => { try{ localStorage.setItem(PRN_KEY, JSON.stringify({...prnCfg(), ...d})); }catch(e){} };
+let serialPort = null;
+async function serialOpen(port){ try{ if(!port.writable) await port.open({baudRate:Number(prnCfg().baud)||9600}); serialPort = port; return true; }catch(e){ serialPort = port.writable ? port : null; return !!serialPort; } }
+if('serial' in navigator) navigator.serial.getPorts().then(ps=>{ if(ps[0] && prnCfg().direct) serialOpen(ps[0]); }).catch(()=>{});
+async function serialConnect(){
+  if(!('serial' in navigator)) return toast('Connexion directe non disponible sur ce navigateur : utilisez Chrome ou Edge sur ordinateur, ou l’impression normale.');
+  try{ const port = await navigator.serial.requestPort(); if(await serialOpen(port)){ prnSave({direct:true}); toast('Imprimante connectée'); } else toast('Impossible d’ouvrir le port : vérifiez la vitesse (baud).'); }
+  catch(e){ if(e.name!=='NotFoundError') toast('Connexion impossible : '+e.message); }
+  schedule(); }
+async function serialWrite(bytes){ if(!serialPort || !serialPort.writable) throw new Error('Imprimante non connectée'); const w = serialPort.writable.getWriter(); try{ await w.write(bytes); } finally { w.releaseLock(); } }
+const asciiFold = s => String(s||'').normalize('NFD').replace(/[̀-ͯ]/g,'').replace(/[’‘]/g,"'").replace(/[«»“”]/g,'"').replace(/[–—]/g,'-').replace(/[  ]/g,' ').replace(/[^\x20-\x7E]/g,'');
+const nF = n => Math.round(Number(n)||0).toString().replace(/\B(?=(\d{3})+(?!\d))/g,' ') + ' F';
+function escposReceipt(o, cols){ const E = [], st = S.settings, t = s=>{ for(const ch of asciiFold(s)) E.push(ch.charCodeAt(0)); }, nl = ()=>E.push(10), c = (...b)=>E.push(...b);
+  const lr = (l, r)=>{ l = asciiFold(l); r = asciiFold(r); const sp = cols - l.length - r.length; if(sp>=1) t(l+' '.repeat(sp)+r); else { t(l.slice(0,cols)); nl(); t(' '.repeat(Math.max(0, cols-r.length))+r); } nl(); };
+  const hr = ch=>{ t((ch||'-').repeat(cols)); nl(); };
+  c(27,64); c(27,97,1); c(29,33,17); t(st.shopName); nl(); c(29,33,0);
+  [[st.address, st.city].filter(Boolean).join(', '), st.phone, st.rccm?'RCCM '+st.rccm:'', st.nif?'NIF '+st.nif:''].filter(Boolean).forEach(x=>{ t(x); nl(); });
+  nl(); c(27,69,1); t(o.number); c(27,69,0); nl(); t(new Date(o.createdAt||Date.now()).toLocaleString('fr-FR')); nl(); c(27,97,0); hr();
+  (o.items||[]).forEach(i=>lr(`${i.qty} x ${i.name}`, nF(i.price*i.qty))); hr();
+  lr('Sous-total', nF(o.subtotal)); if(o.manualDisc&&o.manualDisc.amount){ if(o.discount-o.manualDisc.amount>0) lr('Remise '+(o.promoCode||''), '-'+nF(o.discount-o.manualDisc.amount)); lr('Remise', '-'+nF(o.manualDisc.amount)); } else if(o.discount) lr('Remise '+(o.promoCode||''), '-'+nF(o.discount));
+  c(29,33,1); c(27,69,1); lr('TOTAL', nF(o.total)); c(27,69,0); c(29,33,0);
+  payParts(o).forEach(p=>lr(methodName(p.method), nF(p.amount))); if(o.payment?.received) lr('Rendu', nF(Math.max(0, o.payment.received-(o.payment.parts?(o.payment.parts.find(p=>p.method==='cash')||{}).amount||0:o.total)))); if(o.payment?.rest) lr('Reste a payer', nF(o.payment.rest));
+  if(o.customer?.name){ t('Client : '+o.customer.name); nl(); }
+  if(st.receiptNote){ nl(); c(27,97,1); t(st.receiptNote); nl(); c(27,97,0); }
+  nl(); c(27,97,1); t('Merci de votre visite !'); nl(); c(27,97,0); nl(); nl(); nl(); c(29,86,66,0);
+  return new Uint8Array(E); }
+const DRAWER = new Uint8Array([27,112,0,25,250]);
+async function openDrawer(manual){ try{ await serialWrite(DRAWER); if(manual) toast('Tiroir ouvert'); }catch(e){ if(manual) toast('Tiroir : connectez l’imprimante en direct (Réglages caisse), ou activez « ouvrir le tiroir » dans le pilote de l’imprimante.'); } }
+function printDoc(inner, thermal){ const c = prnCfg(); let stl = document.getElementById('pr-page');
+  if(thermal && c.paper!=='a4'){ if(!stl){ stl = document.createElement('style'); stl.id = 'pr-page'; document.head.appendChild(stl); }
+    const w = c.paper==='58' ? 48 : 72, fs = c.paper==='58' ? 10.5 : 12;
+    stl.textContent = `@media print{ @page{ size:${c.paper}mm auto; margin:0 } #print-area{ width:${w}mm; padding:2mm 0; margin:0 } #print-area .receipt{ border:0!important; padding:0!important; max-width:none!important; box-shadow:none!important } #print-area .receipt, #print-area .receipt *{ font-family:ui-monospace,Menlo,Consolas,monospace!important; font-size:${fs}px!important; line-height:1.3!important; color:#000!important } #print-area .rr{ display:flex; justify-content:space-between; gap:4px } }`;
+    window.addEventListener('afterprint', ()=>{ stl.textContent=''; }, {once:true}); }
+  else if(stl) stl.textContent = '';
+  doPrint(inner); }
+async function printTicket(o){ const c = prnCfg();
+  if(c.direct && serialPort){ try{ await serialWrite(escposReceipt(o, c.paper==='58'?32:48)); return; }catch(e){ toast('Imprimante directe indisponible : impression normale.'); } }
+  printDoc(receiptHTML(o), true); }
+function viewPosSettings(){
+  const c = prnCfg(), st = S.settings, g = isGerant(), md = {...POS_DEF_DISC, ...(st.posMaxDisc||{})}, ser = 'serial' in navigator;
+  return `<div class="sec-h"><h2>Réglages de la caisse</h2></div>
+  <div class="panel"><h3>🖨️ Imprimante de tickets et tiroir-caisse <span class="pill info">cet appareil</span></h3>
+    <div class="field"><label>Format du ticket</label><div class="cats" role="group" aria-label="Format">${[['a4','Imprimante normale (A4)'],['80','Ticket 80 mm'],['58','Ticket 58 mm']].map(([k,l])=>`<button aria-pressed="${c.paper===k}" data-a="prnPaper" data-v="${k}">${l}</button>`).join('')}</div></div>
+    <label class="check-row" style="display:flex;gap:8px;align-items:center;margin:6px 0"><input type="checkbox" id="prn-auto" ${c.auto?'checked':''}> Imprimer le ticket automatiquement après chaque vente</label>
+    <label class="check-row" style="display:flex;gap:8px;align-items:center;margin:6px 0"><input type="checkbox" id="prn-drawer" ${c.drawer?'checked':''}> Ouvrir le tiroir-caisse quand le client paie en espèces</label>
+    <p class="muted small">Le tiroir se branche sur l’imprimante (prise RJ11). <b>Impression normale</b> : dans le pilote de l’imprimante (Windows › Imprimantes › Préférences), activez « Ouvrir le tiroir » ; le tiroir s’ouvre à chaque ticket. <b>Connexion directe</b> (Chrome ou Edge sur ordinateur, imprimante ESC/POS en USB-série ou Bluetooth) : impression instantanée sans fenêtre, coupe du papier et ouverture du tiroir commandées par le site.</p>
+    <div class="fin-actions" style="margin:0;flex-wrap:wrap">${ser?`<button class="btn ${serialPort?'ghost':'primary'} sm" data-a="prnConnect">${serialPort?'✅ Imprimante directe connectée · changer':'🔌 Connecter l’imprimante en direct'}</button>`:'<span class="muted small">Connexion directe non disponible sur ce navigateur.</span>'}
+      ${serialPort?`<button class="btn ghost sm" data-a="prnForget">Déconnecter</button>`:''}<button class="btn ghost sm" data-a="prnTest">🧾 Ticket de test</button><button class="btn ghost sm" data-a="prnDrawer">🗄️ Ouvrir le tiroir</button></div>
+    ${ser?`<div class="field" style="max-width:220px;margin-top:10px"><label for="prn-baud">Vitesse (baud) en direct</label><select class="input" id="prn-baud">${[9600,19200,38400,57600,115200].map(b=>`<option ${Number(c.baud)===b?'selected':''}>${b}</option>`).join('')}</select></div>`:''}</div>
+  ${g?`<div class="panel"><h3>🔒 Règles de la boutique <span class="pill">gérant</span></h3>
+    <label class="check-row" style="display:flex;gap:8px;align-items:center;margin:0 0 10px"><input type="checkbox" id="pc-sess" ${st.posSession!==false?'checked':''}> Ouverture de caisse obligatoire avant la première vente (fond de caisse)</label>
+    <div class="field"><label>Remise manuelle maximale par rôle (%)</label><div class="row">${Object.keys(POS_DEF_DISC).filter(r=>r!=='Gérant').map(r=>`<div class="field" style="margin:0"><label for="pc-md-${esc(r)}" class="small">${esc(r)}</label><input class="input" id="pc-md-${esc(r)}" data-md="${esc(r)}" inputmode="numeric" value="${md[r]}"></div>`).join('')}</div><p class="muted small" style="margin:4px 0 0">Le gérant n’a pas de limite. Toute remise exige un motif.</p></div>
+    <div class="row"><div class="field"><label for="pc-min">Stock minimum par défaut</label><input class="input" id="pc-min" inputmode="numeric" value="${st.posMinStock ?? 3}"></div><div class="field"><label for="pc-cov">Réassort : jours de stock visés</label><input class="input" id="pc-cov" inputmode="numeric" value="${st.posCover||14}"></div></div>
+    <h4 style="margin:10px 0 6px">📊 Rapport du soir</h4>
+    <label class="check-row" style="display:flex;gap:8px;align-items:center;margin:0 0 8px"><input type="checkbox" id="pc-rep" ${st.reportOn?'checked':''}> Envoyer chaque soir le rapport de la journée (notification et WhatsApp)</label>
+    <div class="row"><div class="field"><label for="pc-rh">Heure d’envoi</label><select class="input" id="pc-rh">${[17,18,19,20,21,22,23].map(h=>`<option value="${h}" ${Number(st.reportHour||20)===h?'selected':''}>${h} h</option>`).join('')}</select></div><div class="field"><label for="pc-rp">Numéro WhatsApp du gérant</label><input class="input" id="pc-rp" type="tel" value="${esc(st.reportPhone||'')}" placeholder="Ex. 76 00 00 00"></div></div>
+    <p class="muted small" style="margin:0">Envoi automatique par notification push (ntfy) et, si l’API WhatsApp est configurée (Gestion › Paniers), par WhatsApp avec le modèle « rapport_journalier ». Sinon, le bouton « Rapport du jour sur WhatsApp » de Caisse › Ventes ouvre le message prêt à envoyer.</p>
+    <div class="fin-actions" style="margin:12px 0 0"><button class="btn primary" data-a="pcSave">Enregistrer</button>${isServer()?'<button class="btn ghost" data-a="reportNow">📨 Envoyer le rapport maintenant</button>':''}</div></div>`:''}
+  ${sessionsPanel()}`;
+}
+async function posSettingsSave(){ const s = structuredClone(S.settings), v = id=>($(id)?.value||'').trim();
+  s.posSession = $('#pc-sess').checked; s.posMaxDisc = {}; document.querySelectorAll('[data-md]').forEach(i=>{ s.posMaxDisc[i.dataset.md] = Math.max(0, Math.min(100, parseInt(i.value)||0)); });
+  s.posMinStock = Math.max(0, parseInt(v('#pc-min'))||0); s.posCover = Math.max(1, parseInt(v('#pc-cov'))||14);
+  s.reportOn = $('#pc-rep').checked; s.reportHour = parseInt(v('#pc-rh'))||20; s.reportPhone = v('#pc-rp').slice(0,30);
+  try{ await put('settings','main',s); S.settings = s; toast('Réglages de la caisse enregistrés'); schedule(); }catch(e){ dbErr(e); toast('Enregistrement impossible : réservé au gérant.'); } }
+
+/* --- Mode hors ligne : les ventes sont gardées sur l'appareil puis envoyées au retour du réseau --- */
+const OFQ = 'ffm-offline-q';
+const offQ = () => { try{ return JSON.parse(localStorage.getItem(OFQ)||'[]') || []; }catch(e){ return []; } };
+const offSave = q => { try{ localStorage.setItem(OFQ, JSON.stringify(q)); return true; }catch(e){ toast('Mémoire de l’appareil pleine : vente hors ligne impossible.'); return false; } };
+const isNetErr = e => !!e && !e.status && (e.name==='TypeError' || !navigator.onLine || /fetch|network|load failed/i.test(String(e.message||'')));
+async function runOp(op){ const [k, a, b, c] = op;
+  if(k==='put') return put(a, b, c);
+  if(k==='patch') return patch(a, b, c);
+  if(k==='stock') return applyStock(a, b);
+  if(k==='avoirUse'){ const av = (S.avoirs||[]).find(x=>x.id===a); if(!av) return; return patch('avoirs', a, {used:Math.min(Number(av.amount)||0, (Number(av.used)||0)+b), uses:[...(av.uses||[]), {orderId:c, amount:b, at:Date.now()}]}); } }
+function applyLocal(op){ const [k, a, b, c] = op;
+  try{
+    if(k==='put' && a==='orders' && !S.orders.some(o=>o.id===b)) S.orders.unshift({id:b, ...c, offline:true});
+    else if(k==='put' && a==='fin-moves') S.moves.unshift({id:b, ...c});
+    else if(k==='put' && a==='clients') S.clients.push({id:b, ...c});
+    else if(k==='put' && a==='cash-sessions') (S.cashSessions ||= []).unshift({id:b, ...c});
+    else if(k==='put' && a==='avoirs') (S.avoirs ||= []).unshift({id:b, ...c});
+    else if(k==='patch'){ const L = {'cash-sessions':S.cashSessions, orders:S.orders, avoirs:S.avoirs}[a]; const x = L && L.find(y=>y.id===b); if(x) Object.assign(x, c); }
+    else if(k==='stock') a.forEach(x=>{ const p = S.products.find(y=>y.id===x.id); if(p) p.stock = Math.max(0, (Number(p.stock)||0) - b*x.qty); });
+    else if(k==='avoirUse'){ const av = (S.avoirs||[]).find(x=>x.id===a); if(av) av.used = (Number(av.used)||0)+b; }
+  }catch(e){} }
+async function posCommit(ops, label){
+  const queue = rest => { const q = offQ(); q.push({id:newId('q'), at:Date.now(), label:label||'', ops:rest}); if(!offSave(q)) throw new Error('Mémoire pleine'); rest.forEach(applyLocal); schedule(); return {offline:true}; };
+  if(isServer() && (!navigator.onLine || offQ().length)){ const r = queue(ops); if(navigator.onLine) setTimeout(offFlush, 500); return r; }
+  for(let i=0;i<ops.length;i++){ try{ await runOp(ops[i]); if(isServer() && ['cash-sessions','avoirs'].includes(ops[i][1])) applyLocal(ops[i]); } catch(e){ if(isServer() && isNetErr(e)) return queue(ops.slice(i)); throw e; } }
+  return {offline:false};
+}
+let offBusy = false;
+async function offFlush(){
+  if(offBusy || !isServer() || !navigator.onLine || !offQ().length) return; offBusy = true; let sent = 0;
+  try{ if(window.ffmReload && !(await window.ffmReload())) return;
+    let q; while((q = offQ()).length){ const job = q[0]; while(job.ops.length){ await runOp(job.ops[0]); job.ops.shift(); offSave([job, ...q.slice(1)]); } offSave(offQ().slice(1)); sent++; }
+    if(sent) toast(`✅ ${sent} opération${sent>1?'s':''} hors ligne envoyée${sent>1?'s':''} au serveur`);
+  }catch(e){ console.warn('Envoi hors ligne', e); } finally { offBusy = false; schedule(); } }
+window.addEventListener('online', ()=>{ schedule(); setTimeout(offFlush, 1500); });
+window.addEventListener('offline', ()=>schedule());
+setInterval(()=>{ if(offQ().length) offFlush(); }, 30000);
+function offlineBar(){ const n = offQ().length;
+  if(!navigator.onLine) return `<div class="sess-bar warn"><span>📴 <b>Hors ligne</b> : vous pouvez continuer à vendre. ${n?`${n} opération${n>1?'s':''} en attente d’envoi.`:'Les ventes seront envoyées au retour du réseau.'}</span></div>`;
+  return n ? `<div class="sess-bar warn"><span>⏳ ${n} opération${n>1?'s':''} faite${n>1?'s':''} hors ligne en cours d’envoi…</span><button class="btn ghost sm" data-a="offFlush">Envoyer maintenant</button></div>` : ''; }
 
 /* --- Prix d'achat, produits phares, inventaire --- */
 const costOf = pid => Number(S.costs[pid])||0;
@@ -4112,7 +4570,7 @@ function affPay(a, due){
 /* --- Trésorerie --- */
 const ACCOUNTS = {caisse:'Caisse boutique', banque:'Banque', momo:'Mobile money'};
 const EXP_CATS = ['Achat de marchandises','Commissions ambassadeurs','Loyer','Salaires','Électricité et eau','Transport et livraison','Téléphone et internet','Taxes et impôts','Fournitures','Entretien et réparations','Autre'];
-const MOVE_TYPES = {vente:'Vente', encaissement:'Encaissement', depense:'Dépense', virement:'Virement', reg_fournisseur:'Règlement fournisseur', reg_client:'Règlement client'};
+const MOVE_TYPES = {vente:'Vente', encaissement:'Encaissement', depense:'Dépense', virement:'Virement', reg_fournisseur:'Règlement fournisseur', reg_client:'Règlement client', remboursement:'Remboursement client'};
 const accountFor = m => m==='cash' ? 'caisse' : ['orange','moov','wave'].includes(m) ? 'momo' : 'banque';
 /* Encaissement des commandes en ligne : choix du compte (caisse, mobile money, banque) ou argent gardé par le livreur jusqu'au reversement */
 const CASH_DEST = {caisse:'Caisse boutique', momo:'Mobile money', banque:'Banque', livreur:'Chez le livreur (à reverser en caisse)'};
@@ -4695,16 +5153,17 @@ const AD_NETS = {facebook:'Facebook', instagram:'Instagram', tiktok:'TikTok', go
 const WA_TPL = {
   cart1:['relance_panier_1h','Bonjour {{1}} 👋 Vous avez laissé des articles dans votre panier chez foûfoûni-Market. Ils vous attendent : {{2}}\nPaiement à la livraison, livraison rapide à Bamako.'],
   cart24:['relance_panier_24h','Bonjour {{1}}, votre panier foûfoûni-Market est toujours disponible, mais le stock part vite. Besoin d’un conseil ? Répondez simplement à ce message. Votre panier : {{2}}'],
-  confirm:['confirmation_commande','Bonjour {{1}}, merci pour votre commande {{2}} ({{3}}, à payer à la livraison). Confirmez-la en un clic : {{4}}']};
+  confirm:['confirmation_commande','Bonjour {{1}}, merci pour votre commande {{2}} ({{3}}, à payer à la livraison). Confirmez-la en un clic : {{4}}'],
+  report:['rapport_journalier','📊 Rapport du {{1}} : {{2}}']};
 function waPanel(){ if(!isGerant()) return ''; if(!S.wa){ window.waApi && waApi.load(); return ''; } const w = S.wa; if(w.error) return '';
   return `<details class="panel" ${!w.ready||S.waOpen?'open':''} ontoggle="S.waOpen=this.open"><summary style="cursor:pointer"><h3 style="display:inline">💬 Relances WhatsApp automatiques</h3> ${w.ready?(w.on?'<span class="pill ok">Actives</span>':'<span class="pill warn">En pause</span>'):'<span class="pill warn">À configurer</span>'}</summary>
     <p class="small" style="margin:10px 0">Le site envoie tout seul, depuis votre numéro WhatsApp Business : un rappel <b>1 h</b> puis <b>24 h</b> après un panier abandonné avec numéro, et la <b>demande de confirmation</b> de chaque commande payable à la livraison. Il faut l’API WhatsApp Cloud de Meta (gratuite à configurer ; Meta facture certains messages) et des modèles de messages approuvés.</p>
     <ol class="small" style="padding-left:18px;margin:0 0 10px"><li>Sur <b>business.facebook.com</b> › WhatsApp Manager, ajoutez votre numéro (il ne doit pas être utilisé dans l’application WhatsApp).</li><li>Dans votre application Meta (developers.facebook.com) › WhatsApp › Configuration de l’API : copiez l’<b>identifiant du numéro de téléphone</b>.</li><li>Créez un <b>utilisateur système</b> (Paramètres de l’entreprise › Utilisateurs système), donnez-lui l’accès à votre compte WhatsApp et générez un <b>jeton permanent</b> avec la permission <code>whatsapp_business_messaging</code>.</li><li>Dans WhatsApp Manager › Modèles de messages, créez les 3 modèles ci-dessous (catégorie « Marketing » pour les paniers, « Utilitaire » pour la confirmation, langue Français), puis attendez leur approbation.</li></ol>
     <div class="row"><div class="field"><label for="wa-pid">Identifiant du numéro de téléphone</label><input class="input" id="wa-pid" inputmode="numeric" value="${esc(w.phoneId||'')}" placeholder="ex. 123456789012345"></div><div class="field"><label for="wa-tok">Jeton d’accès permanent</label><input class="input secret" id="wa-tok" type="text" autocomplete="off" spellcheck="false" placeholder="${w.tokenSet?'•••••• enregistré (laisser vide pour le garder)':'EAAG…'}"></div><div class="field" style="flex:0 1 110px"><label for="wa-lang">Langue</label><input class="input" id="wa-lang" value="${esc(w.lang||'fr')}"></div></div>
-    ${Object.entries(WA_TPL).map(([k,[def,txt]])=>{ const f = {cart1:'tplCart1', cart24:'tplCart24', confirm:'tplConfirm'}[k]; return `<div class="wa-t"><div class="field" style="margin:0"><label for="wa-${k}">${{cart1:'Panier abandonné : 1 h après',cart24:'Panier abandonné : 24 h après',confirm:'Confirmation des commandes à la livraison'}[k]} · nom du modèle (vide = désactivé)</label><input class="input" id="wa-${k}" value="${esc(w[f]??def)}"></div><p class="muted small" style="margin:6px 0 0">Texte à créer dans Meta : <span style="white-space:pre-wrap">${esc(txt)}</span></p></div>`; }).join('')}
+    ${Object.entries(WA_TPL).map(([k,[def,txt]])=>{ const f = {cart1:'tplCart1', cart24:'tplCart24', confirm:'tplConfirm', report:'tplReport'}[k]; return `<div class="wa-t"><div class="field" style="margin:0"><label for="wa-${k}">${{cart1:'Panier abandonné : 1 h après',cart24:'Panier abandonné : 24 h après',confirm:'Confirmation des commandes à la livraison',report:'Rapport du soir au gérant (Caisse › Réglages caisse)'}[k]} · nom du modèle (vide = désactivé)</label><input class="input" id="wa-${k}" value="${esc(w[f]??def)}"></div><p class="muted small" style="margin:6px 0 0">Texte à créer dans Meta : <span style="white-space:pre-wrap">${esc(txt)}</span></p></div>`; }).join('')}
     <label class="check-row" style="display:flex;gap:8px;align-items:center;margin:10px 0"><input type="checkbox" id="wa-on" ${w.on!==false?'checked':''}> Envoyer les relances automatiquement</label>
     <div class="fin-actions" style="margin:0"><button class="btn primary" data-a="waSave">Enregistrer</button></div><div class="xp-err" id="wa-err"></div>
-    ${w.ready?`<div class="row" style="align-items:flex-end;margin-top:12px"><div class="field"><label for="wa-to">Envoyer un test à</label><input class="input" id="wa-to" type="tel" placeholder="Votre numéro, ex. 76 00 00 00"></div><div class="field" style="flex:0 1 220px"><label for="wa-tt">Modèle</label><select class="input" id="wa-tt"><option value="cart1">Panier 1 h</option><option value="cart24">Panier 24 h</option><option value="confirm">Confirmation</option></select></div><button class="btn ghost" data-a="waTest" style="flex:0;white-space:nowrap">📨 Envoyer le test</button></div>`:''}
+    ${w.ready?`<div class="row" style="align-items:flex-end;margin-top:12px"><div class="field"><label for="wa-to">Envoyer un test à</label><input class="input" id="wa-to" type="tel" placeholder="Votre numéro, ex. 76 00 00 00"></div><div class="field" style="flex:0 1 220px"><label for="wa-tt">Modèle</label><select class="input" id="wa-tt"><option value="cart1">Panier 1 h</option><option value="cart24">Panier 24 h</option><option value="confirm">Confirmation</option><option value="report">Rapport du soir</option></select></div><button class="btn ghost" data-a="waTest" style="flex:0;white-space:nowrap">📨 Envoyer le test</button></div>`:''}
     ${(w.log||[]).length?`<h4 style="margin:14px 0 6px">Derniers envois</h4><div class="small" style="display:grid;gap:4px">${w.log.slice(0,12).map(x=>`<div>${x.ok?'✅':'❌'} ${dateFr(x.at)} · ${esc(x.to)} · ${esc(x.why||x.tpl)}${x.err?` · <span style="color:var(--danger)">${esc(x.err)}</span>`:''}</div>`).join('')}</div>`:''}</details>`; }
 function panePros(){ const list = (S.pros||[]).slice().sort((a,b)=>(b.createdAt||0)-(a.createdAt||0)), e = S.proEdit || null;
   const stats = id => { const os = S.orders.filter(o=>o.pro && o.pro.id===id && o.status!=='annulee'); return {n:os.length, ca:os.reduce((t,o)=>t+(o.total||0),0), due:os.filter(o=>o.payment&&o.payment.method==='terme' && !['payee'].includes(o.status) && !/encaiss|pay/i.test(o.payment.status.replace(/à payer/,''))).reduce((t,o)=>t+(o.total||0),0)}; };
@@ -5170,7 +5629,7 @@ function orderDetail(o){
   const idx = FLOW.indexOf(o.status), next = idx>=0 && idx<FLOW.length-1 ? FLOW[idx+1] : null;
   $('#overlay').innerHTML = `<div class="scrim" data-a="closeAll"><div class="modal wide" role="dialog" aria-modal="true" aria-label="Commande ${esc(o.number)}">
     <div class="m-h"><h2>${esc(o.number)} <span class="pill ${STATUS[o.status]?.cls}" style="vertical-align:middle">${STATUS[o.status]?.label}</span></h2><button class="x" data-a="closeAll" aria-label="Fermer">×</button></div>
-    <div class="m-b"><div class="two"><div class="panel">${receiptHTML(o)}</div>
+    <div class="m-b"><div class="two"><div><div class="panel">${receiptHTML(o)}</div>${returnPanel(o)}</div>
       <div>${o.affiliate?`<div class="panel"><h3>Ambassadeur</h3><p style="margin:0"><b>${esc(o.affiliate.code)}</b> · ${esc((S.affiliates.find(a=>a.id===o.affiliate.id)||{}).name||'')}<br>Commission ${fmt(o.affiliate.commission)} <span class="pill ${AFF_ST[affState(o)].c}">${AFF_ST[affState(o)].l}</span></p></div>`:''}<div class="panel"><h3>Client</h3><p style="margin:0">${esc(c.name||'—')}<br>${esc(c.phone||'')}<br>${o.delivery==='livraison'?esc([c.address, c.city, c.country&&c.country!=='ML'?WA[c.country]:''].filter(Boolean).join(', ')):'Retrait en boutique'}${c.note?`<br><span class="muted">Repère : ${esc(c.note)}</span>`:''}${o.slot?`<br>🕒 Créneau : <b>${esc(slotLabel(o.slot))}</b>`:''}</p>
       ${(()=>{ const r = o.channel!=='caisse' && phoneRecord(c.phone); if(!r || r.n<2) return r&&r.n===1?'<p class="small muted" style="margin:8px 0 0">🆕 Premier achat de ce numéro</p>':''; const bad = r.refused>=Math.max(1, Number(S.settings.riskMax)||2);
         return `<p class="small" style="margin:8px 0 0">${bad?'🔴':r.refused?'🟠':'🟢'} Fiabilité : <b>${r.delivered} livrée${r.delivered>1?'s':''}</b> · ${r.refused} refusée${r.refused>1?'s':''}${r.cancelled?' · '+r.cancelled+' annulée'+(r.cancelled>1?'s':''):''} (${r.n} commandes)${bad?' · <b>acompte exigé</b> pour le paiement à la livraison':''}</p>`; })()}
@@ -5494,6 +5953,9 @@ document.addEventListener('keydown', e=>{
   }
   if(e.key==='Enter' && e.target.id && e.target.id.startsWith('promo-')){ e.preventDefault(); e.target.nextElementSibling?.click(); }
 });
+document.addEventListener('change', e=>{ const t = e.target; if(!t || !t.id && !t.dataset) return;
+  if(t.id==='prn-auto') prnSave({auto:t.checked}); else if(t.id==='prn-drawer') prnSave({drawer:t.checked}); else if(t.id==='prn-baud') prnSave({baud:Number(t.value)||9600});
+  else if(t.dataset && t.dataset.min){ const p = S.products.find(x=>x.id===t.dataset.min), v = Math.max(0, parseInt(t.value)||0); if(p && v!==Number(p.minStock)){ patch('products', p.id, {minStock:v}).then(()=>{ p.minStock = v; toast('Stock minimum enregistré'); schedule(); }).catch(dbErr); } } });
 document.addEventListener('change', async e=>{
   const t = e.target, a = t.dataset.a;
   if(a==='togglePromo'){ const p=S.promos.find(x=>x.code===t.dataset.id); try{ await patch('promos',p.code,{active:t.checked}); await patch('promo-lookup',await hashCode(p.code),{active:t.checked}); }catch(err){ dbErr(err); } }
@@ -5542,7 +6004,7 @@ document.addEventListener('click', async e=>{
     case 'adDel': { const id = el.dataset.id; if(!confirm('Supprimer cette dépense ?')) break; del('ad-spend', id).then(()=>{ S.adSpend = (S.adSpend||[]).filter(x=>x.id!==id); schedule(); }).catch(dbErr); break; }
     case 'proOpen': proModal(); break;
     case 'waSave': { const err = $('#wa-err'), v = q=>($(q).value||'').trim(); el.disabled = true; err.textContent = '';
-      S.waOpen = true; waApi.save({phoneId:v('#wa-pid'), token:v('#wa-tok'), lang:v('#wa-lang')||'fr', tplCart1:v('#wa-cart1'), tplCart24:v('#wa-cart24'), tplConfirm:v('#wa-confirm'), on:$('#wa-on').checked})
+      S.waOpen = true; waApi.save({phoneId:v('#wa-pid'), token:v('#wa-tok'), lang:v('#wa-lang')||'fr', tplCart1:v('#wa-cart1'), tplCart24:v('#wa-cart24'), tplConfirm:v('#wa-confirm'), tplReport:v('#wa-report'), on:$('#wa-on').checked})
         .then(r=>toast(r.ready?'Relances WhatsApp enregistrées ✓':'Enregistré : il manque le jeton ou l’identifiant du numéro')).catch(e=>{ err.textContent = e.message; }).finally(()=>{ el.disabled = false; }); break; }
     case 'waTest': { const to = ($('#wa-to').value||'').trim(); if(to.replace(/\D/g,'').length<8){ toast('Indiquez votre numéro.'); break; } el.disabled = true;
       waApi.test(to, $('#wa-tt').value).then(()=>toast('Message de test envoyé ✓')).catch(e=>toast(e.message)).finally(()=>{ el.disabled = false; }); break; }
@@ -5821,7 +6283,7 @@ document.addEventListener('click', async e=>{
     case 'coBack': readCO(); CO.step--; drawCheckout(); break;
     case 'coNext': coNext(); break;
     case 'receipt': { const o=S.orders.find(x=>x.id===id); if(o) showReceipt(o,false); break; }
-    case 'printReceipt': { const o = S.orders.find(x=>x.id===id) || window._lastReceipt; if(o) doPrint(receiptHTML(o)); break; }
+    case 'printReceipt': { const o = S.orders.find(x=>x.id===id) || window._lastReceipt; if(o) printTicket(o); break; }
     case 'dlReceipt': { const o = S.orders.find(x=>x.id===id) || window._lastReceipt; if(o) save(`recu-${o.number}.html`, standalone('Reçu '+o.number, receiptHTML(o))); break; }
     case 'posAdd': addToCart(id,1,'pos'); break;
     case 'posQty': changeQty('pos', id, Number(el.dataset.d)); break;
@@ -5843,7 +6305,33 @@ document.addEventListener('click', async e=>{
       w.document.write(brouillardHTML(acc, from, to)); w.document.close(); setTimeout(()=>{ try{ w.focus(); w.print(); }catch(e){} }, 500); closeAll(); break; }
     case 'exportMoves': save('journal-tresorerie.csv', csv([['Date','Type','Libellé','Catégorie','Compte','Montant','Référence'], ...S.moves.slice().sort((a,b)=>(a.date||'').localeCompare(b.date||'')).map(m=>[m.date,MOVE_TYPES[m.type],m.label,m.category,ACCOUNTS[m.account],m.amount,m.ref])])); break;
     case 'exportParties': { const tp=el.dataset.v, list=tp==='client'?S.clients:S.suppliers; save(tp==='client'?'clients.csv':'fournisseurs.csv', csv([['Nom','Téléphone','E-mail','Adresse','Produits','Solde dû','Note'], ...list.map(x=>[x.name,x.phone,x.email,x.address,x.products,partyBalance(tp,x.id),x.note])])); break; }
-    case 'posClear': S.pos=[]; S.posPromo=null; schedule(); break;
+    case 'posClear': S.pos=[]; S.posPromo=null; S.posDisc=null; schedule(); break;
+    case 'posHold': posHoldModal(); break;
+    case 'posResume': posResume(id); break;
+    case 'posHeldDel': if(confirm('Supprimer ce ticket en attente ?')){ heldSave(heldList().filter(h=>h.id!==id)); schedule(); } break;
+    case 'posDisc': posDiscModal(); break;
+    case 'sessOpen': sessionOpenModal(false); break;
+    case 'sessClose': sessionCloseModal(); break;
+    case 'sessZ': { const x = (S.cashSessions||[]).find(y=>y.id===id); if(x) sessionZ(x); break; }
+    case 'posReturn': { const o = S.orders.find(x=>x.id===id); if(o) returnModal(o); break; }
+    case 'avoirShow': { const a = (S.avoirs||[]).find(x=>x.id===id); if(a) avoirModal(a); break; }
+    case 'rsF': S.rsF = el.dataset.v; schedule(); break;
+    case 'labelsPos': labelsDialog(); break;
+    case 'labelsPu': { const pu = (S.purchases||[])[0]; if(pu) labelsDialog([...new Set((pu.lines||[]).map(l=>l.productId).filter(Boolean))]); break; }
+    case 'poPrint': case 'poWa': { const sid = el.dataset.v, lines = poLines(sid); if(!lines.length){ toast('Cochez au moins un produit avec une quantité.'); break; }
+      if(a==='poPrint') printDoc(poHTML(sid, lines)); else { const sup = S.suppliers.find(x=>x.id===sid); window.open(waShare(poText(sid, lines), sup&&sup.phone), '_blank', 'noopener'); } break; }
+    case 'tgPer': S.tgPer = el.dataset.v; schedule(); break;
+    case 'tgSave': { const s2 = structuredClone(S.settings); s2.posTargets = {}; s2.posTargetDef = {};
+      document.querySelectorAll('[data-tg]').forEach(i=>{ const [u, per] = i.dataset.tg.split('|'), v = Math.max(0, parseInt((i.value||'').replace(/\s/g,''))||0); if(!v) return; if(u==='__def') s2.posTargetDef[per] = v; else (s2.posTargets[u] ||= {})[per] = v; });
+      try{ await put('settings','main',s2); S.settings = s2; toast('Objectifs enregistrés'); schedule(); }catch(e){ dbErr(e); toast('Enregistrement impossible : réservé au gérant.'); } break; }
+    case 'prnPaper': prnSave({paper:el.dataset.v}); schedule(); break;
+    case 'prnConnect': serialConnect(); break;
+    case 'prnForget': try{ await serialPort.close(); }catch(e){} try{ await serialPort.forget?.(); }catch(e){} serialPort = null; prnSave({direct:false}); schedule(); break;
+    case 'prnTest': printTicket({number:'TEST-0001', createdAt:Date.now(), items:[{name:'Article de test', qty:2, price:2500}], subtotal:5000, discount:0, total:5000, channel:'caisse', payment:{method:'cash', paid:5000, received:10000}, customer:{}}); break;
+    case 'prnDrawer': openDrawer(true); break;
+    case 'pcSave': posSettingsSave(); break;
+    case 'reportNow': if(window.sendReportNow){ el.disabled = true; window.sendReportNow().then(r=>toast(r.wa?'Rapport envoyé (notification et WhatsApp)':r.push?'Rapport envoyé par notification':'Rapport prêt : configurez les notifications ou WhatsApp pour l’envoi automatique')).catch(e=>toast(e.message)).finally(()=>{ el.disabled=false; }); } break;
+    case 'offFlush': offFlush(); break;
     case 'posPay': posPay(); break;
     case 'tab': S.tab=el.dataset.v; S.aq=''; schedule(); break;
     case 'newProduct': S.view==='admin'||(S.view='admin', S.tab='products'); productForm(null); schedule(); break;

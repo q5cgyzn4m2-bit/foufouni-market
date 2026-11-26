@@ -209,7 +209,7 @@ ${bundles ? 'LOTS :\n' + bundles : ''}`;
 const NTFY = { server: (env.NTFY_SERVER || 'https://ntfy.sh').replace(/\/$/, ''), topic: (env.NTFY_TOPIC || '').trim(), token: (env.NTFY_TOKEN || '').trim() };
 const ABANDON_MIN = Math.max(5, Number(env.ABANDON_MINUTES) || 10);
 const money = n => new Intl.NumberFormat('fr-FR').format(Math.round(n || 0)).replace(/[\u202f\u00a0]/g, ' ') + ' ' + (settings().currency || 'FCFA');
-const METHOD_NAMES = { wave: 'Wave', orange: 'Orange Money', moov: 'Moov Money', cod: 'À la livraison', cash: 'Espèces', credit: 'À crédit', card: 'Carte', paypal: 'PayPal' };
+const METHOD_NAMES = { wave: 'Wave', orange: 'Orange Money', moov: 'Moov Money', cod: 'À la livraison', cash: 'Espèces', credit: 'À crédit', card: 'Carte', paypal: 'PayPal', split: 'Paiement mixte', avoir: 'Avoir' };
 const waLink = (phone, text) => { let d = String(phone || '').replace(/\D/g, ''); if (d.length === 8) d = '223' + d; return d ? `https://wa.me/${d}?text=${encodeURIComponent(text)}` : ''; };
 async function notify({ title, message, tags = [], priority = 3, click }) {
   if (!NTFY.topic) return;
@@ -857,18 +857,57 @@ async function waTick() {
   } finally { waBusy = false; }
 }
 setInterval(() => { waTick().catch(e => console.warn('Relances WhatsApp :', e.message)); }, Number(env.WA_TICK_MS) || 5 * 60e3).unref();
+/* ===================== Rapport du soir (caisse + en ligne) au gérant ===================== */
+function dayReport(day = today()) {
+  const from = Date.parse(day + 'T00:00:00Z'), to = from + 864e5, inDay = t => (t || 0) >= from && (t || 0) < to;
+  const pos = allDocs('orders').filter(o => o.channel === 'caisse' && o.status !== 'annulee' && inDay(o.createdAt));
+  const web = allDocs('orders').filter(o => o.channel !== 'caisse' && ['payee', 'preparation', 'expediee', 'livree'].includes(o.status) && inDay(o.createdAt));
+  const by = {}, prods = {}; let total = 0, credit = 0, disc = 0;
+  for (const o of pos) {
+    total += o.total || 0; credit += Number(o.payment?.rest) || 0; disc += Number(o.manualDisc?.amount) || 0;
+    const parts = Array.isArray(o.payment?.parts) && o.payment.parts.length ? o.payment.parts : o.payment?.paid > 0 ? [{ method: o.payment.method, amount: o.payment.paid }] : [];
+    for (const p of parts) by[p.method] = (by[p.method] || 0) + (Number(p.amount) || 0);
+    for (const i of o.items || []) if (!i.gift) prods[i.name] = (prods[i.name] || 0) + (i.qty || 0);
+  }
+  const refunds = allDocs('fin-moves').filter(m => m.type === 'remboursement' && inDay(m.createdAt)).reduce((t, m) => t - (Number(m.amount) || 0), 0);
+  const sess = allDocs('cash-sessions').filter(x => x.closedAt && inDay(x.closedAt)), gap = sess.reduce((t, x) => t + (Number(x.gap) || 0), 0);
+  const top = Object.entries(prods).sort((a, b) => b[1] - a[1]).slice(0, 3).map(([n, q]) => `${q} × ${n}`).join(', ');
+  const webTot = web.reduce((t, o) => t + (o.total || 0), 0);
+  const L = [`Caisse : ${pos.length} vente(s), ${money(total)}`];
+  if (web.length) L.push(`En ligne : ${web.length} commande(s), ${money(webTot)}`);
+  const pay = Object.entries(by).filter(([, v]) => v > 0).map(([k, v]) => `${METHOD_NAMES[k] || k} ${money(v)}`).join(', '); if (pay) L.push(pay);
+  if (credit) L.push(`À crédit : ${money(credit)}`); if (disc) L.push(`Remises : ${money(disc)}`); if (refunds) L.push(`Remboursements : ${money(refunds)}`);
+  if (sess.length) L.push(`Écart de caisse : ${gap > 0 ? '+' : ''}${money(gap)}`);
+  if (top) L.push(`Top : ${top}`);
+  return { text: L.join('\n'), line: L.join(' · ').slice(0, 900), total: total + webTot };
+}
+async function sendDayReport(day = today()) {
+  const s = settings(), r = dayReport(day), out = { text: r.text, push: !!NTFY.topic, wa: false };
+  await notify({ title: `📊 Rapport du ${day.split('-').reverse().join('/')} : ${money(r.total)}`, tags: ['bar_chart'], priority: 3, click: BASE_URL, message: r.text }).catch(() => {});
+  const c = waCfg();
+  if (c.tplReport && waReady(c) && waTo(s.reportPhone)) { try { await waSend(s.reportPhone, c.tplReport, [day.split('-').reverse().join('/'), r.line], 'rapport du soir'); out.wa = true; } catch (e) { out.waError = e.message; } }
+  return out;
+}
+setInterval(() => {
+  const s = settings(); if (!s.reportOn) return;
+  if (new Date().getUTCHours() < (Number(s.reportHour) || 20)) return;
+  const log = getDoc('report-log', 'main') || {}; if (log.last === today()) return;
+  putDoc('report-log', 'main', { last: today(), at: Date.now() });
+  sendDayReport().catch(e => console.warn('Rapport du soir :', e.message));
+}, Number(env.REPORT_TICK_MS) || 5 * 60e3).unref();
+app.post('/api/admin/report/send', requireStaff, requireManager, express.json({ limit: '2kb' }), h(async (req, res) => res.json(await sendDayReport())));
 app.get('/api/admin/wa', requireStaff, requireManager, (req, res) => { const c = waCfg(); const { token, ...rest } = c;
   res.json({ ...rest, tokenSet: !!token, ready: waReady(c), log: ((getDoc('wa-log', 'main') || {}).items || []).slice(0, 30) }); });
 app.post('/api/admin/wa', requireStaff, requireManager, express.json({ limit: '20kb' }), h(async (req, res) => {
   const b = req.body || {}, prev = getDoc('wa-config', 'main') || {}, tplOk = x => String(x || '').trim().toLowerCase().replace(/[^a-z0-9_]/g, '').slice(0, 60);
-  const d = { on: b.on !== false, lang: String(b.lang || 'fr').replace(/[^a-zA-Z_]/g, '').slice(0, 10) || 'fr', phoneId: String(b.phoneId || '').replace(/\D/g, '').slice(0, 30), tplCart1: tplOk(b.tplCart1), tplCart24: tplOk(b.tplCart24), tplConfirm: tplOk(b.tplConfirm),
+  const d = { on: b.on !== false, lang: String(b.lang || 'fr').replace(/[^a-zA-Z_]/g, '').slice(0, 10) || 'fr', phoneId: String(b.phoneId || '').replace(/\D/g, '').slice(0, 30), tplCart1: tplOk(b.tplCart1), tplCart24: tplOk(b.tplCart24), tplConfirm: tplOk(b.tplConfirm), tplReport: tplOk(b.tplReport),
     token: String(b.token || '').trim() ? String(b.token).trim().slice(0, 600) : (prev.token || '') };
   putDoc('wa-config', 'main', d); await store.flush();
   res.json({ ok: true, ready: waReady(d) });
 }));
 app.post('/api/admin/wa/test', requireStaff, requireManager, express.json({ limit: '5kb' }), h(async (req, res) => {
-  const c = waCfg(), tpl = { cart1: c.tplCart1, cart24: c.tplCart24, confirm: c.tplConfirm }[req.body?.tpl] || c.tplCart1;
-  const params = req.body?.tpl === 'confirm' ? ['Awa', 'FM-TEST-0001', money(12500), BASE_URL + '/guide'] : ['Awa', BASE_URL];
+  const c = waCfg(), tpl = { cart1: c.tplCart1, cart24: c.tplCart24, confirm: c.tplConfirm, report: c.tplReport }[req.body?.tpl] || c.tplCart1;
+  const params = req.body?.tpl === 'confirm' ? ['Awa', 'FM-TEST-0001', money(12500), BASE_URL + '/guide'] : req.body?.tpl === 'report' ? [today(), dayReport().line] : ['Awa', BASE_URL];
   await waSend(req.body?.to, tpl, params, 'test'); res.json({ ok: true });
 }));
 app.get('/api/admin/social/status', requireStaff, (req, res) => res.json(socialStatus()));
@@ -1727,11 +1766,12 @@ app.get('/api/admin/state', requireStaff, (req, res) => {
     clients: allDocs('clients'), suppliers: allDocs('suppliers'),
     moves: allDocs('fin-moves').sort((a, b) => b.createdAt - a.createdAt), ledger: allDocs('fin-ledger').sort((a, b) => b.createdAt - a.createdAt),
     finConfig: getDoc('fin-config', 'main') || {},
+    cashSessions: allDocs('cash-sessions').sort((a, b) => b.openedAt - a.openedAt).slice(0, 200), avoirs: allDocs('avoirs').sort((a, b) => b.createdAt - a.createdAt).slice(0, 500),
     notifications: { active: !!NTFY.topic, abandonMinutes: ABANDON_MIN },
     settings: s, users: store.users.list(), providers: providers(), configured: CONFIGURED, me: req.user
   });
 });
-const ADMIN_COLS = new Set(['articles', 'aff-clicks', 'products', 'product-images', 'costs', 'stock-moves', 'lp-stats', 'campaigns', 'contact-flags', 'drivers', 'delivery-photos', 'purchases', 'reviews', 'review-images', 'bundles', 'promos', 'orders', 'settings', 'affiliates', 'aff-payouts', 'aff-lookup', 'clients', 'suppliers', 'fin-moves', 'fin-ledger', 'fin-config', 'social-posts', 'ad-spend', 'pros']);
+const ADMIN_COLS = new Set(['articles', 'aff-clicks', 'products', 'product-images', 'costs', 'stock-moves', 'lp-stats', 'campaigns', 'contact-flags', 'drivers', 'delivery-photos', 'purchases', 'reviews', 'review-images', 'bundles', 'promos', 'orders', 'settings', 'affiliates', 'aff-payouts', 'aff-lookup', 'clients', 'suppliers', 'fin-moves', 'fin-ledger', 'fin-config', 'social-posts', 'ad-spend', 'pros', 'cash-sessions', 'avoirs']);
 function adminTarget(req) {
   const { col, id } = req.params;
   if (!ADMIN_COLS.has(col) || !validId(id)) throw httpErr(400, 'Requête invalide.');
@@ -1766,6 +1806,10 @@ app.patch('/api/admin/:col/:id', requireStaff, h((req, res) => {
   const after = patchDoc(col, id, body); if (!after) throw httpErr(404, 'Introuvable.');
   res.json({ ok: true });
   if (col === 'orders' && body.status && before && before.status !== body.status) pushOrder(id, after);
+  if (col === 'cash-sessions' && body.closedAt && before && !before.closedAt) {
+    notify({ title: `Caisse clôturée · écart ${after.gap > 0 ? '+' : ''}${money(after.gap)}`, tags: [after.gap ? 'warning' : 'white_check_mark'], priority: after.gap ? 4 : 3, click: BASE_URL,
+      message: `Par ${req.user.name} · ventes ${money(after.summary?.total)} · attendu ${money(after.expected)} · compté ${money(after.counted)}${after.note ? '\nMotif : ' + String(after.note).slice(0, 200) : ''}` }).catch(() => {});
+  }
 }));
 app.delete('/api/admin/:col/:id', requireStaff, h((req, res) => {
   const { col, id } = req.params;

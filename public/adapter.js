@@ -20,7 +20,7 @@
         const s = await api('GET', '/api/admin/state');
         S.products = s.products; S.bundles = s.bundles || []; S.promos = s.promos; S.affiliates = s.affiliates || []; S.affPayouts = s.affPayouts || []; S.visits = s.visits || []; S.reviews = s.reviews || []; S.campaigns = s.campaigns || []; S.adSpend = s.adSpend || []; S.pros = s.pros || []; S.drivers = s.drivers || []; S.purchases = s.purchases || []; S.affClicks = s.affClicks || []; S.articles = s.articles || []; S.lpStats = s.lpStats || []; S.socialPosts = s.socialPosts || []; S.social = s.social || { meta: { connected: false } }; S.contactFlags = Object.fromEntries((s.contactFlags || []).map(f => [f.id, f])); S.costs = Object.fromEntries((s.costs || []).map(c => [c.id, Number(c.cost) || 0])); S.stockMoves = s.stockMoves || [];
         S.clients = (s.clients||[]).sort((a,b)=>a.name.localeCompare(b.name)); S.suppliers = (s.suppliers||[]).sort((a,b)=>a.name.localeCompare(b.name));
-        S.moves = s.moves || []; S.ledger = s.ledger || []; S.finConfig = s.finConfig || {}; S.orders = s.orders; S.users = s.users;
+        S.moves = s.moves || []; S.cashSessions = s.cashSessions || []; S.avoirs = s.avoirs || []; S.ledger = s.ledger || []; S.finConfig = s.finConfig || {}; S.orders = s.orders; S.users = s.users;
         S.settings = mergeSettings(s.settings); providers = s.providers; configured = s.configured || {}; notif = s.notifications || {};
       } else {
         const s = await api('GET', '/api/public/catalog');
@@ -28,10 +28,11 @@
         const got = await Promise.all(myOrders().slice(0, 20).map(m => api('GET', `/api/orders/${encodeURIComponent(m.id)}?t=${encodeURIComponent(m.t)}`).catch(() => null)));
         S.orders = got.filter(Boolean).sort((a, b) => b.createdAt - a.createdAt);
       }
-      S.settings.testMode = false;
+      S.settings.testMode = false; load._ok = true;
     } catch (e) {
+      load._ok = false;
       if (e.status === 401 && me) { location.reload(); return; }
-      if (Date.now() - (load._warned || 0) > 60000) { load._warned = Date.now(); toast('Connexion au serveur impossible. Nouvel essai dans un instant.'); }
+      if (navigator.onLine && Date.now() - (load._warned || 0) > 60000) { load._warned = Date.now(); toast('Connexion au serveur impossible. Nouvel essai dans un instant.'); }
     }
     /* ne pas redessiner la page pendant une saisie (sinon le champ perd le texte collé ou le menu Coller se ferme) : on attend la sortie du champ */
     const a = document.activeElement;
@@ -42,6 +43,8 @@
     schedule();
   }
   const reload = () => { clearTimeout(loadT); loadT = setTimeout(load, 250); };
+  window.ffmReload = async () => { clearTimeout(loadT); await load(); return !!load._ok; };
+  window.sendReportNow = () => api('POST', '/api/admin/report/send', {});
 
   /* ---------- notifications push pour les clients ---------- */
   const PUSH_OK = 'serviceWorker' in navigator && 'PushManager' in window && 'Notification' in window;
@@ -128,7 +131,7 @@
 
   /* ---------- démarrage ---------- */
   window.boot = async function () {
-    try { me = (await api('GET', '/api/me')).user; } catch (e) { me = null; } S.isGerant = !!(me && me.role === 'Gérant');
+    try { me = (await api('GET', '/api/me')).user; } catch (e) { me = null; } S.isGerant = !!(me && me.role === 'Gérant'); S.myRole = me ? me.role : '';
     await pushState();
     try { if (new URLSearchParams(location.search).get('vue') === 'commandes') S.view = 'orders'; } catch (e) {}
     S.isAdmin = !!me; S.myName = me ? me.name : ''; S.uid = me ? me.id : null; S.live = false;
@@ -439,7 +442,7 @@
   window.renderTop = function () {
     baseTop();
     const sm = document.querySelector('#topbar .brand small'); if (sm) sm.textContent = me ? `Connecté : ${me.role}` : 'Boutique en ligne';
-    S.isGerant = !!(me && me.role === 'Gérant');
+    S.isGerant = !!(me && me.role === 'Gérant'); S.myRole = me ? me.role : '';
     const cart = document.querySelector('#topbar [data-a="cart"]');
     const b = document.createElement('button'); b.className = 'btn ghost sm'; b.dataset.srv = me ? 'logout' : 'login';
     b.textContent = me ? 'Déconnexion' : 'Espace équipe'; cart.before(b);
@@ -510,7 +513,7 @@
         toast(`Alerte envoyée : ${r.sent} reçue${r.sent > 1 ? 's' : ''}${r.failed ? ', ' + r.failed + ' appareil(s) désabonné(s)' : ''}`); S.pushPre = null; pushStats = null; schedule();
       }
       if (a === 'notifyTest') { el.disabled = true; await api('POST', '/api/admin/notify-test'); toast('Notification envoyée : regardez votre téléphone'); el.disabled = false; }
-      if (a === 'logout') { await api('POST', '/api/auth/logout'); location.reload(); }
+      if (a === 'logout') { await api('POST', '/api/auth/logout'); try { if (window.caches) await caches.delete('ffm-offline'); } catch (e) {} location.reload(); }
       if (a === 'doLogin') {
         el.disabled = true;
         try { await api('POST', '/api/auth/login', { email: $('#lg-email').value, password: $('#lg-pw').value }); location.reload(); }
