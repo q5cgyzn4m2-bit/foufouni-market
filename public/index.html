@@ -646,6 +646,17 @@ tr.mv-tr td:first-child{box-shadow:inset 3px 0 0 var(--indigo)}
 .b-row2{display:grid; grid-template-columns:minmax(0,1fr) 70px 42px; gap:6px; margin-bottom:10px; padding-bottom:10px; border-bottom:1px dashed var(--line)}
 .b-row2 .b-l,.b-row2 .b-v{grid-column:1 / -1}
 .b-pool{display:grid; grid-template-columns:repeat(auto-fill,minmax(220px,1fr)); gap:6px; max-height:240px; overflow:auto; padding:8px; border:1px solid var(--line); border-radius:12px; font-size:13.5px}
+.sd-img{margin-top:14px; text-align:left; display:grid; gap:10px; padding-top:12px; border-top:1px solid var(--line)}
+.sd-h{display:flex; justify-content:space-between; align-items:baseline; gap:8px; flex-wrap:wrap}
+.sd-thumbs{display:flex; gap:8px; flex-wrap:wrap}
+.sd-th{position:relative; width:72px; height:72px; padding:0; border-radius:12px; overflow:hidden; border:2px solid var(--line); background:var(--surface-2); cursor:pointer; color:inherit; font:inherit}
+.sd-th img{width:100%; height:100%; object-fit:cover}
+.sd-th.on{border-color:var(--saffron); box-shadow:0 0 0 2px var(--saffron)}
+.sd-th i{position:absolute; top:4px; left:4px; width:20px; height:20px; border-radius:50%; background:var(--saffron); color:#1b1204; font:800 12px/20px var(--f-b); text-align:center; font-style:normal}
+.sd-th.add{display:grid; place-items:center; align-content:center; font-size:22px; border-style:dashed}
+.sd-th.add small{font-size:10.5px}
+.sd-opts{display:grid; gap:4px}
+.sd-rg{display:grid; gap:2px; font-size:13px} .sd-rg span{display:flex; justify-content:space-between} .sd-rg input{width:100%; accent-color:var(--saffron)}
 .pub-sub td{font-size:13px; color:var(--muted)} .pub-sub td:first-child{padding-left:22px}
 .ab-r{margin-top:8px; padding:10px 12px; border-radius:12px; background:var(--surface-2); font-size:13px; display:grid; gap:3px}
 .slots{display:flex; flex-wrap:wrap; gap:6px}
@@ -2601,13 +2612,16 @@ async function drawPoster(d, W, H, net){
   const band = Math.round(Math.max(22, 36*u)); bogolanBand(ctx,0,0,W,band); bogolanBand(ctx,0,H-band,W,band);
   const pad = Math.round(60*u);
   // zone image
-  const box = wide ? {x:pad, y:band+pad, w:Math.round(W*0.42), h:H-2*(band+pad)} : {x:pad, y:band+pad*(H>1500?2.2:1), w:W-2*pad, h:Math.round(H*(H>1500?0.45:H>1200?0.46:0.42))};
+  const io = d.imgOpt || {}, big = Math.max(0, Math.min(2, io.big||0));
+  const box = wide ? {x:pad, y:band+pad, w:Math.round(W*(0.42+big*0.07)), h:H-2*(band+pad)} : {x:pad, y:band+pad*(H>1500?2.2:1), w:W-2*pad, h:Math.round(H*((H>1500?0.45:H>1200?0.46:0.42)+big*(H>1500?0.08:H>1200?0.055:0.045)))};
   ctx.save(); rrect(ctx, box.x, box.y, box.w, box.h, 34*u); ctx.fillStyle='#FFFFFF'; ctx.fill(); ctx.clip();
   const imgs = (d.imgs||[]).slice(0,4), n = Math.max(1, imgs.length), cols = n>1?2:1, rows = n>2?2:1;
   const cells = n===3 ? [[0,0,1,2],[1,0,1,1],[1,1,1,1]] : Array.from({length:n},(_,i)=>[i%cols, Math.floor(i/cols), 1, 1]);
   for(let i=0;i<n;i++){ const [cx,cy,cw,ch] = cells[i], gx = box.x + cx*box.w/cols, gy = box.y + cy*box.h/rows, gw = cw*box.w/cols, gh = ch*box.h/rows, src = imgs[i];
     if(n>1){ ctx.fillStyle = (cx+cy)%2 ? '#F6F1E7' : '#FFFFFF'; ctx.fillRect(gx,gy,gw,gh); }
-    if(src && /^(data:|blob:|\/|https?:)/.test(src)){ const im = await loadImg(src); if(im){ const k = Math.max(gw/im.width, gh/im.height); ctx.drawImage(im, gx+(gw-im.width*k)/2, gy+(gh-im.height*k)/2, im.width*k, im.height*k); } }
+    if(src && /^(data:|blob:|\/|https?:)/.test(src)){ const im = await loadImg(src); if(im){ const z = Math.max(1, Math.min(3, io.zoom||1)), k = (io.fit==='contain' ? Math.min(gw/im.width, gh/im.height) : Math.max(gw/im.width, gh/im.height))*z, iw = im.width*k, ih = im.height*k;
+      const ox = (gw-iw)/2 + (iw>gw ? (iw-gw)/2*Math.max(-1,Math.min(1,-(io.px||0))) : 0), oy = (gh-ih)/2 + (ih>gh ? (ih-gh)/2*Math.max(-1,Math.min(1,-(io.py||0))) : 0);
+      ctx.save(); ctx.beginPath(); ctx.rect(gx,gy,gw,gh); ctx.clip(); ctx.drawImage(im, gx+ox, gy+oy, iw, ih); ctx.restore(); } }
     else { ctx.fillStyle='#F6F1E7'; ctx.fillRect(gx,gy,gw,gh); ctx.font = `${Math.round(Math.min(gw,gh)*0.5)}px "Apple Color Emoji","Segoe UI Emoji","Noto Color Emoji",sans-serif`; ctx.textAlign='center'; ctx.textBaseline='middle'; ctx.fillText(src||'📦', gx+gw/2, gy+gh/2+6); ctx.textBaseline='alphabetic'; }
     if(n>1){ ctx.strokeStyle='rgba(16,14,11,.15)'; ctx.lineWidth=3; ctx.strokeRect(gx,gy,gw,gh); } }
   { const pp = d.pid && S.products.find(x=>x.id===d.pid); const rt = pp ? productRating(pp.id) : shopRating(); ctx.save(); rrect(ctx, box.x, box.y, box.w, box.h, 34*u); ctx.clip();
@@ -2641,6 +2655,8 @@ async function drawPoster(d, W, H, net){
     return y;
   };
   let f = centerStory ? 1.45 : wide ? 1.3 : 1; while(f>0.5 && layout(f,false) > bottom) f -= 0.04;
+  if(layout(f,false) > bottom && d.sub){ d = {...d, sub:''}; f = centerStory ? 1.45 : wide ? 1.3 : 1; while(f>0.5 && layout(f,false) > bottom) f -= 0.04; }
+  if(layout(f,false) > bottom && d.old){ d = {...d, old:''}; while(f>0.45 && layout(f,false) > bottom) f -= 0.04; }
   if(centerStory || wide){ const hgt = layout(f,false)-top, shift = Math.max(0, (bottom-top-hgt)/2); ctx.save(); ctx.translate(0, shift); layout(f,true); ctx.restore(); }
   else layout(f,true);
   // pied : appel à l'action + QR code éventuel
@@ -2710,7 +2726,7 @@ function spPlanBox(ss){
       <span class="small" style="position:absolute;left:4px;top:4px;background:rgba(0,0,0,.65);color:#fff;border-radius:6px;padding:0 5px;font-size:11px">${i+1}${m.type==='video'?' 🎬':m.kind==='studio'?' ✨':''}</span>
       <div class="row" style="gap:2px;margin-top:3px;justify-content:center">${i?`<button class="btn ghost sm" style="flex:none;padding:2px 7px" data-a="spMove" data-v="${i}" aria-label="Avancer">←</button>`:''}<button class="btn ghost sm" style="flex:none;padding:2px 7px" data-a="spRm" data-v="${i}" aria-label="Retirer">×</button></div></div>`).join('')}
       ${spMediaList().length<10?`<label class="btn ghost sm" style="flex:none;cursor:pointer;width:72px;height:72px;display:grid;place-items:center;text-align:center;line-height:1.2">＋<br><span style="font-size:11px">Photo / vidéo</span><input type="file" accept="image/*,video/mp4,video/quicktime" multiple class="sp-add" hidden></label>`:''}
-      ${!spMediaList().some(m=>m.kind==='studio')?`<button class="btn ghost sm" style="flex:none;align-self:center" data-a="spAddStudio">＋ Visuel du Studio</button>`:''}</div>
+      ${!spMediaList().some(m=>m.kind==='studio')?`<button class="btn ghost sm" style="flex:none;align-self:center" data-a="spAddStudio">＋ Visuel du Studio</button>`:''}${sdCands().length>1&&spMediaList().length<10?`<button class="btn ghost sm" style="flex:none;align-self:center" data-a="spAddPics">＋ Photos du produit (${sdCands().length})</button>`:''}</div>
     <p class="muted small" style="margin:0 0 10px">1 photo = publication simple · 1 vidéo = vidéo / Reel · 2 à 10 éléments = <b>carrousel</b> (glissez avec ← pour changer l’ordre). Vidéos : MP4, 30 Mo max.</p>
     <p class="co-lbl" style="margin:4px 0 6px">Réseaux</p><div class="row" style="flex-wrap:wrap;gap:6px 14px;margin-bottom:8px">${SP_NETS.map(n=>`<label class="row small sp-nl" style="gap:6px;font-weight:700;flex:0 0 auto"><input type="checkbox" class="sp-net" value="${n}" ${n===ss.net?'checked':''}> ${esc(NETS[n])} <span class="pill ${SP_AUTO(n)?'ok':''}" style="font-size:10.5px">${SP_AUTO(n)?'auto':'rappel'}</span></label>`).join('')}</div>
     <p class="muted small" style="margin:0 0 10px"><b>auto</b> : publié tout seul à l’heure prévue. <b>rappel</b> : notification sur votre téléphone à l’heure prévue, avec le visuel et le texte prêts à publier.${S.social?.meta?.connected?'':' Reliez Facebook et Instagram dans <b>Gestion › Calendrier réseaux</b> pour la publication automatique.'}</p>
@@ -2849,7 +2865,7 @@ function paneStudio(){
     <div class="cats" role="group" aria-label="Réseau" style="margin:6px 0 10px">${Object.entries(NETS).map(([k,l])=>`<button aria-pressed="${ss.net===k}" data-a="sdNet" data-v="${k}">${l}</button>`).join('')}</div>
     <div class="cats" role="group" aria-label="Format" style="margin:0">${fmts.map(([k,l,w,h])=>`<button aria-pressed="${ss.fmt===k}" data-a="sdFmt" data-v="${k}">${l} · ${w}×${h}</button>`).join('')}</div></div>
   <div class="row" style="align-items:flex-start;gap:20px">
-    <div class="panel" style="flex:1 1 320px;text-align:center"><div id="sd-prev" style="min-height:240px;display:grid;place-items:center"><div class="spinner"></div></div></div>
+    <div class="panel" style="flex:1 1 320px;text-align:center"><div id="sd-prev" style="min-height:240px;display:grid;place-items:center"><div class="spinner"></div></div>${sdImgPanel()}</div>
     <div class="panel" style="flex:1 1 320px"><div class="field"><label for="sd-cap">Texte de publication (${esc(NETS[ss.net])})</label><textarea class="input" id="sd-cap" style="min-height:200px">${esc(d?studioCaption(d, ss.net):'')}</textarea></div>
       <div class="field"><label>Lien suivi pour ${esc(NETS[ss.net])}</label><div class="row" style="gap:8px"><input class="input" id="sd-link" value="${esc(link)}" readonly style="flex:1"><button class="btn ghost sm" data-a="sdCopyLink" style="flex:0">Copier</button></div></div>
       <div class="fin-actions"><button class="btn primary" data-a="sdDl">⬇️ Télécharger l’image</button>${navigator.canShare?'<button class="btn ghost" data-a="sdShare">↗ Partager</button>':''}<button class="btn ghost" data-a="sdCopy">Copier le texte</button></div>
@@ -2860,6 +2876,26 @@ function paneStudio(){
     ${stats.map(r=>`<tr><td><b>${esc(r.label)}</b></td>${isServer()?`<td style="text-align:right">${r.visits}</td>`:''}<td style="text-align:right">${r.orders}</td><td style="text-align:right">${fmt(r.revenue)}</td></tr>`).join('')}</tbody></table>
     <p class="muted small" style="margin:10px 0 0">Une commande est attribuée au réseau du dernier lien suivi cliqué par le client (pendant 30 jours).</p></div>`;
 }
+/* Photos du visuel : choix parmi les photos du produit (angles), d'autres produits ou des images importées ; zoom, cadrage, taille */
+function sdCands(){ const ss = S.studio, [kind, id] = String(ss.subject).split(':'), out = [];
+  if(kind==='product'){ const p = S.products.find(x=>x.id===id); if(p){ if(p.image) out.push(p.image); (p.gallery||[]).map(extraSrc).filter(Boolean).forEach(u=>out.push(u)); (p.variants||[]).forEach(v=>{ if(v.image) out.push(v.image); }); } }
+  else if(kind==='bundle'){ const b = S.bundles.find(x=>x.id===id); if(b){ if(b.image) out.push(b.image); bundleInfo(b).comps.forEach(c=>{ if(c.p && c.p.image) out.push(c.p.image); }); } }
+  else { const d = subjectData(ss.subject); (d&&d.imgs||[]).forEach(u=>{ if(/^(data:|blob:|\/|https?:)/.test(u)) out.push(u); }); }
+  (ss.extra||[]).forEach(u=>out.push(u)); return [...new Set(out)]; }
+function sdData(){ const ss = S.studio, d = subjectData(ss.subject); if(!d) return null; const pics = (ss.pics||[]).filter(u=>sdCands().includes(u));
+  return {...d, imgs: pics.length ? pics.slice(0,4) : d.imgs, imgOpt:{zoom:(ss.zoom||100)/100, px:(ss.px||0)/100, py:(ss.py||0)/100, fit:ss.fit||'cover', big:ss.big||0}}; }
+function sdImgPanel(){ const ss = S.studio, c = sdCands(), sel = ss.pics||[], others = S.products.filter(p=>p.active!==false && p.image && !c.includes(p.image));
+  return `<div class="sd-img"><div class="sd-h"><b>🖼️ Photos du visuel</b><span class="muted small">${sel.length?sel.length+' choisie'+(sel.length>1?'s':'')+' · jusqu’à 4':'touchez pour choisir · jusqu’à 4'}</span></div>
+    <div class="sd-thumbs">${c.map(u=>{ const k = sel.indexOf(u); return `<button class="sd-th${k>=0?' on':''}" data-a="sdPic" data-v="${esc(u)}" aria-pressed="${k>=0}" aria-label="Choisir cette photo">${k>=0?`<i>${k+1}</i>`:''}<img src="${esc(u)}" alt="" loading="lazy"></button>`; }).join('')}
+      <label class="sd-th add" title="Importer une image">＋<small>Importer</small><input type="file" accept="image/*" multiple id="sd-up" class="sr"></label></div>
+    ${others.length?`<select class="input" id="sd-other" aria-label="Ajouter la photo d’un autre produit"><option value="">➕ Ajouter la photo d’un autre produit…</option>${others.map(p=>`<option value="${esc(p.image)}">${esc(p.name)}</option>`).join('')}</select>`:''}
+    <div class="sd-opts"><span class="muted small">Taille de la photo</span><div class="cats" style="margin:0">${[['0','Normale'],['1','Grande'],['2','Très grande']].map(([k,l])=>`<button aria-pressed="${String(ss.big||0)===k}" data-a="sdBig" data-v="${k}">${l}</button>`).join('')}</div></div>
+    <div class="sd-opts"><span class="muted small">Cadrage</span><div class="cats" style="margin:0">${[['cover','Remplir le cadre'],['contain','Photo entière']].map(([k,l])=>`<button aria-pressed="${(ss.fit||'cover')===k}" data-a="sdFit" data-v="${k}">${l}</button>`).join('')}</div></div>
+    <label class="sd-rg"><span>🔍 Zoom <b id="sd-zoom-v">${ss.zoom||100} %</b></span><input type="range" id="sd-zoom" min="100" max="250" step="5" value="${ss.zoom||100}"></label>
+    <label class="sd-rg"><span>↔ Déplacer à gauche / droite</span><input type="range" id="sd-px" min="-100" max="100" step="5" value="${ss.px||0}"></label>
+    <label class="sd-rg"><span>↕ Déplacer en haut / bas</span><input type="range" id="sd-py" min="-100" max="100" step="5" value="${ss.py||0}"></label>
+    <button class="btn ghost sm" data-a="sdImgReset">Réinitialiser la photo</button>
+    <p class="muted small" style="margin:6px 0 0">Avec 2 à 4 photos, le visuel les montre en mosaïque (différents angles). Le zoom et le déplacement s’appliquent à chaque photo.</p></div>`; }
 function studioStats(){
   const since = Date.now()-30*864e5, rows = {};
   Object.entries(NETS).forEach(([k,l])=>rows[k]={label:l, visits:0, orders:0, revenue:0});
@@ -2869,7 +2905,7 @@ function studioStats(){
 }
 async function studioRender(){
   const box = $('#sd-prev'); if(!box) return;
-  const ss = S.studio, d = subjectData(ss.subject); if(!d){ box.textContent='Sujet introuvable.'; return; }
+  const ss = S.studio, d = sdData(); if(!d){ box.textContent='Sujet introuvable.'; return; }
   const [, , W, H] = FORMATS[ss.net].find(f=>f[0]===ss.fmt) || FORMATS[ss.net][0];
   const key = JSON.stringify([ss, S.products.length, S.settings.shopName]); if(S._sdKey===key && S._sdBlob){ if(!box.querySelector('img')) box.innerHTML = `<img src="${S._sdUrl}" alt="Aperçu du visuel" style="max-width:100%;max-height:62vh;border-radius:12px;border:1px solid var(--line)">`; return; }
   S._sdKey = key; box.innerHTML = '<div class="spinner"></div>';
@@ -3196,6 +3232,7 @@ function carouselBlock(){
   return `<section class="car" aria-label="${title}" style="--car-dur:${dur}s"><div class="car-h"><b>${title}</b><span class="muted small">${list.length} produits</span></div>
     <div class="car-mask"><div class="car-track">${cards}<span aria-hidden="true" style="display:contents">${cards.replace(/<button /g,'<button tabindex="-1" ')}</span></div></div></section>`;
 }
+document.addEventListener('input', e=>{ const t = e.target; if(!t || !['sd-zoom','sd-px','sd-py'].includes(t.id)) return; const k = {'sd-zoom':'zoom','sd-px':'px','sd-py':'py'}[t.id]; S.studio[k] = +t.value; if(k==='zoom' && $('#sd-zoom-v')) $('#sd-zoom-v').textContent = t.value+' %'; clearTimeout(S._sdT); S._sdT = setTimeout(()=>studioRender(), 160); });
 document.addEventListener('change', e=>{ const t = e.target; if(t && t.matches && t.matches('select[data-bv]')){ S.bvs = S.bvs||{}; S.bvs[t.dataset.bv] = {...(S.bvs[t.dataset.bv]||{}), [t.dataset.pid]: t.value}; if(S.view==='bundle') schedule(); } });
 document.addEventListener('touchstart', e=>{ const c = e.target.closest && e.target.closest('.car'); if(c) c.classList.add('paused'); }, {passive:true});
 document.addEventListener('touchend', e=>{ const c = e.target.closest && e.target.closest('.car'); if(c) setTimeout(()=>c.classList.remove('paused'), 1500); }, {passive:true});
@@ -5424,7 +5461,9 @@ document.addEventListener('change', async e=>{
   if(t.dataset.audsel || t.id==='cp-prod' || t.id==='cp-code'){ S.audCid = null; }
   if(t.dataset.audsel){ S.audForm = {prod:$('#cp-prod')?.value||'', code:$('#cp-code')?.value||'', name:$('#cp-name')?.value||''}; S.audSel[t.dataset.audsel] = t.checked; S.audTpl = S.audTpl || {}; document.querySelectorAll('[data-cptpl]').forEach(x=>S.audTpl[x.dataset.cptpl]=x.value); schedule(); }
   if(t.dataset.top==='sort'){ S.topSort=t.value; schedule(); }
-  if(t.dataset.studio==='subject'){ S.studio.subject=t.value; schedule(); }
+  if(t.dataset.studio==='subject'){ S.studio.subject=t.value; S.studio.pics=[]; S.studio.zoom=100; S.studio.px=0; S.studio.py=0; schedule(); }
+  if(t.id==='sd-other' && t.value){ const ss = S.studio; ss.extra = [...new Set([...(ss.extra||[]), t.value])]; ss.pics = [...(ss.pics||[]).filter(u=>u!==t.value), t.value].slice(-4); schedule(); }
+  if(t.id==='sd-up' && t.files && t.files.length){ const ss = S.studio; [...t.files].slice(0,4).forEach(f=>{ if(/^image\//.test(f.type)){ const u = URL.createObjectURL(f); ss.extra = [...(ss.extra||[]), u]; ss.pics = [...(ss.pics||[]), u].slice(-4); } }); schedule(); }
   if(t.dataset.stk==='cat'){ S.stCat=t.value; schedule(); }
   if(t.dataset.fin==='acc'){ S.trAcc=t.value; schedule(); }
   if(t.id==='rv-q'){ S.rvQ=t.value; schedule(); }
@@ -5577,6 +5616,12 @@ document.addEventListener('click', async e=>{
     case 'lpVideoGo': $('#lp-video')?.scrollIntoView({behavior:'smooth', block:'center'}); break;
     case 'lpZoom': { const p = S.products.find(x=>x.id===S.pid); const src = p && galleryFor(p)[Number(el.dataset.v)]; if(src) zoomBox(src); break; }
     case 'sdNet': S.studio.net = el.dataset.v; schedule(); break;
+    case 'sdPic': { const ss = S.studio, u = el.dataset.v, cur = ss.pics||[]; ss.pics = cur.includes(u) ? cur.filter(x=>x!==u) : [...cur, u].slice(-4); schedule(); break; }
+    case 'sdBig': S.studio.big = +el.dataset.v; schedule(); break;
+    case 'sdFit': S.studio.fit = el.dataset.v; schedule(); break;
+    case 'sdImgReset': Object.assign(S.studio, {pics:[], zoom:100, px:0, py:0, fit:'cover', big:0}); schedule(); break;
+    case 'spAddPics': { const us = sdCands().filter(u=>!/^blob:/.test(u) || true).slice(0, 10-spMediaList().length); if(!us.length){ toast('Aucune autre photo pour ce produit.'); break; } el.disabled = true;
+      Promise.all(us.map(async (u,i)=>{ const b = await (await fetch(u)).blob(); return new File([b], 'photo-'+(i+1)+'.jpg', {type:b.type||'image/jpeg'}); })).then(fs=>spAddFiles(fs)).then(()=>toast(us.length+' photo'+(us.length>1?'s':'')+' ajoutée'+(us.length>1?'s':'')+' au carrousel')).catch(()=>toast('Impossible de récupérer ces photos.')).finally(()=>{ el.disabled = false; }); break; }
     case 'sdFmt': S.studio.fmt = el.dataset.v; schedule(); break;
     case 'sdCopyLink': try{ await navigator.clipboard.writeText($('#sd-link').value); toast('Lien copié'); }catch(err){ toast($('#sd-link').value); } break;
     case 'sdCopy': try{ await navigator.clipboard.writeText($('#sd-cap').value); toast('Texte copié'); }catch(err){} break;
