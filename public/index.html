@@ -837,7 +837,14 @@ tr.click:hover td{background:var(--surface-2)}
 .cash-keys{display:grid; grid-template-columns:repeat(3,1fr); gap:6px}
 .sess-bar{display:flex;align-items:center;gap:10px;flex-wrap:wrap;justify-content:space-between;padding:10px 14px;border-radius:12px;background:rgba(60,170,105,.13);border:1px solid rgba(60,170,105,.45);margin-bottom:12px;font-size:14px;color:inherit}
 .ds-grp{padding:10px 0;border-top:1px solid var(--line)}.ds-grp:first-of-type{border-top:0;padding-top:0}
-.ds-note{margin-bottom:8px}.ds-pill{display:inline-block;white-space:normal;border-radius:12px;line-height:1.4;padding:6px 10px}
+.ds-note{margin-bottom:8px}
+.soc-row{display:flex;gap:10px;align-items:flex-start;padding:10px 4px;border-top:1px solid var(--line)}.soc-row:first-of-type{border-top:0}.soc-ic{font-size:22px;width:30px;text-align:center}
+.soc-thread{max-height:52vh;overflow:auto;display:flex;flex-direction:column;gap:8px;padding:10px;border:1px solid var(--line);border-radius:12px;background:rgba(127,127,127,.06)}
+.soc-msg{max-width:82%;display:flex;flex-direction:column}.soc-msg.client{align-self:flex-start}.soc-msg.bot,.soc-msg.staff{align-self:flex-end;align-items:flex-end}
+.soc-b{padding:8px 12px;border-radius:14px;background:rgba(127,127,127,.18);font-size:14px;line-height:1.4;overflow-wrap:anywhere}.soc-msg.bot .soc-b{background:rgba(60,170,105,.22)}.soc-msg.staff .soc-b{background:rgba(200,160,80,.28)}
+.soc-meta{font-size:11px;opacity:.7;margin-top:2px}
+.soc-cards{display:flex;gap:6px;overflow:auto}.soc-card{width:120px;display:flex;flex-direction:column;gap:2px;font-size:12px}.soc-card img{width:120px;height:90px;object-fit:cover;border-radius:8px;background:#333}
+.soc-guide{margin:8px 0 12px;padding-left:18px;display:grid;gap:4px}.ds-pill{display:inline-block;white-space:normal;border-radius:12px;line-height:1.4;padding:6px 10px}
 .sess-bar.off{background:rgba(220,80,60,.12);border-color:rgba(220,80,60,.45)}.sess-bar.warn{background:rgba(230,170,40,.13);border-color:rgba(230,170,40,.5)}
 .held-row{display:flex;flex-wrap:wrap;gap:6px;padding:8px 16px 0}
 .held-chip{display:inline-flex;align-items:center;border:1px dashed currentColor;border-radius:999px;background:rgba(127,127,127,.12);font-size:12.5px;max-width:100%}
@@ -1771,6 +1778,62 @@ async function posQrPay(){
       S.pos = []; S.posPromo = null; S.posLcd = {l1:'PAIEMENT REÇU ✓', l2:res.number}; setTimeout(()=>{ closeAll(); schedule(); }, 1600); } }, 3000);
 }
 
+
+
+/* ===================== Gestion › Messenger et Instagram : vendeur automatique ===================== */
+const SOC = {data:null, at:0, loading:false, err:''};
+async function socLoad(force){ if(!window.msgrApi || SOC.loading || (!force && Date.now()-SOC.at < 12000)) return; SOC.loading = true;
+  try{ SOC.data = await window.msgrApi('GET', ''); SOC.err = ''; }catch(e){ SOC.err = e.message; } SOC.at = Date.now(); SOC.loading = false; if(S.view==='admin' && S.tab==='msgr') schedule(); }
+const socIcon = ch => ch==='instagram' ? '📸' : '💬';
+const socAgo = t => { const m = Math.round((Date.now()-t)/60000); return m<1 ? 'à l’instant' : m<60 ? `il y a ${m} min` : m<1440 ? `il y a ${Math.round(m/60)} h` : dateFr(t); };
+function paneMsgr(){
+  if(!isServer()) return `<h2 style="font-size:24px">Messenger et Instagram</h2><p class="muted">Disponible sur le site en ligne.</p>`;
+  socLoad(false); const d = SOC.data, g = isGerant();
+  if(!d) return `<h2 style="font-size:24px">Messenger et Instagram</h2><p class="muted">${SOC.err?esc(SOC.err):'Chargement…'}</p>`;
+  const c = d.cfg || {}, unread = d.convs.filter(x=>x.unread).length, wait = d.convs.filter(x=>x.paused);
+  return `<h2 style="font-size:24px;margin-bottom:6px">Messenger et Instagram</h2>
+  <p class="muted" style="margin-top:0">Un vendeur automatique répond à vos clients sur votre Page Facebook et votre compte Instagram, montre vos articles avec photo et prix, et prend les commandes (paiement à la livraison). Vous validez chaque commande avant l’expédition.</p>
+  <div class="sess-bar ${d.ready?'':'off'}"><span>${d.ready?`🟢 <b>Connecté</b>${c.pageName?' à la Page '+esc(c.pageName):''}${c.igName?' et à Instagram @'+esc(c.igName):''} · vendeur automatique <b>${c.botOn===false?'en pause':'actif'}</b>`:'🔴 <b>Pas encore connecté</b> : suivez le guide ci-dessous'}${d.ai?'':' · ⚠️ clé ANTHROPIC_API_KEY absente : réponses simples seulement'} · ${d.usage} réponse${d.usage>1?'s':''} IA aujourd’hui</span><button class="btn ghost sm" data-a="socRefresh">↻ Actualiser</button></div>
+  <div class="panel"><h3>Conversations${unread?` · <span class="pill warn">${unread} non lue${unread>1?'s':''}</span>`:''}${wait.length?` · <span class="pill info">🙋 ${wait.length} pour un vendeur</span>`:''}</h3>
+    ${d.convs.length?d.convs.map(x=>`<div class="soc-row click" data-a="socOpen" data-id="${esc(x.id)}"><span class="soc-ic" aria-hidden="true">${socIcon(x.channel)}</span><div style="flex:1;min-width:0"><div class="toolbar" style="margin:0;gap:6px"><b style="flex:1;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${esc(x.name||'Client '+(x.channel==='instagram'?'Instagram':'Messenger'))}</b><span class="muted small">${socAgo(x.lastAt)}</span></div>
+      <div class="small muted" style="overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${x.lastFrom==='bot'?'🤖 ':x.lastFrom==='staff'?'Vous : ':''}${esc(x.last)}</div>
+      <div style="display:flex;gap:4px;flex-wrap:wrap;margin-top:3px">${x.unread?`<span class="pill warn">${x.unread} nouveau${x.unread>1?'x':''}</span>`:''}${x.paused?'<span class="pill info">🙋 vendeur humain</span>':''}${x.orderNumber?`<span class="pill ok">🛒 ${esc(x.orderNumber)} · ${esc(x.orderState||'')}</span>`:''}</div></div></div>`).join(''):`<p class="muted small" style="margin:0">Aucune conversation pour l’instant.${d.ready?' Écrivez à votre Page depuis un autre compte pour tester.':''}</p>`}</div>
+  ${g?socConfigPanel(d):''}`;
+}
+function socConfigPanel(d){ const c = d.cfg||{};
+  return `<details class="panel" ${d.ready?'':'open'}><summary style="cursor:pointer"><h3 style="display:inline">⚙️ Connexion et réglages</h3></summary>
+    <ol class="small soc-guide"><li>Sur <b>developers.facebook.com</b>, créez une application avec le cas d’usage « Interagir avec les clients sur Messenger from Meta », puis reliez votre <b>Page Facebook</b>.</li>
+      <li>Pour Instagram : passez votre compte en <b>compte professionnel</b>, reliez-le à la Page, puis dans l’application Instagram : Paramètres › Messages › Outils connectés › autorisez l’accès aux messages.</li>
+      <li>Générez le <b>jeton d’accès de la Page</b> (autorisations pages_messaging et instagram_manage_messages). Conseil : créez-le avec un <b>utilisateur système</b> dans Meta Business Suite › Paramètres, il n’expire pas. Copiez aussi la <b>clé secrète</b> de l’application (Paramètres › Général).</li>
+      <li>Dans Webhooks (objets <b>Page</b> et <b>Instagram</b>), collez l’adresse et le jeton de vérification ci-dessous, et abonnez les champs <b>messages</b> et <b>messaging_postbacks</b>.</li>
+      <li>Enregistrez ici, puis touchez « Connecter et vérifier ».</li>
+      <li>Tant que l’application est en mode développement, seules les personnes ajoutées comme testeurs reçoivent les réponses. Pour tous vos clients : vérification de l’entreprise, examen de l’application (accès avancé à pages_messaging et instagram_manage_messages) puis passage en mode Live.</li></ol>
+    <div class="row"><div class="field"><label>Adresse du webhook</label><input class="input" readonly value="${esc(d.webhook)}" onclick="this.select()"></div><div class="field"><label>Jeton de vérification</label><input class="input" readonly value="${esc(c.verifyToken||'(enregistrez une première fois)')}" onclick="this.select()"></div></div>
+    <div class="row"><div class="field"><label for="sc-page">Identifiant de la Page</label><input class="input" id="sc-page" inputmode="numeric" value="${esc(c.pageId||'')}" placeholder="Ex. 102938475610293"></div><div class="field"><label for="sc-tok">Jeton d’accès de la Page</label><input class="input" id="sc-tok" value="${esc(c.pageToken||'')}" placeholder="EAAG…" autocomplete="off"></div><div class="field"><label for="sc-sec">Clé secrète de l’application</label><input class="input" id="sc-sec" value="${esc(c.appSecret||'')}" autocomplete="off"></div></div>
+    <p class="muted small" style="margin:-4px 0 10px">Le jeton et la clé ne sont jamais affichés en entier ; laissez « •••• » pour les garder. Ne les envoyez à personne.</p>
+    <label class="check-row" style="display:flex;gap:8px;align-items:center;margin:0 0 6px"><input type="checkbox" id="sc-bot" ${c.botOn!==false?'checked':''}> Vendeur automatique actif (décochez pour répondre vous-même à tous)</label>
+    <label class="check-row" style="display:flex;gap:8px;align-items:center;margin:0 0 10px"><input type="checkbox" id="sc-ig" ${c.igOn!==false?'checked':''}> Répondre aussi sur Instagram</label>
+    <div class="field"><label for="sc-greet">Message d’accueil si l’IA est indisponible</label><input class="input" id="sc-greet" maxlength="500" value="${esc(c.greeting||'')}" placeholder="Bonjour 👋 Bienvenue chez ${esc(S.settings.shopName)} ! Un vendeur vous répond très vite."></div>
+    <div class="field"><label for="sc-extra">Consignes pour le vendeur automatique (facultatif)</label><textarea class="input" id="sc-extra" rows="3" maxlength="800" placeholder="Ex. Livraison le dimanche possible. Les tailles de nos robes taillent petit : conseillez la taille au-dessus.">${esc(c.extra||'')}</textarea></div>
+    <div class="field" style="max-width:260px"><label for="sc-max">Réponses IA maximum par jour</label><input class="input" id="sc-max" inputmode="numeric" value="${c.maxDay||800}"></div>
+    <div class="fin-actions" style="margin:6px 0 0"><button class="btn primary" data-a="socSave">Enregistrer</button><button class="btn ghost" data-a="socConnect">🔌 Connecter et vérifier</button></div><div class="small" id="sc-msg" style="margin-top:8px"></div></details>`; }
+async function socOpen(id){
+  let x; try{ x = await window.msgrApi('GET', '/conv/'+encodeURIComponent(id)); }catch(e){ return toast(e.message); }
+  const late = Date.now() - (x.windowAt||0) > 24*3600e3, ord = x.orderNumber ? S.orders.find(o=>o.number===x.orderNumber) : null, dr = x.draft||{};
+  $('#overlay').innerHTML = `<div class="scrim" data-a="closeAll"><div class="modal wide" role="dialog" aria-modal="true" aria-label="Conversation"><div class="m-h"><h2>${socIcon(x.channel)} ${esc(x.name||'Client')}</h2><button class="x" data-a="closeAll" aria-label="Fermer">×</button></div>
+    <div class="m-b"><div class="toolbar" style="flex-wrap:wrap;gap:8px;margin-top:0"><span class="pill ${x.paused?'info':'ok'}">${x.paused?'🙋 Vous répondez (vendeur automatique en pause)':'🤖 Le vendeur automatique répond'}</span><span style="flex:1"></span>
+      <button class="btn ghost sm" id="sv-pause">${x.paused?'🤖 Rendre la main au vendeur automatique':'🙋 Je reprends la conversation'}</button>${ord?`<button class="btn ghost sm" data-a="orderDetail" data-id="${ord.id}">🛒 Commande ${esc(ord.number)}</button>`:''}</div>
+    ${(dr.items||[]).length?`<p class="small" style="margin:0 0 8px">🛒 Commande en préparation : ${dr.items.map(i=>{ const p = S.products.find(y=>y.id===i.id); return `${i.qty} × ${esc(p?p.name:i.id)}${i.variant?' ('+esc(i.variant)+')':''}`; }).join(', ')}${dr.name?' · '+esc(dr.name):''}${dr.phone?' · '+esc(dr.phone):''}${dr.address?' · '+esc(dr.address):''}</p>`:''}
+    <div class="soc-thread" id="sv-th">${(x.msgs||[]).map(m=>`<div class="soc-msg ${m.from}"><div class="soc-b">${m.cards?`<div class="soc-cards">${m.cards.map(cd=>`<div class="soc-card"><img src="${esc(cd.img)}" alt="" loading="lazy"><b>${esc(cd.t)}</b><span>${esc(cd.s)}</span></div>`).join('')}</div>`:esc(m.text).replace(/\n/g,'<br>')}</div><div class="soc-meta">${m.from==='bot'?'🤖 Vendeur automatique · ':m.from==='staff'?esc(m.by||'Équipe')+' · ':''}${new Date(m.at).toLocaleString('fr-FR',{day:'2-digit',month:'2-digit',hour:'2-digit',minute:'2-digit'})}</div></div>`).join('')}</div>
+    ${late?'<p class="small" style="color:var(--danger);margin:8px 0 0">Plus de 24 h depuis le dernier message du client : Meta n’autorise plus de réponse tant qu’il ne vous réécrit pas.</p>':''}
+    <div class="row" style="align-items:flex-end;margin-top:10px"><div class="field" style="margin:0"><label for="sv-txt">Votre réponse</label><textarea class="input" id="sv-txt" rows="2" maxlength="1500" ${late?'disabled':''} placeholder="Écrivez au client…"></textarea></div><button class="btn primary" id="sv-send" style="flex:0" ${late?'disabled':''}>Envoyer</button></div>
+    <p class="muted small" style="margin:6px 0 0">Quand vous répondez, le vendeur automatique se met en pause pour ce client. Pour une commande prise par le vendeur automatique, ouvrez-la et touchez « Confirmée » : le client reçoit la confirmation ici.</p><div class="xp-err" id="sv-err"></div></div></div></div>`;
+  const th = $('#sv-th'); th.scrollTop = th.scrollHeight;
+  $('#sv-pause').onclick = async e=>{ e.stopPropagation(); try{ await window.msgrApi('POST', '/conv/'+encodeURIComponent(id), {paused:!x.paused}); SOC.at = 0; socOpen(id); }catch(err){ toast(err.message); } };
+  $('#sv-send').onclick = async e=>{ e.stopPropagation(); const t = $('#sv-txt').value.trim(); if(!t) return; $('#sv-send').disabled = true;
+    try{ await window.msgrApi('POST', '/conv/'+encodeURIComponent(id), {text:t}); SOC.at = 0; socOpen(id); }catch(err){ $('#sv-err').textContent = err.message; $('#sv-send').disabled = false; } };
+  SOC.at = 0;
+}
 
 /* ===================== Dropshipping : vente sur commande (fournisseur local) ou en précommande (import) ===================== */
 const DS_MODES = {'':'📦 En stock : j’ai la marchandise', local:'🤝 Sur commande : un fournisseur local garde la marchandise', import:'✈️ Précommande : import (Chine, Dubaï…) avec acompte'};
@@ -2909,7 +2972,7 @@ async function spSchedule(now){
     const id = newId('sp'), captions = Object.fromEntries(nets.map(n=>[n, studioCaption(d, n)]));
     await put('social-posts', id, {id, at, nets, captions, media, image:first.type==='image'?first.id:(first.poster||''), images, title:d.title, subject:ss.subject, kind: media.length>1?'carousel':first.type, fmt:ss.fmt, size:first.w?`${first.w}×${first.h}`:'', status:'scheduled', createdAt:Date.now(), by:S.uid||''});
     L.forEach(m=>{ if(m.url) URL.revokeObjectURL(m.url); }); S.spMedia = null;
-    if(now){ toast('Publication en cours…'); const res = await window.socialApi('POST', '/api/admin/social/publish/'+encodeURIComponent(id)); if(res && res.background) toast('🎬 Vidéo en cours de traitement par Facebook / Instagram : vous recevrez une notification (1 à 5 min).'); else spToastResult(res); schedule(); }
+    if(now){ toast('Publication en cours…'); const res = await window.msgrApi('POST', '/api/admin/social/publish/'+encodeURIComponent(id)); if(res && res.background) toast('🎬 Vidéo en cours de traitement par Facebook / Instagram : vous recevrez une notification (1 à 5 min).'); else spToastResult(res); schedule(); }
     else toast(`Programmé pour ${spDate(at)} ✓ Retrouvez-le dans Gestion › Calendrier réseaux.`);
   }catch(e){ toast(e.message || 'Programmation impossible.'); }
   btns.forEach(b=>b.disabled=false);
@@ -5165,7 +5228,7 @@ function paneTransport(){
   ${Object.keys(CITIES).map(k=>`<datalist id="tr-cities-${k}">${CITIES[k].map(v=>`<option value="${esc(v)}">`).join('')}</datalist>`).join('')}
   <div class="row" style="gap:8px;flex-wrap:wrap"><button class="btn ghost" data-a="trAddCar">+ Ajouter une compagnie</button>${CARRIER_SUGG.some(([n])=>!list.some(c=>normCity(c.name)===normCity(n)))?'<button class="btn ghost" data-a="trSugg">📋 Ajouter des compagnies connues (à vérifier)</button>':''}<button class="btn primary" data-a="trSave">Enregistrer</button></div>`;
 }
-const TABS = [['dash','Tableau de bord'],['products','Produits'],['stock','Stock & inventaire'],['bundles','Lots'],['orders','Commandes'],['ds','Dropshipping'],['promos','Codes promo'],['affiliates','Ambassadeurs'],['reviews','Avis clients'],['blog','Conseils (blog)'],['studio','Studio réseaux'],['audience','Clients & retargeting'],['pros','Clients pro'],['pub','Rentabilité pub'],['alerts','Alertes clients'],['carts','Assistant & paniers'],['company','Société'],['social','Calendrier réseaux'],['transport','Transport'],['payments','Paiements'],['team','Équipe']];
+const TABS = [['dash','Tableau de bord'],['products','Produits'],['stock','Stock & inventaire'],['bundles','Lots'],['orders','Commandes'],['ds','Dropshipping'],['msgr','Messenger et Instagram'],['promos','Codes promo'],['affiliates','Ambassadeurs'],['reviews','Avis clients'],['blog','Conseils (blog)'],['studio','Studio réseaux'],['audience','Clients & retargeting'],['pros','Clients pro'],['pub','Rentabilité pub'],['alerts','Alertes clients'],['carts','Assistant & paniers'],['company','Société'],['social','Calendrier réseaux'],['transport','Transport'],['payments','Paiements'],['team','Équipe']];
 /* --- Gestion › Conseils --- */
 function blogIdeas(){
   const city = S.settings.city||'Bamako', live = S.products.filter(p=>p.active!==false), cats = [...new Set(live.map(p=>p.category).filter(Boolean))];
@@ -5252,7 +5315,7 @@ function articleForm(a0){
 }
 function viewAdmin(){
   const pending = S.orders.filter(o=>o.status==='en_attente'||(o.status==='payee'&&!o.stockApplied)).length;
-  const panes = {dash:paneDash, products:paneProducts, stock:paneStock, bundles:paneBundles, orders:paneOrders, ds:paneDs, promos:panePromos, affiliates:paneAffiliates, reviews:paneReviews, blog:paneBlog, studio:paneStudio, audience:paneAudience, pub:panePub, pros:panePros, company:paneCompany, social:paneSocial, transport:paneTransport, alerts:()=>window.paneAlerts?window.paneAlerts():'', carts:()=>window.paneCarts?window.paneCarts():'', payments:panePayments, team:paneTeam};
+  const panes = {dash:paneDash, products:paneProducts, stock:paneStock, bundles:paneBundles, orders:paneOrders, ds:paneDs, msgr:paneMsgr, promos:panePromos, affiliates:paneAffiliates, reviews:paneReviews, blog:paneBlog, studio:paneStudio, audience:paneAudience, pub:panePub, pros:panePros, company:paneCompany, social:paneSocial, transport:paneTransport, alerts:()=>window.paneAlerts?window.paneAlerts():'', carts:()=>window.paneCarts?window.paneCarts():'', payments:panePayments, team:paneTeam};
   return `<div class="admin"><nav class="side" aria-label="Gestion">${TABS.filter(([k])=>(!['alerts','carts'].includes(k)||isServer()) && (k!=='pub'||isGerant())).map(([k,l])=>`<button data-a="tab" data-v="${k}" ${S.tab===k?'aria-current="page"':''}>${l}${k==='orders'&&pending?`<span class="pill warn">${pending}</span>`:''}</button>`).join('')}</nav>
     <section>${panes[S.tab]()}</section></div>`;
 }
@@ -6258,13 +6321,13 @@ document.addEventListener('click', async e=>{
     case 'spCopy': try{ await navigator.clipboard.writeText($('#spc-'+el.dataset.v).value); toast('Texte copié'); }catch(err){ $('#spc-'+el.dataset.v).select(); } break;
     case 'spDone': { const p=(S.socialPosts||[]).find(x=>x.id===id); if(!p) break; const R={...(p.results||{})}; R[el.dataset.v]={...(R[el.dataset.v]||{}), ok:true, manual:true, at:Date.now()}; const all=(p.nets||[]).every(n=>R[n]&&R[n].ok);
       await patch('social-posts', id, {results:R, ...(all?{status:'done'}:{})}); toast('Marqué comme publié'); setTimeout(()=>spOpen(id), 300); break; }
-    case 'spPub': { if(!confirm('Publier maintenant ?')) break; el.disabled=true; try{ spToastResult(await window.socialApi('POST','/api/admin/social/publish/'+encodeURIComponent(id))); }catch(err){ toast(err.message); el.disabled=false; } break; }
-    case 'spDel': { if(!confirmTwice(el)) break; try{ await window.socialApi('DELETE','/api/admin/social/post/'+encodeURIComponent(id)); toast('Publication supprimée'); }catch(err){ toast(err.message); } break; }
+    case 'spPub': { if(!confirm('Publier maintenant ?')) break; el.disabled=true; try{ spToastResult(await window.msgrApi('POST','/api/admin/social/publish/'+encodeURIComponent(id))); }catch(err){ toast(err.message); el.disabled=false; } break; }
+    case 'spDel': { if(!confirmTwice(el)) break; try{ await window.msgrApi('DELETE','/api/admin/social/post/'+encodeURIComponent(id)); toast('Publication supprimée'); }catch(err){ toast(err.message); } break; }
     case 'spMeta': { const body={appId:($('#mt-app').value||'').replace(/\s/g,''), appSecret:($('#mt-sec').value||'').replace(/\s/g,''), userToken:($('#mt-tok').value||'').replace(/\s/g,''), pageId:$('#mt-page')?.value||''};
       if(!body.appId || !body.appSecret || !body.userToken){ toast('Remplissez les trois champs.'); break; } el.disabled=true; el.textContent='Connexion…';
-      try{ const r = await window.socialApi('POST','/api/admin/social/meta', body); if(r.choose){ S._spPages=r.choose; S._spForm=body; schedule(); toast('Choisissez la page, puis cliquez de nouveau sur Relier.'); setTimeout(()=>{ $('#mt-app').value=body.appId; $('#mt-sec').value=body.appSecret; $('#mt-tok').value=body.userToken; }, 120); } else { S._spPages=null; S._mt=null; S.social=r; toast('Facebook et Instagram reliés ✓'); schedule(); } }
+      try{ const r = await window.msgrApi('POST','/api/admin/social/meta', body); if(r.choose){ S._spPages=r.choose; S._spForm=body; schedule(); toast('Choisissez la page, puis cliquez de nouveau sur Relier.'); setTimeout(()=>{ $('#mt-app').value=body.appId; $('#mt-sec').value=body.appSecret; $('#mt-tok').value=body.userToken; }, 120); } else { S._spPages=null; S._mt=null; S.social=r; toast('Facebook et Instagram reliés ✓'); schedule(); } }
       catch(err){ toast(err.message); } el.disabled=false; el.textContent='🔗 Relier Facebook et Instagram'; break; }
-    case 'spMetaOff': { if(!confirm('Déconnecter Facebook et Instagram ? Les publications programmées deviendront des rappels.')) break; try{ S.social = await window.socialApi('DELETE','/api/admin/social/meta'); schedule(); toast('Déconnecté'); }catch(err){ toast(err.message); } break; }
+    case 'spMetaOff': { if(!confirm('Déconnecter Facebook et Instagram ? Les publications programmées deviendront des rappels.')) break; try{ S.social = await window.msgrApi('DELETE','/api/admin/social/meta'); schedule(); toast('Déconnecté'); }catch(err){ toast(err.message); } break; }
     case 'cvSave': { const n = el.dataset.v, x = {test:$('#cv-'+n+'-test')?.value||'', testMode:!!$('#cv-'+n+'-tm')?.checked}; const tk = ($('#cv-'+n+'-tok')?.value||'').trim(); if(tk) x.token = tk; if(n==='pinterest') x.adAccount = $('#cv-pinterest-acc').value;
       if(!tk && !(S.conv&&S.conv[n]&&S.conv[n].on)){ toast('Collez d’abord le jeton d’accès.'); break; } if(n==='pinterest' && !String(x.adAccount).replace(/\D/g,'')){ toast('Indiquez l’identifiant du compte publicitaire Pinterest.'); break; }
       el.disabled = true; el.textContent = 'Enregistrement…'; try{ const r = await window.convApi('POST','/api/admin/conversions',{[n]:x}); S.conv = null; const on = (r.on||[]).map(k=>({meta:'Meta',tiktok:'TikTok',pinterest:'Pinterest'})[k]); toast(on.includes({meta:'Meta',tiktok:'TikTok',pinterest:'Pinterest'}[n]) ? `✅ Enregistré dans la base : ${on.join(' + ')} actif${on.length>1?'s':''}. Cliquez sur « Envoyer un achat test ».` : '⚠️ Le jeton n’a pas été enregistré : recollez-le en entier.'); schedule(); }catch(err){ toast(err.message); el.disabled=false; } break; }
@@ -6425,6 +6488,14 @@ document.addEventListener('click', async e=>{
     case 'exportParties': { const tp=el.dataset.v, list=tp==='client'?S.clients:S.suppliers; save(tp==='client'?'clients.csv':'fournisseurs.csv', csv([['Nom','Téléphone','E-mail','Adresse','Produits','Solde dû','Note'], ...list.map(x=>[x.name,x.phone,x.email,x.address,x.products,partyBalance(tp,x.id),x.note])])); break; }
     case 'posClear': S.pos=[]; S.posPromo=null; S.posDisc=null; schedule(); break;
     case 'posHold': posHoldModal(); break;
+    case 'socRefresh': SOC.at = 0; socLoad(true); break;
+    case 'socOpen': socOpen(id); break;
+    case 'socSave': case 'socConnect': { const msg = $('#sc-msg'); el.disabled = true;
+      try{ await window.msgrApi('POST', '/config', {pageId:$('#sc-page').value, pageToken:$('#sc-tok').value, appSecret:$('#sc-sec').value, botOn:$('#sc-bot').checked, igOn:$('#sc-ig').checked, greeting:$('#sc-greet').value, extra:$('#sc-extra').value, maxDay:$('#sc-max').value});
+        if(a==='socConnect'){ const r = await window.msgrApi('POST', '/connect', {}); msg.style.color = r.subscribed?'var(--kola)':'var(--danger)'; msg.textContent = `✓ Page « ${r.page} »${r.instagram?' et Instagram @'+r.instagram:' (aucun compte Instagram relié à la Page)'} · ${r.subscribed?'abonnement aux messages activé':'abonnement impossible : '+r.subErr}`; }
+        else { msg.style.color = 'var(--kola)'; msg.textContent = '✓ Réglages enregistrés'; }
+        SOC.at = 0; await socLoad(true); }
+      catch(e){ msg.style.color = 'var(--danger)'; msg.textContent = e.message; } el.disabled = false; break; }
     case 'dsSet': { const o = S.orders.find(x=>x.id===id); if(!o) break; const [sid, st] = el.dataset.v.split('|'); try{ await dsSet(o, sid, st); toast(st==='ordered'?'Noté : commandé au fournisseur':st==='received'?'Noté : marchandise reçue':'Remis « à commander »'); if($('#overlay').innerHTML && S.view==='admin' && S.tab!=='ds') orderDetail(o); schedule(); }catch(e){ dbErr(e); toast('Enregistrement impossible.'); } break; }
     case 'dsAll': { const sid = el.dataset.v; el.disabled = true; let n = 0; for(const o of S.orders){ if(dsLines(o)[sid] && dsState(o,sid).state==='todo' && dsReady(o) && o.status!=='livree'){ try{ await dsSet(o, sid, 'ordered'); n++; }catch(e){ dbErr(e); } } } toast(`${n} commande${n>1?'s':''} marquée${n>1?'s':''} « commandée${n>1?'s':''} »`); schedule(); break; }
     case 'depPaid': { const o = S.orders.find(x=>x.id===id); if(!o||!o.deposit) break; el.disabled = true; try{ await depPaid(o, ($('#dep-acc')||{}).value||'momo'); toast('Acompte enregistré en trésorerie'); orderDetail(o); }catch(e){ dbErr(e); toast('Enregistrement impossible.'); el.disabled=false; } break; }

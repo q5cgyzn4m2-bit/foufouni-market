@@ -46,6 +46,7 @@
   const reload = () => { clearTimeout(loadT); loadT = setTimeout(load, 250); };
   window.ffmReload = async () => { clearTimeout(loadT); await load(); return !!load._ok; };
   window.sendReportNow = () => api('POST', '/api/admin/report/send', {});
+  window.msgrApi = (m, path, body) => api(m, '/api/admin/social' + path, body);
 
   /* ---------- notifications push pour les clients ---------- */
   const PUSH_OK = 'serviceWorker' in navigator && 'PushManager' in window && 'Notification' in window;
