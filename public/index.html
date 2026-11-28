@@ -558,6 +558,11 @@ tr.mv-tr td:first-child{box-shadow:inset 3px 0 0 var(--indigo)}
 .hrv-im{border:0; padding:0; width:100%; aspect-ratio:4/3; border-radius:12px; overflow:hidden; cursor:zoom-in; background:var(--surface-2)}
 .hrv-im img{width:100%; height:100%; object-fit:cover}
 .hero-cta{display:flex; gap:10px; flex-wrap:wrap}
+.hero-badges{list-style:none;margin:0 0 18px;padding:0;display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:8px;max-width:560px}
+.hero-badges li{display:flex;align-items:center;gap:8px;padding:9px 10px;border-radius:14px;background:rgba(20,16,10,.62);border:1px solid rgba(214,177,106,.45);-webkit-backdrop-filter:blur(6px);backdrop-filter:blur(6px);color:#F5EEDF;min-width:0}
+.hero-badges .hb-i{font-size:20px;line-height:1;flex:0 0 auto}
+.hero-badges b{display:block;font-size:13px;line-height:1.2;color:#E9C987}.hero-badges small{display:block;font-size:11.5px;line-height:1.25;opacity:.9}
+@media (max-width:560px){ .hero-badges{gap:6px} .hero-badges li{flex-direction:column;align-items:flex-start;gap:4px;padding:8px} .hero-badges b{font-size:12.5px} .hero-badges small{font-size:11px} }
 /* Accroche transparente avec cascade de photos */
 .hero.has-flow{position:relative; isolation:isolate; background:color-mix(in srgb, var(--surface) 55%, transparent)}
 .hero.has-flow>*:not(.hero-flow){position:relative; z-index:1}
@@ -1345,6 +1350,12 @@ function facetBar(){
     <div class="fg"><button data-a="onlyStock" aria-pressed="${S.onlyStock}">Disponible uniquement</button>${any?'<button data-a="facetClear">✕ Effacer les filtres</button>':''}</div></div>`;
 }
 /* ===================== Accueil : bande de confiance, catégories, avis ===================== */
+/* Badges de confiance dans l'en-tête : garantie, livraison, paiement */
+function heroBadges(){ const st = S.settings, cod = codOn();
+  const it = [['🛡️', 'Garantie', cod ? 'Vérifiez avant de payer' : 'Produits contrôlés'],
+    ['🚚', Number(st.freeFrom)>0 ? 'Livraison offerte' : 'Livraison rapide', Number(st.freeFrom)>0 ? 'dès '+fmt(st.freeFrom) : etaText().replace(/^entre /,'Entre ')],
+    cod ? ['💵', 'Paiement', 'à la livraison'] : ['📱', 'Paiement', 'mobile money']];
+  return `<ul class="hero-badges" aria-label="Nos garanties">${it.map(([i,a,b])=>`<li><span class="hb-i" aria-hidden="true">${i}</span><span><b>${esc(a)}</b><small>${esc(b)}</small></span></li>`).join('')}</ul>`; }
 function trustBand(){ const st = S.settings, rv = S.reviews.filter(r=>r.status!=='hidden' && r.rating), avg = rv.length ? rv.reduce((t,r)=>t+r.rating,0)/rv.length : 0, cod = enabledProcs().some(([k])=>k==='cod');
   const it = [cod?['💵','Paiement à la livraison','Vous payez en recevant']:['📱','Paiement mobile','Orange Money, Wave, Moov'], ['🚚', Number(st.freeFrom)>0?'Livraison offerte dès '+fmt(st.freeFrom):'Livraison à '+(st.city||'Bamako'), etaText().replace(/^entre /,'Livré entre ')],
     rv.length>=3 ? ['⭐', (Math.round(avg*10)/10).toString().replace('.',',')+'/5', rv.length+' avis clients vérifiés'] : ['🛡️','Produits vérifiés','Contrôlés avant envoi'], ['💬','Service WhatsApp','On vous répond vite']];
@@ -1393,7 +1404,7 @@ function viewShop(){
   const pool = S.products.filter(p=>p.active!==false && p.stock>0);
   const feat = pool.slice().sort((a,b)=>((b.comparePrice>b.price?b.comparePrice-b.price:0)-(a.comparePrice>a.price?a.comparePrice-a.price:0)) || b.price-a.price)[0];
   const hero = !S.q ? `<section class="hero${heroFlow()?' has-flow':''}">${heroFlow()}<div class="hero-txt">
-      <h1>${esc(st.tagline)}</h1><p>${esc(st.intro)}</p>
+      <h1>${esc(st.tagline)}</h1><p>${esc(st.intro)}</p>${heroBadges()}
       <div class="hero-cta"><button class="btn primary" data-a="scroll">Voir tous les produits</button><button class="btn ghost" data-a="catDrawer">🗂️ Rayons</button></div>${payRow(true)}
     </div>${feat?`<aside class="vitrine" aria-label="Pièce du moment"><em>La pièce du moment</em>
       <button class="v-img" data-a="product" data-id="${feat.id}" aria-label="Voir ${esc(feat.name)}">${pImg(feat)}</button>
