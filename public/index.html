@@ -562,6 +562,18 @@ tr.mv-tr td:first-child{box-shadow:inset 3px 0 0 var(--indigo)}
 .hero-badges li{display:flex;align-items:center;gap:8px;padding:9px 10px;border-radius:14px;background:rgba(20,16,10,.62);border:1px solid rgba(214,177,106,.45);-webkit-backdrop-filter:blur(6px);backdrop-filter:blur(6px);color:#F5EEDF;min-width:0}
 .hero-badges .hb-i{font-size:20px;line-height:1;flex:0 0 auto}
 .hero-badges b{display:block;font-size:13px;line-height:1.2;color:#E9C987}.hero-badges small{display:block;font-size:11.5px;line-height:1.25;opacity:.9}
+/* animations : entrée (translate) et mise en avant une à une (transform), propriétés indépendantes */
+.hero-badges.intro li{animation:hbIn .55s cubic-bezier(.2,.8,.2,1) var(--d0) both, hbGlow var(--cyc) ease-in-out var(--d1) infinite}
+.hero-badges li{animation:hbGlow var(--cyc) ease-in-out var(--d1) infinite}
+.hero-badges .hb-i{display:inline-block;animation:hbBounce var(--cyc) ease-in-out var(--d1) infinite}
+.pay-row.anim .pl{animation:plGlow var(--cyc) ease-in-out var(--d1) infinite}
+.pay-row.anim.intro .pl{animation:plIn .45s cubic-bezier(.2,.8,.2,1.4) var(--d0) both, plGlow var(--cyc) ease-in-out var(--d1) infinite}
+@keyframes hbIn{from{opacity:0;translate:0 14px}to{opacity:1;translate:0 0}}
+@keyframes hbGlow{0%,22%,100%{border-color:rgba(214,177,106,.45);box-shadow:0 0 0 rgba(233,201,135,0);background:rgba(20,16,10,.62)}9%{border-color:#E9C987;box-shadow:0 6px 22px rgba(233,201,135,.35);background:rgba(60,44,18,.75)}}
+@keyframes hbBounce{0%,22%,100%{transform:none}6%{transform:translateY(-4px) scale(1.18) rotate(-6deg)}12%{transform:translateY(0) scale(1.05) rotate(4deg)}}
+@keyframes plIn{from{opacity:0;translate:0 10px;scale:.7}to{opacity:1;translate:0 0;scale:1}}
+@keyframes plGlow{0%,18%,100%{transform:none;box-shadow:0 1px 4px rgba(0,0,0,.25)}7%{transform:translateY(-6px) scale(1.1);box-shadow:0 8px 18px rgba(233,201,135,.45)}13%{transform:translateY(0) scale(1)}}
+@media (prefers-reduced-motion:reduce){ .hero-badges li,.hero-badges .hb-i,.pay-row.anim .pl{animation:none!important} }
 @media (max-width:560px){ .hero-badges{gap:6px} .hero-badges li{flex-direction:column;align-items:flex-start;gap:4px;padding:8px} .hero-badges b{font-size:12.5px} .hero-badges small{font-size:11px} }
 /* Accroche transparente avec cascade de photos */
 .hero.has-flow{position:relative; isolation:isolate; background:color-mix(in srgb, var(--surface) 55%, transparent)}
@@ -1350,12 +1362,15 @@ function facetBar(){
     <div class="fg"><button data-a="onlyStock" aria-pressed="${S.onlyStock}">Disponible uniquement</button>${any?'<button data-a="facetClear">✕ Effacer les filtres</button>':''}</div></div>`;
 }
 /* ===================== Accueil : bande de confiance, catégories, avis ===================== */
+/* Animation de l'en-tête : entrée une seule fois, puis les éléments s'animent un à un en boucle (continue malgré l'actualisation de la page) */
+function heroAnim(i, step, n, introStart){ const cyc = step*n, off = (Date.now()/1000) % cyc, intro = !!window._hbIntro;
+  return `--d0:${intro?(introStart+i*0.14).toFixed(2):'0'}s;--d1:${(intro?introStart+1+i*step:i*step-off).toFixed(2)}s;--cyc:${cyc}s`; }
 /* Badges de confiance dans l'en-tête : garantie, livraison, paiement */
-function heroBadges(){ const st = S.settings, cod = codOn();
+function heroBadges(){ const st = S.settings, cod = codOn(); window._hbIntro = !window._hbSeen; window._hbSeen = true;
   const it = [['🛡️', 'Garantie', cod ? 'Vérifiez avant de payer' : 'Produits contrôlés'],
     ['🚚', Number(st.freeFrom)>0 ? 'Livraison offerte' : 'Livraison rapide', Number(st.freeFrom)>0 ? 'dès '+fmt(st.freeFrom) : etaText().replace(/^entre /,'Entre ')],
     cod ? ['💵', 'Paiement', 'à la livraison'] : ['📱', 'Paiement', 'mobile money']];
-  return `<ul class="hero-badges" aria-label="Nos garanties">${it.map(([i,a,b])=>`<li><span class="hb-i" aria-hidden="true">${i}</span><span><b>${esc(a)}</b><small>${esc(b)}</small></span></li>`).join('')}</ul>`; }
+  return `<ul class="hero-badges${window._hbIntro?' intro':''}" aria-label="Nos garanties">${it.map(([i,a,b],k)=>`<li style="${heroAnim(k, 1.6, it.length, 0.15)}"><span class="hb-i" aria-hidden="true">${i}</span><span><b>${esc(a)}</b><small>${esc(b)}</small></span></li>`).join('')}</ul>`; }
 function trustBand(){ const st = S.settings, rv = S.reviews.filter(r=>r.status!=='hidden' && r.rating), avg = rv.length ? rv.reduce((t,r)=>t+r.rating,0)/rv.length : 0, cod = enabledProcs().some(([k])=>k==='cod');
   const it = [cod?['💵','Paiement à la livraison','Vous payez en recevant']:['📱','Paiement mobile','Orange Money, Wave, Moov'], ['🚚', Number(st.freeFrom)>0?'Livraison offerte dès '+fmt(st.freeFrom):'Livraison à '+(st.city||'Bamako'), etaText().replace(/^entre /,'Livré entre ')],
     rv.length>=3 ? ['⭐', (Math.round(avg*10)/10).toString().replace('.',',')+'/5', rv.length+' avis clients vérifiés'] : ['🛡️','Produits vérifiés','Contrôlés avant envoi'], ['💬','Service WhatsApp','On vous répond vite']];
@@ -1405,7 +1420,7 @@ function viewShop(){
   const feat = pool.slice().sort((a,b)=>((b.comparePrice>b.price?b.comparePrice-b.price:0)-(a.comparePrice>a.price?a.comparePrice-a.price:0)) || b.price-a.price)[0];
   const hero = !S.q ? `<section class="hero${heroFlow()?' has-flow':''}">${heroFlow()}<div class="hero-txt">
       <h1>${esc(st.tagline)}</h1><p>${esc(st.intro)}</p>${heroBadges()}
-      <div class="hero-cta"><button class="btn primary" data-a="scroll">Voir tous les produits</button><button class="btn ghost" data-a="catDrawer">🗂️ Rayons</button></div>${payRow(true)}
+      <div class="hero-cta"><button class="btn primary" data-a="scroll">Voir tous les produits</button><button class="btn ghost" data-a="catDrawer">🗂️ Rayons</button></div>${payRow(true, false, true)}
     </div>${feat?`<aside class="vitrine" aria-label="Pièce du moment"><em>La pièce du moment</em>
       <button class="v-img" data-a="product" data-id="${feat.id}" aria-label="Voir ${esc(feat.name)}">${pImg(feat)}</button>
       <h3>${esc(feat.name)}</h3>
@@ -3755,10 +3770,10 @@ const logoFile = f => new Promise((ok,ko)=>{ if(!/image\/(png|jpeg|webp)/.test(f
   const r = new FileReader(); r.onload = ()=>{ const im = new Image(); im.onload = ()=>{ const k = Math.min(1, 240/Math.max(im.width, im.height)), c = document.createElement('canvas'); c.width = Math.round(im.width*k); c.height = Math.round(im.height*k); c.getContext('2d').drawImage(im,0,0,c.width,c.height); trimLogo(c.toDataURL('image/png')).then(ok, ()=>ok(c.toDataURL('image/png'))); }; im.onerror = ko; im.src = r.result; }; r.onerror = ko; r.readAsDataURL(f); });
 function shownProcs(){ const pay = new Set(enabledProcs().map(([k])=>k));
   return Object.entries(PROCESSORS).filter(([k])=>{ const v = S.settings.processors[k]||{}; return pay.has(k) || (v.showLogo===true) || (v.logo && v.showLogo!==false); }); }
-function payRow(big, withNames){ const ps = shownProcs().slice().sort((a,b)=>['orange','wave','moov','card','paypal','cod'].indexOf(a[0])-['orange','wave','moov','card','paypal','cod'].indexOf(b[0]));
+function payRow(big, withNames, anim){ const ps = shownProcs().slice().sort((a,b)=>['orange','wave','moov','card','paypal','cod'].indexOf(a[0])-['orange','wave','moov','card','paypal','cod'].indexOf(b[0]));
   if(!ps.length) return '';
-  return `<div class="pay-row${big?' big':''}" aria-label="Moyens de paiement acceptés">${ps.map(([k])=>{ const P = PROCESSORS[k], lg = (S.settings.processors[k]||{}).logo;
-    return `<span class="pl${lg?' lgo':''}" title="${esc(P.name)}" style="${lg?'':'background:'+P.color}">${lg?`<img src="${esc(lg)}" alt="${esc(P.name)}">`:k==='cod'?'<span style="font-size:18px">💵</span>':esc(P.short)}</span>${withNames?`<span class="small" style="margin-right:8px">${esc(P.name)}</span>`:''}`; }).join('')}</div>`; }
+  return `<div class="pay-row${big?' big':''}${anim?' anim'+(window._hbIntro?' intro':''):''}" aria-label="Moyens de paiement acceptés">${ps.map(([k],j)=>{ const P = PROCESSORS[k], lg = (S.settings.processors[k]||{}).logo;
+    return `<span class="pl${lg?' lgo':''}" title="${esc(P.name)}" style="${lg?'':'background:'+P.color+';'}${anim?heroAnim(j, 0.9, ps.length, 0.6):''}">${lg?`<img src="${esc(lg)}" alt="${esc(P.name)}">`:k==='cod'?'<span style="font-size:18px">💵</span>':esc(P.short)}</span>${withNames?`<span class="small" style="margin-right:8px">${esc(P.name)}</span>`:''}`; }).join('')}</div>`; }
 /* Commande par WhatsApp : le panier part tout prêt vers le WhatsApp de la boutique */
 const WA_ICON = '<svg class="wa-ic" viewBox="0 0 24 24" fill="currentColor" aria-hidden="true"><path d="M12 2a10 10 0 0 0-8.6 15.1L2 22l5-1.3A10 10 0 1 0 12 2zm0 18.2a8.2 8.2 0 0 1-4.2-1.1l-.3-.2-3 .8.8-2.9-.2-.3A8.2 8.2 0 1 1 12 20.2zm4.5-6.1c-.2-.1-1.5-.7-1.7-.8s-.4-.1-.6.1-.7.8-.8 1-.3.2-.5.1a6.7 6.7 0 0 1-3.3-2.9c-.3-.4.2-.4.7-1.3a.4.4 0 0 0 0-.4l-.8-1.8c-.2-.5-.4-.4-.6-.4h-.5a1 1 0 0 0-.7.3 3 3 0 0 0-.9 2.2 5.2 5.2 0 0 0 1.1 2.7 11.8 11.8 0 0 0 4.5 4c1.7.7 2.3.8 3.2.6a2.6 2.6 0 0 0 1.7-1.2 2.1 2.1 0 0 0 .1-1.2c0-.1-.2-.2-.4-.3z"/></svg>';
 const shopWa = () => { const n = waNumber(S.settings.whatsapp || S.settings.phone || ''); return n && n.length >= 8 ? n : ''; };
